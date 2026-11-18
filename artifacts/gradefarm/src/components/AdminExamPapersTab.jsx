@@ -14,7 +14,7 @@ const input = { padding: '6px 8px', borderRadius: 7, border: '1px solid var(--t-
 const btn = (primary, disabled) => ({
   display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, fontFamily: FONT_B, fontSize: 13, fontWeight: 800,
   cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.55 : 1,
-  border: primary ? 'none' : '1px solid var(--t-border)', background: primary ? 'var(--t-accent)' : 'var(--t-bgCard)', color: primary ? '#0c1037' : 'var(--t-text)',
+  border: primary ? 'none' : '1px solid var(--t-border)', background: primary ? 'var(--t-accent)' : 'var(--t-bgCard)', color: primary ? 'var(--t-onAccent)' : 'var(--t-text)',
 })
 const STATUS = {
   checked: ['Checked (dry run)', 'var(--t-text)'],

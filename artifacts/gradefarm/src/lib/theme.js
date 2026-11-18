@@ -34,6 +34,7 @@ const BASE = {
     accent:       '#e2b54c',
     accentLight:  '#ecc96e',
     accentBlue:   '#e2b54c',
+    onAccent:     '#0c1037',
     accentGlow:   'rgba(226,181,76,0.12)',
     accentGlow2:  'rgba(226,181,76,0.07)',
 
@@ -84,6 +85,7 @@ const BASE = {
     accent:       '#f1be43',
     accentLight:  '#f9d87a',
     accentBlue:   '#0c1037',
+    onAccent:     '#0c1037',
     accentGlow:   'rgba(241,190,67,0.12)',
     accentGlow2:  'rgba(241,190,67,0.06)',
 
@@ -125,6 +127,7 @@ export const PALETTES = [
   { id: 'dark', name: 'Dark', mode: 'dark' },
   { id: 'midnight', name: 'Midnight', mode: 'dark',
     tokens: {
+      onAccent: '#080b1a',
       bg: '#080b1a', bgCard: '#10152b', bgNav: '#050713', bgInput: '#10152b', bgHover: '#1a2140', bgSubtle: '#0d1124', bgElevated: '#161c36',
       border: '#1d2442', borderMid: '#283058', borderStrong: '#353e6c', borderAccent: 'rgba(241,190,67,0.30)',
       text: '#eef1fa', textSub: '#d3d8ec', textMuted: '#a2a9c4', textFaint: '#737b9c',
@@ -134,6 +137,7 @@ export const PALETTES = [
     shell: { bg: '#050713', raise: '#10152b', hover: 'rgba(255,255,255,0.04)', line: '#1d2442', fg: '#eef1fa', sub: '#a2a9c4', dim: '#8189a9', icon: '#f1be43', menuShadow: '0 12px 32px rgba(0,0,0,0.6)' } },
   { id: 'paper', name: 'Paper', mode: 'light',
     tokens: {
+      onAccent: '#2b2418',
       bg: '#f5efe3', bgCard: '#fffcf5', bgInput: '#fffaf0', bgHover: '#efe6d4', bgSubtle: '#f1e9d8', bgElevated: '#fffcf5',
       border: '#e3d8c2', borderMid: '#d4c6aa', borderStrong: '#c2b291', borderAccent: 'rgba(211,155,42,0.40)',
       text: '#2b2418', textSub: '#3e3423', textMuted: '#6b604f', textFaint: '#9a8d78', contentText: '#2b2418',
@@ -143,6 +147,7 @@ export const PALETTES = [
     shell: { bg: '#ece3d1', raise: '#fffcf5', hover: '#e4d9c3', line: '#e3d8c2', fg: '#2b2418', sub: '#5a4f3e', dim: '#7a6d58', icon: '#8a5a0a', menuShadow: '0 12px 32px rgba(60,40,10,0.14)' } },
   { id: 'ocean', name: 'Ocean', mode: 'light',
     tokens: {
+      onAccent: '#0b2b3a',
       bg: '#eef5f8', bgCard: '#ffffff', bgInput: '#f4f9fb', bgHover: '#e3f0f5', bgSubtle: '#e8f2f6', bgElevated: '#ffffff',
       border: '#cfe2ea', borderMid: '#b4d0dc', borderStrong: '#97bccb', borderAccent: 'rgba(79,179,214,0.45)',
       text: '#0b2b3a', textSub: '#15394a', textMuted: '#46636f', textFaint: '#7d97a2', contentText: '#0b2b3a',
@@ -152,6 +157,7 @@ export const PALETTES = [
     shell: { bg: '#dcebf1', raise: '#ffffff', hover: '#d0e4ec', line: '#cfe2ea', fg: '#0b2b3a', sub: '#3d5a66', dim: '#5e7883', icon: '#0e6a8a', menuShadow: '0 12px 32px rgba(11,43,58,0.14)' } },
   { id: 'forest', name: 'Forest', mode: 'dark',
     tokens: {
+      onAccent: '#0a1912',
       bg: '#10241a', bgCard: '#173224', bgNav: '#0a1912', bgInput: '#173224', bgHover: '#21402f', bgSubtle: '#132b1f', bgElevated: '#1d3b2b',
       border: '#24473a', borderMid: '#2e5646', borderStrong: '#3b6a57', borderAccent: 'rgba(124,201,140,0.30)',
       text: '#e9f3eb', textSub: '#d0e3d5', textMuted: '#a3c0aa', textFaint: '#76927d',
@@ -161,6 +167,7 @@ export const PALETTES = [
     shell: { bg: '#0a1912', raise: '#173224', hover: 'rgba(255,255,255,0.04)', line: '#24473a', fg: '#e9f3eb', sub: '#a3c0aa', dim: '#86a38d', icon: '#7cc98c', menuShadow: '0 12px 32px rgba(0,0,0,0.5)' } },
   { id: 'earth', name: 'Earth', mode: 'dark',
     tokens: {
+      onAccent: '#1a120d',
       bg: '#251a13', bgCard: '#32241a', bgNav: '#1a120d', bgInput: '#32241a', bgHover: '#3f2e22', bgSubtle: '#2b1f17', bgElevated: '#3d2c20',
       border: '#4a3627', borderMid: '#5a4331', borderStrong: '#6c523e', borderAccent: 'rgba(217,137,74,0.32)',
       text: '#f4e9dd', textSub: '#e4d4c3', textMuted: '#c4ae99', textFaint: '#957e69',
@@ -170,6 +177,7 @@ export const PALETTES = [
     shell: { bg: '#1a120d', raise: '#32241a', hover: 'rgba(255,255,255,0.04)', line: '#4a3627', fg: '#f4e9dd', sub: '#c4ae99', dim: '#a48d78', icon: '#d9894a', menuShadow: '0 12px 32px rgba(0,0,0,0.5)' } },
   { id: 'gold', name: 'Gold', mode: 'light', locked: 3,
     tokens: {
+      onAccent: '#241c05',
       bg: '#fbf6e8', bgCard: '#fffdf6', bgNav: '#0c1037', bgInput: '#fffaf0', bgHover: '#f5ecd2', bgSubtle: '#f7efd6', bgElevated: '#fffdf6',
       border: '#ecdfb8', borderMid: '#dccb94', borderStrong: '#c9b46f', borderAccent: 'rgba(224,169,26,0.45)',
       text: '#241c05', textSub: '#3a2e0b', textMuted: '#6b5a2a', textFaint: '#9c8a55', contentText: '#241c05',

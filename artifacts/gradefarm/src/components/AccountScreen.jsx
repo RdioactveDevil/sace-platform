@@ -524,7 +524,7 @@ export default function AccountScreen({ profile, theme, onToggleTheme, palette, 
   const btn = (variant = 'primary', disabled = false) => ({
     padding: '8px 16px', borderRadius: 9, fontFamily: FONT_B, fontSize: 13, fontWeight: 800,
     cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.55 : 1,
-    ...(variant === 'primary' ? { border: 'none', background: t.accent, color: '#0c1037' }
+    ...(variant === 'primary' ? { border: 'none', background: t.accent, color: 'var(--t-onAccent)' }
       : variant === 'danger' ? { border: `1px solid ${t.danger}`, background: 'transparent', color: t.danger }
       : { border: `1px solid ${t.border}`, background: t.bgCard, color: t.text }),
   })

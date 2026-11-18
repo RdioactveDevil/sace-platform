@@ -8,7 +8,7 @@ import { fetchMyExamAttempts } from '../lib/db'
 import { fetchLessons } from '../lib/learnStore'
 import { groupAnswersIntoSessions } from '../lib/sessionHistory'
 
-const GOLD = '#f1be43'
+const GOLD = 'var(--t-accent)'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
 function dayLabel(ms) {
@@ -119,7 +119,7 @@ export default function HistoryScreen({ profile, subject, questions = [], theme,
   const redo = (ids) => onStartSession({ mode: 'review', subtopics: [], subject: subjectName || undefined, reviewIds: ids })
 
   const toneOf = (pct) => (pct < 40 ? t.danger : pct < 70 ? t.goldText : t.success)
-  const segOn = theme === 'dark' ? { background: t.text, color: t.bg } : { background: '#0c1037', color: '#fff' }
+  const segOn = { background: t.text, color: t.bg }
   const linkBtn = { border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', fontFamily: FONT_B, fontSize: 13, fontWeight: 700, color: t.text, textDecoration: 'underline', textDecorationColor: GOLD, textDecorationThickness: 2, textUnderlineOffset: 4 }
 
   return (
@@ -176,7 +176,7 @@ export default function HistoryScreen({ profile, subject, questions = [], theme,
                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '10px 0 8px' }}>
                           {item.wrongIds.length > 0 && (
                             <button type="button" onClick={() => redo(item.wrongIds)}
-                              style={{ padding: '7px 13px', borderRadius: 8, border: 'none', background: GOLD, color: '#0c1037', fontFamily: FONT_B, fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}>
+                              style={{ padding: '7px 13px', borderRadius: 8, border: 'none', background: GOLD, color: 'var(--t-onAccent)', fontFamily: FONT_B, fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}>
                               Redo the {item.wrongIds.length} you got wrong
                             </button>
                           )}

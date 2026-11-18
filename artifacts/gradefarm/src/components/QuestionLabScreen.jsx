@@ -9,9 +9,9 @@ import DiagramView from './DiagramView'
 import QuestionRenderer from './questions/QuestionRenderer'
 import QuizToolsDock from './QuizToolsDock'
 
-const GOLD = '#f1be43'
-const GOLDL = '#f9d87a'
-const NAVY = '#0c1037'
+const GOLD = 'var(--t-accent)'
+const GOLDL = 'var(--t-accentLight)'
+const NAVY = 'var(--t-onAccent)'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const FONT_D = "'Sifonn Pro', sans-serif"
 
@@ -21,18 +21,18 @@ const svgUri = (svg) => `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`
 const CELL_SVG = svgUri(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 240'>
   <rect width='400' height='240' fill='#0f1430'/>
   <ellipse cx='200' cy='120' rx='170' ry='100' fill='#1e2a52' stroke='#4f8ef7' stroke-width='4'/>
-  <circle cx='200' cy='120' r='45' fill='#f1be43'/>
+  <circle cx='200' cy='120' r='45' fill='var(--t-accent)'/>
   <circle cx='200' cy='120' r='14' fill='#b8860b'/>
-  <circle cx='120' cy='75' r='10' fill='#34d399'/>
-  <circle cx='285' cy='165' r='10' fill='#34d399'/>
+  <circle cx='120' cy='75' r='10' fill='var(--t-success)'/>
+  <circle cx='285' cy='165' r='10' fill='var(--t-success)'/>
 </svg>`)
 
 const TRIANGLE_SVG = svgUri(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 240'>
   <rect width='400' height='240' fill='#0f1430'/>
-  <polygon points='60,200 340,200 60,40' fill='#1e2a52' stroke='#f1be43' stroke-width='3'/>
-  <rect x='60' y='184' width='16' height='16' fill='none' stroke='#94a3b8' stroke-width='2'/>
-  <path d='M 305 200 A 35 35 0 0 1 326 172' fill='none' stroke='#34d399' stroke-width='3'/>
-  <text x='300' y='188' fill='#34d399' font-size='18' font-family='sans-serif'>θ</text>
+  <polygon points='60,200 340,200 60,40' fill='#1e2a52' stroke='var(--t-accent)' stroke-width='3'/>
+  <rect x='60' y='184' width='16' height='16' fill='none' stroke='var(--t-textFaint)' stroke-width='2'/>
+  <path d='M 305 200 A 35 35 0 0 1 326 172' fill='none' stroke='var(--t-success)' stroke-width='3'/>
+  <text x='300' y='188' fill='var(--t-success)' font-size='18' font-family='sans-serif'>θ</text>
 </svg>`)
 
 // Sample questions showcasing every supported format. These are local demo data
@@ -86,7 +86,7 @@ const SAMPLES = [
     question: 'In the series circuit shown, what is the total resistance?',
     diagram: {
       caption: 'A 4 Ω and 8 Ω resistor in series with a 12 V cell',
-      svg: "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 320 160'><rect width='320' height='160' fill='#0f1430'/><path d='M40 110 H40 V50 H120' stroke='#cbd5e1' stroke-width='2' fill='none'/><rect x='120' y='40' width='50' height='20' fill='none' stroke='#f1be43' stroke-width='2'/><text x='145' y='34' fill='#f9d87a' font-size='12' text-anchor='middle' font-family='sans-serif'>4Ω</text><path d='M170 50 H200' stroke='#cbd5e1' stroke-width='2'/><rect x='200' y='40' width='50' height='20' fill='none' stroke='#f1be43' stroke-width='2'/><text x='225' y='34' fill='#f9d87a' font-size='12' text-anchor='middle' font-family='sans-serif'>8Ω</text><path d='M250 50 H280 V110 H40' stroke='#cbd5e1' stroke-width='2' fill='none'/><line x1='40' y1='95' x2='40' y2='65' stroke='#34d399' stroke-width='2'/><line x1='34' y1='88' x2='46' y2='88' stroke='#34d399' stroke-width='4'/><line x1='37' y1='72' x2='43' y2='72' stroke='#34d399' stroke-width='2'/><text x='18' y='84' fill='#34d399' font-size='11' font-family='sans-serif'>12V</text></svg>",
+      svg: "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 320 160'><rect width='320' height='160' fill='#0f1430'/><path d='M40 110 H40 V50 H120' stroke='var(--t-borderMid)' stroke-width='2' fill='none'/><rect x='120' y='40' width='50' height='20' fill='none' stroke='var(--t-accent)' stroke-width='2'/><text x='145' y='34' fill='var(--t-accentLight)' font-size='12' text-anchor='middle' font-family='sans-serif'>4Ω</text><path d='M170 50 H200' stroke='var(--t-borderMid)' stroke-width='2'/><rect x='200' y='40' width='50' height='20' fill='none' stroke='var(--t-accent)' stroke-width='2'/><text x='225' y='34' fill='var(--t-accentLight)' font-size='12' text-anchor='middle' font-family='sans-serif'>8Ω</text><path d='M250 50 H280 V110 H40' stroke='var(--t-borderMid)' stroke-width='2' fill='none'/><line x1='40' y1='95' x2='40' y2='65' stroke='var(--t-success)' stroke-width='2'/><line x1='34' y1='88' x2='46' y2='88' stroke='var(--t-success)' stroke-width='4'/><line x1='37' y1='72' x2='43' y2='72' stroke='var(--t-success)' stroke-width='2'/><text x='18' y='84' fill='var(--t-success)' font-size='11' font-family='sans-serif'>12V</text></svg>",
     },
     options: ['4 Ω', '8 Ω', '12 Ω', '32 Ω'],
     answer_index: 2,

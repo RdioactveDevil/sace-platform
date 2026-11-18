@@ -18,8 +18,8 @@ import {
   getTutorBilling,
 } from '../lib/db'
 
-const GOLD  = '#f1be43'
-const GOLDL = '#f9d87a'
+const GOLD  = 'var(--t-accent)'
+const GOLDL = 'var(--t-accentLight)'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
 function fmtDateTime(iso) {
@@ -169,7 +169,7 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
     border: sessionType === type ? 'none' : isDark ? '1px solid var(--t-border)' : `1px solid ${t.border}`,
     cursor: 'pointer', fontFamily: FONT_B, fontSize: 14, fontWeight: 700,
     background: sessionType === type ? 'var(--t-accent)' : isDark ? 'var(--t-bgSubtle)' : t.bgCard,
-    color: sessionType === type ? '#0c1037' : t.textMuted,
+    color: sessionType === type ? 'var(--t-onAccent)' : t.textMuted,
   })
 
   const modalBg = t.bgCard
@@ -192,7 +192,7 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
             </span>
             <button
               onClick={handleCopyLink}
-              style={{ flexShrink: 0, background: copied ? t.successBg : 'var(--t-accent)', color: copied ? t.success : '#1a1a2e', border: 'none', borderRadius: 8, padding: '8px 14px', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT_B, transition: 'background 0.2s' }}
+              style={{ flexShrink: 0, background: copied ? t.successBg : 'var(--t-accent)', color: copied ? t.success : 'var(--t-onAccent)', border: 'none', borderRadius: 8, padding: '8px 14px', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT_B, transition: 'background 0.2s' }}
             >
               {copied ? '✓ Copied' : 'Copy'}
             </button>
@@ -200,7 +200,7 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
           <button
             onClick={onClose}
             className="btn-gold-shimmer"
-            style={{ width: '100%', padding: '12px', borderRadius: 10, border: 'none', background: 'var(--t-accent)', color: '#0c1037', fontFamily: FONT_B, fontSize: 14, fontWeight: 800, cursor: 'pointer' }}
+            style={{ width: '100%', padding: '12px', borderRadius: 10, border: 'none', background: 'var(--t-accent)', color: 'var(--t-onAccent)', fontFamily: FONT_B, fontSize: 14, fontWeight: 800, cursor: 'pointer' }}
           >
             Done
           </button>
@@ -332,7 +332,7 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
                       <label key={s.student_id} style={{
                         display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
                         cursor: 'pointer', borderBottom: isDark ? '1px solid var(--t-border)' : `1px solid ${t.border}`,
-                        background: checked ? (isDark ? 'var(--t-bgSubtle)' : '#fdf8e8') : 'transparent',
+                        background: checked ? 'color-mix(in srgb, var(--t-accent) 10%, transparent)' : 'transparent',
                       }}>
                         <input
                           type="checkbox"
@@ -428,7 +428,7 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
             <button type="button" onClick={onClose} style={{ padding: '10px 20px', borderRadius: 9, border: isDark ? '1px solid var(--t-border)' : `1px solid ${t.border}`, background: isDark ? 'var(--t-bgSubtle)' : 'transparent', color: t.textMuted, fontFamily: FONT_B, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
               Cancel
             </button>
-            <button type="submit" disabled={loading} className={loading ? '' : 'btn-gold-shimmer'} style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: loading ? (isDark ? 'var(--t-bgSubtle)' : t.border) : 'var(--t-accent)', color: loading ? t.textMuted : '#0c1037', fontFamily: FONT_B, fontSize: 13, fontWeight: 800, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}>
+            <button type="submit" disabled={loading} className={loading ? '' : 'btn-gold-shimmer'} style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: loading ? (isDark ? 'var(--t-bgSubtle)' : t.border) : 'var(--t-accent)', color: loading ? t.textMuted : 'var(--t-onAccent)', fontFamily: FONT_B, fontSize: 13, fontWeight: 800, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}>
               {loading ? 'Creating…' : isRecurring ? 'Create recurring lessons' : 'Create lesson'}
             </button>
           </div>
@@ -505,7 +505,7 @@ function SessionCard({ session, theme, onJoin, onCancel }) {
         {canJoin && (
           <button
             onClick={() => onJoin(session.id)}
-            style={{ background: 'var(--t-accent)', color: '#1a1a2e', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 13, fontWeight: 700, fontFamily: FONT_B, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            style={{ background: 'var(--t-accent)', color: 'var(--t-onAccent)', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 13, fontWeight: 700, fontFamily: FONT_B, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
           >
             {session.status === 'active'
               ? <><span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--t-danger)', display: 'inline-block' }} />Rejoin</>
@@ -692,7 +692,7 @@ export default function SessionsTab({ profile, theme }) {
         </div>
         <button
           onClick={() => setShowModal(true)}
-          style={{ marginLeft: 'auto', background: 'var(--t-accent)', color: '#0c1037', border: 'none', borderRadius: 9, padding: '8px 14px', fontSize: 13, fontWeight: 800, fontFamily: FONT_B, cursor: 'pointer' }}
+          style={{ marginLeft: 'auto', background: 'var(--t-accent)', color: 'var(--t-onAccent)', border: 'none', borderRadius: 9, padding: '8px 14px', fontSize: 13, fontWeight: 800, fontFamily: FONT_B, cursor: 'pointer' }}
         >
           Schedule lesson
         </button>

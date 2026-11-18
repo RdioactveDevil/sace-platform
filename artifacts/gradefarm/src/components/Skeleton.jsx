@@ -15,7 +15,7 @@ export default function Skeleton({ width = '100%', height = 16, radius = 8, styl
           width,
           height,
           borderRadius: radius,
-          background: 'rgba(255,255,255,0.07)',
+          background: 'var(--t-bgHover)',
           animation: 'sk-pulse 1.4s ease-in-out infinite',
           flexShrink: 0,
           ...style,
@@ -28,7 +28,7 @@ export default function Skeleton({ width = '100%', height = 16, radius = 8, styl
 export function SkeletonRow({ theme }) {
   const isDark = theme !== 'light'
   const bg = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)'
-  const border = isDark ? 'rgba(255,255,255,0.07)' : '#e2e5f0'
+  const border = 'var(--t-border)'
   return (
     <>
       <style>{pulse}</style>

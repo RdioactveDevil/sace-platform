@@ -5,8 +5,8 @@ import { Zap, GraduationCap, ChartColumn, Trophy, BookOpen, Clock, Sun, Moon } f
 import RankIcon from './RankIcon'
 import { formatSubjectLabel } from '../lib/subjects'
 
-const GOLD  = '#f1be43'
-const GOLDL = '#f9d87a'
+const GOLD  = 'var(--t-accent)'
+const GOLDL = 'var(--t-accentLight)'
 const FONT_D = "'Sifonn Pro', sans-serif"
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
@@ -49,12 +49,12 @@ export default function Layout({
       {/* Logo + theme toggle */}
       <div style={{ padding: '18px 20px 14px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
         <span style={{ fontFamily: FONT_D, fontSize: 18, letterSpacing: 1 }}>
-          <span style={{ color: '#fff' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
+          <span style={{ color: t.text }}>grade</span><span style={{ color: GOLD }}>farm.</span>
         </span>
         {/* Theme toggle */}
         <button onClick={onToggleTheme} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 8px', borderRadius: 20, border: `1px solid ${t.border}`, background: 'transparent', cursor: 'pointer' }}>
           <span style={{ display: 'flex', color: GOLD }}>{theme === 'dark' ? <Moon size={12} aria-hidden="true" /> : <Sun size={12} aria-hidden="true" />}</span>
-          <div style={{ width: 28, height: 15, borderRadius: 8, background: theme === 'dark' ? '#1e293b' : '#cbd5e1', position: 'relative' }}>
+          <div style={{ width: 28, height: 15, borderRadius: 8, background: 'var(--t-borderMid)', position: 'relative' }}>
             <div style={{ position: 'absolute', top: 2, left: theme === 'dark' ? 2 : 14, width: 11, height: 11, borderRadius: '50%', background: GOLD, transition: 'left 0.2s' }} />
           </div>
         </button>
@@ -68,7 +68,7 @@ export default function Layout({
       {/* Profile */}
       <div style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}`, flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-          <div style={{ width: 36, height: 36, borderRadius: '50%', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 800, color: '#0c1037', flexShrink: 0 }}>
+          <div style={{ width: 36, height: 36, borderRadius: '50%', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 800, color: 'var(--t-onAccent)', flexShrink: 0 }}>
             {profile.display_name[0].toUpperCase()}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -93,7 +93,7 @@ export default function Layout({
             <button key={item.id} onClick={() => handleNav(item.id)} style={{
               display: 'flex', alignItems: 'center', gap: 10,
               padding: '10px 12px', borderRadius: 9, border: 'none',
-              background: active ? `rgba(241,190,67,0.12)` : 'transparent',
+              background: active ? `color-mix(in srgb, var(--t-accent) 12%, transparent)` : 'transparent',
               color: active ? GOLD : t.textMuted,
               fontSize: 14, fontWeight: active ? 700 : 500,
               cursor: 'pointer', fontFamily: FONT_B,
@@ -110,7 +110,7 @@ export default function Layout({
 
       {/* Bottom actions */}
       <div style={{ padding: '12px 14px', borderTop: `1px solid ${t.border}`, display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
-        <button onClick={onChangeSubject} style={{ width: '100%', padding: '8px', borderRadius: 8, border: `1px solid rgba(241,190,67,0.3)`, background: 'transparent', color: GOLD, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B }}>
+        <button onClick={onChangeSubject} style={{ width: '100%', padding: '8px', borderRadius: 8, border: `1px solid color-mix(in srgb, var(--t-accent) 30%, transparent)`, background: 'transparent', color: GOLD, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B }}>
           ⇄ Change Subject
         </button>
         <button onClick={onSignOut} style={{ width: '100%', padding: '8px', borderRadius: 8, border: `1px solid ${t.border}`, background: 'transparent', color: t.textFaint, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>
@@ -157,14 +157,14 @@ export default function Layout({
             </button>
 
             <span style={{ fontFamily: FONT_D, fontSize: 17, letterSpacing: 1 }}>
-              <span style={{ color: '#fff' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
+              <span style={{ color: t.text }}>grade</span><span style={{ color: GOLD }}>farm.</span>
             </span>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <button onClick={onToggleTheme} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', color: GOLD }}>
                 {theme === 'dark' ? <Moon size={18} aria-hidden="true" /> : <Sun size={18} aria-hidden="true" />}
               </button>
-              <div style={{ width: 30, height: 30, borderRadius: '50%', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: '#0c1037' }}>
+              <div style={{ width: 30, height: 30, borderRadius: '50%', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: 'var(--t-onAccent)' }}>
                 {profile.display_name[0].toUpperCase()}
               </div>
             </div>

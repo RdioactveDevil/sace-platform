@@ -5,7 +5,7 @@ import { ASSIGNMENT_DIFFICULTIES } from '../lib/engine'
 import { fetchAssignmentReport, generateAssignmentReportSummary } from '../lib/db'
 import MathText from './MathText'
 
-const GOLD = '#f1be43'
+const GOLD = 'var(--t-accent)'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const FONT_D = "'Sifonn Pro', sans-serif"
 
@@ -145,8 +145,8 @@ export default function AssignmentReport({ assignmentId, theme = 'dark', onClose
           {summary ? (
             <>
               <div style={{ fontSize: 13.5, color: t.text, lineHeight: 1.6 }}><MathText text={summary.overview} /></div>
-              {list(TrendingUp, 'Strengths', summary.strengths, t.success || '#4ade80')}
-              {list(TriangleAlert, 'What went wrong', summary.went_wrong, t.danger || '#f87171')}
+              {list(TrendingUp, 'Strengths', summary.strengths, t.success)}
+              {list(TriangleAlert, 'What went wrong', summary.went_wrong, t.danger || 'var(--t-danger)')}
               {list(Target, 'What could be better', summary.improve, t.goldText)}
               {list(ListChecks, 'Next steps', summary.next_steps, t.text)}
             </>
@@ -156,7 +156,7 @@ export default function AssignmentReport({ assignmentId, theme = 'dark', onClose
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <div style={{ fontSize: 13, color: t.textMuted, flex: '1 1 240px' }}>Get a write-up of how they went: strengths, what went wrong and why, what could have been better, and what to cover next.</div>
               <button type="button" onClick={() => writeSummary(false)} disabled={writing}
-                style={{ ...quietBtn, height: 36, border: 'none', background: 'var(--t-accent)', color: '#171724' }}>
+                style={{ ...quietBtn, height: 36, border: 'none', background: 'var(--t-accent)', color: 'var(--t-onAccent)' }}>
                 <Sparkles size={14} aria-hidden="true" />{writing ? 'Writing…' : 'Write report'}
               </button>
             </div>

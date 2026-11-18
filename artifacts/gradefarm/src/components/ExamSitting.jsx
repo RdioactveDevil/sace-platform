@@ -275,7 +275,7 @@ function Clock({ t, attempt, sitting, persist, saveFailed }) {
 
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center', marginTop: 8 }}>
           {st.paused
-            ? <button type="button" onClick={() => { unlockAudio(); persist(resumeSitting(sitting)) }} style={ctl({ border: 'none', background: t.accent, color: '#0c1037' })}><Play size={18} aria-hidden="true" /> Resume</button>
+            ? <button type="button" onClick={() => { unlockAudio(); persist(resumeSitting(sitting)) }} style={ctl({ border: 'none', background: t.accent, color: 'var(--t-onAccent)' })}><Play size={18} aria-hidden="true" /> Resume</button>
             : <button type="button" onClick={() => persist(pauseSitting(sitting))} style={ctl()}><Pause size={18} aria-hidden="true" /> Pause</button>}
           {st.phase === 'reading' && !st.paused && (
             <button type="button" onClick={() => { unlockAudio(); persist(skipReading(sitting)) }} style={ctl()}>Start writing now</button>

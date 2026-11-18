@@ -157,14 +157,14 @@ export default function CropTool({ pdfUrl, startPage = 1, onUse, onCancel }) {
               {box && box.width > 0 && box.height > 0 && (
                 <div onPointerDown={e => onDown(e, 'move')}
                   style={{ position: 'absolute', left: box.left * scale, top: box.top * scale, width: box.width * scale, height: box.height * scale,
-                    outline: '2px solid #2563eb', boxShadow: '0 0 0 9999px rgba(15,23,42,0.35)', cursor: 'move' }}>
+                    outline: '2px solid var(--t-blue)', boxShadow: '0 0 0 9999px rgba(15,23,42,0.35)', cursor: 'move' }}>
                   {HANDLES.map(h => {
                     const pos = {
                       left: h.includes('w') ? -6 : h.includes('e') ? 'calc(100% - 6px)' : 'calc(50% - 6px)',
                       top: h.includes('n') ? -6 : h.includes('s') ? 'calc(100% - 6px)' : 'calc(50% - 6px)',
                     }
                     return <div key={h} onPointerDown={e => onDown(e, h)} aria-hidden="true"
-                      style={{ position: 'absolute', width: 12, height: 12, background: '#fff', border: '2px solid #2563eb', borderRadius: 3, cursor: `${h}-resize`, ...pos }} />
+                      style={{ position: 'absolute', width: 12, height: 12, background: '#fff', border: '2px solid var(--t-blue)', borderRadius: 3, cursor: `${h}-resize`, ...pos }} />
                   })}
                 </div>
               )}

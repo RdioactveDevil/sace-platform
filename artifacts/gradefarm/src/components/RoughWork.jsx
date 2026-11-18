@@ -586,7 +586,7 @@ export default function RoughWork({
         <div style={{ display: 'flex', gap: 8, padding: '10px 12px 12px' }}>
           {onCheckAnswer && (
             <button type="button" onClick={onCheckAnswer} disabled={!canCheckAnswer}
-              style={{ flex: 1, height: 44, borderRadius: 12, border: 'none', background: t.accent, color: '#0c1037', fontFamily: FONT_B, fontSize: 14, fontWeight: 800, cursor: canCheckAnswer ? 'pointer' : 'default', opacity: canCheckAnswer ? 1 : 0.5 }}>
+              style={{ flex: 1, height: 44, borderRadius: 12, border: 'none', background: t.accent, color: 'var(--t-onAccent)', fontFamily: FONT_B, fontSize: 14, fontWeight: 800, cursor: canCheckAnswer ? 'pointer' : 'default', opacity: canCheckAnswer ? 1 : 0.5 }}>
               Check answer
             </button>
           )}

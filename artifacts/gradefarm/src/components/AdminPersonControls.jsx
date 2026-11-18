@@ -62,7 +62,7 @@ function Btn({ children, onClick, disabled, variant, title }) {
       cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1,
       border: primary ? 'none' : `1px solid ${danger ? 'var(--t-danger)' : 'var(--t-border)'}`,
       background: primary ? 'var(--t-accent)' : danger ? 'transparent' : 'var(--t-bgCard)',
-      color: primary ? '#0c1037' : danger ? 'var(--t-danger)' : 'var(--t-text)',
+      color: primary ? 'var(--t-onAccent)' : danger ? 'var(--t-danger)' : 'var(--t-text)',
     }}>{children}</button>
   )
 }

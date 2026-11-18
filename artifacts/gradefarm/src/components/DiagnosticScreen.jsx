@@ -193,7 +193,7 @@ const OkLine = ({ children }) => <div style={{ display: 'flex', alignItems: 'cen
 const btnStyle = (kind, full = true) => ({
   display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minHeight: 42, padding: '0 18px', borderRadius: 10,
   fontFamily: FONT, fontSize: 14, fontWeight: 800, cursor: 'pointer', width: full ? '100%' : undefined,
-  ...(kind === 'primary' ? { border: 'none', background: C.accent, color: '#0c1037' } : { border: `1px solid ${C.border}`, background: C.card, color: C.text }),
+  ...(kind === 'primary' ? { border: 'none', background: C.accent, color: 'var(--t-onAccent)' } : { border: `1px solid ${C.border}`, background: C.card, color: C.text }),
 })
 
 function SubmittedScreen({ preCallFormUrl, onRedirect, studentName, tutorName }) {

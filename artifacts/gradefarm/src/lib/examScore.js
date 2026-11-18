@@ -37,11 +37,11 @@ export function predictScore(trackId, percent) {
 /** A coarse readiness label from a percentage. */
 export function readiness(percent) {
   const p = clamp(percent, 0, 100)
-  if (p >= 85) return { label: 'Exam-ready', color: '#34d399' }
-  if (p >= 70) return { label: 'Strong', color: '#34d399' }
-  if (p >= 55) return { label: 'On track', color: '#f1be43' }
-  if (p >= 40) return { label: 'Developing', color: '#f1be43' }
-  return { label: 'Needs work', color: '#f87171' }
+  if (p >= 85) return { label: 'Exam-ready', color: 'var(--t-success)' }
+  if (p >= 70) return { label: 'Strong', color: 'var(--t-success)' }
+  if (p >= 55) return { label: 'On track', color: 'var(--t-accent)' }
+  if (p >= 40) return { label: 'Developing', color: 'var(--t-accent)' }
+  return { label: 'Needs work', color: 'var(--t-danger)' }
 }
 
 /** Phrase a percentile rank against other attempts. */

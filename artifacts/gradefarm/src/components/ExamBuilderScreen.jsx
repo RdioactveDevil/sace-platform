@@ -439,7 +439,7 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, profile, on
     .eb-grid { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 20px; padding: 20px; align-items: start; }
     .eb-side { display: flex; flex-direction: column; gap: 18px; position: sticky; top: 70px; max-height: calc(100vh - 90px); overflow-y: auto; padding-right: 6px; }
     .eb-card { background: ${t.bgCard}; border: 1px solid ${t.border}; border-radius: 12px; padding: 14px; }
-    .eb-preview { min-width: 0; background: ${theme === 'dark' ? '#0e0e10' : '#e6e8ee'}; border-radius: 12px; padding: 16px 4px; overflow: hidden; }
+    .eb-preview { min-width: 0; background: color-mix(in srgb, var(--t-bg) 86%, #000); border-radius: 12px; padding: 16px 4px; overflow: hidden; }
     @media screen and (max-width: 960px) { .eb-grid { grid-template-columns: 1fr; padding: 12px; } .eb-side { position: static; max-height: none; overflow: visible; } }
     @media screen and (max-width: 560px) { .eb-title { display: none; } }
     @media print { .eb-bar, .eb-side { display: none !important; } .eb-preview { background: none; padding: 0; } .eb-zoom { zoom: 1 !important; } }
@@ -461,7 +461,7 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, profile, on
           </button>
         )}
         <button type="button" onClick={download} disabled={!totals.total || !!pdfProgress} aria-live="polite"
-          style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 10, border: 'none', background: totals.total ? t.accent : t.bgHover, color: totals.total ? '#0c1037' : t.textFaint, fontFamily: FONT_B, fontSize: 13.5, fontWeight: 800, cursor: totals.total && !pdfProgress ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap' }}>
+          style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 10, border: 'none', background: totals.total ? t.accent : t.bgHover, color: totals.total ? 'var(--t-onAccent)' : t.textFaint, fontFamily: FONT_B, fontSize: 13.5, fontWeight: 800, cursor: totals.total && !pdfProgress ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap' }}>
           <Printer size={16} aria-hidden="true" />
           {pdfProgress ? (pdfProgress.total ? `Downloading… ${pdfProgress.done}/${pdfProgress.total}` : 'Downloading…') : 'Download PDF'}
         </button>
@@ -490,7 +490,7 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, profile, on
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
               <button type="button" onClick={() => setSaveOpen(false)} style={{ padding: '9px 14px', borderRadius: 10, border: `1px solid ${t.border}`, background: 'transparent', color: t.text, fontFamily: FONT_B, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
               {ownsCurrent && <button type="button" onClick={() => doSave(true)} disabled={!saveTitle.trim() || saveState === 'saving'} style={{ padding: '9px 14px', borderRadius: 10, border: `1px solid ${t.border}`, background: 'transparent', color: t.text, fontFamily: FONT_B, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Save as new</button>}
-              <button type="button" onClick={() => doSave(false)} disabled={!saveTitle.trim() || saveState === 'saving'} style={{ padding: '9px 16px', borderRadius: 10, border: 'none', background: t.accent, color: '#0c1037', fontFamily: FONT_B, fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>
+              <button type="button" onClick={() => doSave(false)} disabled={!saveTitle.trim() || saveState === 'saving'} style={{ padding: '9px 16px', borderRadius: 10, border: 'none', background: t.accent, color: 'var(--t-onAccent)', fontFamily: FONT_B, fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>
                 {saveState === 'saving' ? 'Saving…' : 'Save'}
               </button>
             </div>
@@ -507,8 +507,8 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, profile, on
               <div className="eb-card" role="status" style={{ display: 'flex', flexDirection: 'column', gap: 10, borderColor: t.borderAccent }}>
                 <div style={{ fontSize: 13, color: t.textSub, lineHeight: 1.55 }}><b style={{ color: t.text }}>Saved to your Exams.</b> Start it there under timed conditions, then mark it against the solutions.</div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {onSit && downloaded && <button type="button" onClick={() => onSit(downloaded.id)} style={{ padding: '8px 14px', borderRadius: 10, border: 'none', background: t.accent, color: '#0c1037', fontFamily: FONT_B, fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>Start this exam</button>}
-                  {onExit && !downloaded && <button type="button" onClick={onExit} style={{ padding: '8px 14px', borderRadius: 10, border: 'none', background: t.accent, color: '#0c1037', fontFamily: FONT_B, fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>Go to my Exams</button>}
+                  {onSit && downloaded && <button type="button" onClick={() => onSit(downloaded.id)} style={{ padding: '8px 14px', borderRadius: 10, border: 'none', background: t.accent, color: 'var(--t-onAccent)', fontFamily: FONT_B, fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>Start this exam</button>}
+                  {onExit && !downloaded && <button type="button" onClick={onExit} style={{ padding: '8px 14px', borderRadius: 10, border: 'none', background: t.accent, color: 'var(--t-onAccent)', fontFamily: FONT_B, fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>Go to my Exams</button>}
                   {onMark && downloaded && <button type="button" onClick={() => onMark(downloaded.id)} style={{ padding: '8px 14px', borderRadius: 10, border: `1px solid ${t.borderMid}`, background: 'transparent', color: t.text, fontFamily: FONT_B, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Mark it now</button>}
                 </div>
               </div>

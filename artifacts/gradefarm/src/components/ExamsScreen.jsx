@@ -76,7 +76,7 @@ export default function ExamsScreen({
     .ex-table th { text-align: left; color: ${t.textMuted}; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 800; padding: 8px 6px; }
     .ex-table td { padding: 11px 6px; border-top: 1px solid ${t.border}; }
     .ex-btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; padding: 9px 15px; border-radius: 10px; font-family: ${FONT_B}; font-size: 13.5px; font-weight: 700; cursor: pointer; border: 1px solid ${t.borderMid}; background: transparent; color: ${t.text}; text-decoration: none; }
-    .ex-btn.primary { border: none; background: ${t.accent}; color: #0c1037; font-weight: 800; }
+    .ex-btn.primary { border: none; background: ${t.accent}; color: var(--t-onAccent); font-weight: 800; }
     .ex-btn:disabled { opacity: 0.55; cursor: not-allowed; }
     .ex-link { border: none; background: transparent; color: ${t.goldText}; font-family: ${FONT_B}; font-size: 13.5px; font-weight: 700; cursor: pointer; padding: 0; }
     .ex-mark { min-width: 44px; height: 44px; padding: 0 12px; border-radius: 10px; font-family: ${FONT_B}; font-size: 14px; font-weight: 800; cursor: pointer; border: 1px solid ${t.borderMid}; background: transparent; color: ${t.text}; }
@@ -261,7 +261,7 @@ function Dashboard({ t, attempts, error, subject, subjectName, myId, go, newExam
                   <div key={x.id} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, minWidth: 0 }}>
                     <span style={{ fontSize: 13, fontWeight: 700 }}>{x.percent}%</span>
                     <div style={{ width: '100%', maxWidth: 72, display: 'flex', flexDirection: 'column' }}>
-                      <div style={{ height: Math.round(x.skippedPercent * 1.5), background: 'rgba(226,181,76,0.30)', borderRadius: '6px 6px 0 0' }} />
+                      <div style={{ height: Math.round(x.skippedPercent * 1.5), background: 'color-mix(in srgb, var(--t-accent) 30%, transparent)', borderRadius: '6px 6px 0 0' }} />
                       <div style={{ height: Math.max(2, Math.round(x.percent * 1.5)), background: t.accent, borderRadius: x.skippedPercent ? 0 : '6px 6px 0 0' }} />
                     </div>
                   </div>

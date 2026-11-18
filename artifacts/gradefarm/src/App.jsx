@@ -96,8 +96,8 @@ function prefetchStudyScreens() {
   else setTimeout(run, 1500)
 }
 
-const GOLD   = '#f1be43'
-const GOLDL  = '#f9d87a'
+const GOLD   = 'var(--t-accent)'
+const GOLDL  = 'var(--t-accentLight)'
 const FONT_D = "'Sifonn Pro', sans-serif"
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
@@ -230,7 +230,7 @@ function shellColors(theme) {
 function UnreadBadge({ count }) {
   if (count <= 0) return null
   return (
-    <span aria-label={`${count} unread message${count === 1 ? '' : 's'}`} style={{ minWidth: 18, height: 18, padding: '0 5px', borderRadius: 9, background: GOLD, color: '#06091f', fontSize: 10.5, fontWeight: 800, lineHeight: '18px', textAlign: 'center', flexShrink: 0 }}>
+    <span aria-label={`${count} unread message${count === 1 ? '' : 's'}`} style={{ minWidth: 18, height: 18, padding: '0 5px', borderRadius: 9, background: GOLD, color: 'var(--t-onAccent)', fontSize: 10.5, fontWeight: 800, lineHeight: '18px', textAlign: 'center', flexShrink: 0 }}>
       {count > 9 ? '9+' : count}
     </span>
   )
@@ -377,8 +377,8 @@ function SidebarContent({ profile, subject, onChangeSubject, onSwitchSubject, su
           same shape as the subject row below it */}
       <div style={{ padding: '14px 12px 10px', flexShrink: 0 }}>
         <button type="button" className="gf-logo" onClick={() => go('/home')} aria-label="gradefarm home"
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: 48, borderRadius: 9, border: `1px solid ${theme === 'dark' ? SB.line : '#0c1037'}`, background: theme === 'dark' ? SB.raise : '#0c1037', cursor: 'pointer', fontFamily: FONT_D, fontSize: 19, letterSpacing: 1.5, lineHeight: 1 }}>
-          <span style={{ color: '#ffffff' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: 48, borderRadius: 9, border: `1px solid ${theme === 'dark' ? SB.line : 'var(--t-text)'}`, background: theme === 'dark' ? SB.raise : 'var(--t-text)', cursor: 'pointer', fontFamily: FONT_D, fontSize: 19, letterSpacing: 1.5, lineHeight: 1 }}>
+          <span style={{ color: theme === 'dark' ? 'var(--t-text)' : 'var(--t-bgCard)' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
         </button>
       </div>
 
@@ -501,8 +501,8 @@ function SidebarContent({ profile, subject, onChangeSubject, onSwitchSubject, su
             <button type="button" className="gf-side-btn" role="switch" aria-checked={theme === 'dark'} style={menuItem} onClick={onToggleTheme}>
               <Moon size={16} color={SB.sub} aria-hidden="true" />
               <span style={{ flex: 1 }}>Dark mode</span>
-              <span aria-hidden="true" style={{ width: 28, height: 16, borderRadius: 999, background: theme === 'dark' ? SB.fg : '#c8cee0', position: 'relative', flexShrink: 0 }}>
-                <span style={{ position: 'absolute', top: 2, left: theme === 'dark' ? 14 : 2, width: 12, height: 12, borderRadius: '50%', background: theme === 'dark' ? SB.bg : '#ffffff', transition: 'left 0.15s' }} />
+              <span aria-hidden="true" style={{ width: 28, height: 16, borderRadius: 999, background: theme === 'dark' ? SB.fg : SB.dim, position: 'relative', flexShrink: 0 }}>
+                <span style={{ position: 'absolute', top: 2, left: theme === 'dark' ? 14 : 2, width: 12, height: 12, borderRadius: '50%', background: theme === 'dark' ? SB.bg : SB.raise, transition: 'left 0.15s' }} />
               </span>
             </button>
             <button type="button" className="gf-side-btn" style={menuItem} onClick={onSignOut}>
@@ -518,7 +518,7 @@ function SidebarContent({ profile, subject, onChangeSubject, onSwitchSubject, su
           onClick={() => setAccountOpen(v => !v)}
           style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: 10, borderRadius: 9, border: 'none', background: accountOpen ? SB.raise : 'transparent', cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left' }}
         >
-          <span style={{ width: 30, height: 30, borderRadius: '50%', background: GOLD, color: '#06091f', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, flexShrink: 0 }}>
+          <span style={{ width: 30, height: 30, borderRadius: '50%', background: GOLD, color: 'var(--t-onAccent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, flexShrink: 0 }}>
             {profile.display_name[0].toUpperCase()}
           </span>
           <span style={{ flex: 1, minWidth: 0 }}>
@@ -555,7 +555,7 @@ function LockedSubjectScreen({ subject, reason = 'locked', onChangeSubject, them
             : <>Full practice exams aren't part of the free subject. Subscribe to <strong style={{ color: t.text }}>{formatSubjectLabel(subject)}</strong> to sit them — you can cancel any time.</>
           : <>You don't have access to <strong style={{ color: t.text }}>{formatSubjectLabel(subject)}</strong> yet. Try it as your free subject or subscribe — you can cancel any time.</>}
       </p>
-      <button onClick={() => navigate('/get-access', { state: { subject } })} style={{ padding: '12px 24px', borderRadius: 12, border: 'none', background: GOLD, color: '#0c1037', fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+      <button onClick={() => navigate('/get-access', { state: { subject } })} style={{ padding: '12px 24px', borderRadius: 12, border: 'none', background: GOLD, color: 'var(--t-onAccent)', fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
         See plans →
       </button>
       <button onClick={onChangeSubject} style={{ padding: '10px 20px', borderRadius: 10, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 13, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -578,7 +578,7 @@ function DiagnosticDueScreen({ subject, diagnostic, onChangeSubject, theme }) {
         Your tutor wants to see where you're at in <strong style={{ color: t.text }}>{formatSubjectLabel(subject)}</strong> before you start practising.
         It's 20 questions with no time limit. Your results go to your tutor and set up your practice.
       </p>
-      <button onClick={() => navigate(`/diagnostic/${encodeURIComponent(diagnostic.token)}`)} style={{ padding: '12px 24px', borderRadius: 12, border: 'none', background: GOLD, color: '#0c1037', fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
+      <button onClick={() => navigate(`/diagnostic/${encodeURIComponent(diagnostic.token)}`)} style={{ padding: '12px 24px', borderRadius: 12, border: 'none', background: GOLD, color: 'var(--t-onAccent)', fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
         Start the diagnostic →
       </button>
       <button onClick={onChangeSubject} style={{ padding: '10px 20px', borderRadius: 10, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
@@ -662,14 +662,14 @@ function LiveLessonBanner({ profile, theme }) {
   if (!lesson || location.pathname === '/lessons') return null
   const started = lesson.status === 'active' || now >= new Date(lesson.scheduled_at).getTime()
   return (
-    <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 20px', flexShrink: 0, fontFamily: FONT_B, borderBottom: `1px solid ${t.border}`, background: theme === 'dark' ? 'rgba(241,190,67,0.10)' : '#fff8e6' }}>
+    <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 20px', flexShrink: 0, fontFamily: FONT_B, borderBottom: `1px solid ${t.border}`, background: 'color-mix(in srgb, var(--t-accent) 10%, transparent)' }}>
       <Radio size={17} color={t.goldText} aria-hidden="true" style={{ flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         <strong>{lesson.title || 'Your lesson'}</strong>
         <span style={{ color: t.textMuted }}> {started ? 'is happening now' : 'is about to start'} · with {lesson.other_party_name || 'your tutor'}</span>
       </div>
       <button type="button" onClick={() => navigate(`/session/${lesson.id}`)}
-        style={{ display: 'inline-flex', alignItems: 'center', gap: 7, height: 34, padding: '0 14px', borderRadius: 9, border: 'none', background: GOLD, color: '#171724', fontFamily: FONT_B, fontSize: 13, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 7, height: 34, padding: '0 14px', borderRadius: 9, border: 'none', background: GOLD, color: 'var(--t-onAccent)', fontFamily: FONT_B, fontSize: 13, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>
         <Video size={15} aria-hidden="true" /> Join
       </button>
     </div>
@@ -771,7 +771,7 @@ function AppShell({ children, profile, subject, onChangeSubject, onSwitchSubject
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <button onClick={onToggleTheme} title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 15, display: 'flex', alignItems: 'center', color: GOLD }}>{theme === 'dark' ? <Moon size={17} aria-hidden="true" /> : <Sun size={17} aria-hidden="true" />}</button>
-              <div style={{ width: 30, height: 30, borderRadius: '50%', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: '#080d28' }}>
+              <div style={{ width: 30, height: 30, borderRadius: '50%', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: 'var(--t-onAccent)' }}>
                 {profile.display_name[0].toUpperCase()}
               </div>
             </div>
@@ -815,7 +815,7 @@ function AppShellScreens({
   const learnState  = { phase, setPhase, topic, setTopic, messages, setMessages, interests, setInterests, docContext, setDocContext, docName, setDocName, questionContext, setQuestionContext, onConsolidate, learnRequest, setLearnRequest }
   const openInLearn = (request) => { setLearnRequest({ ...request, at: Date.now() }); navigate('/learn') }
   const shellProps  = { ...commonProps, profile, subject, onChangeSubject, onSwitchSubject, subscriptions, fullAccess, onSignOut, onProfileUpdated }
-  const GOLD = '#f1be43'
+  const GOLD = 'var(--t-accent)'
   const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
   const onLessons = LESSON_PATHS.includes(location.pathname)
@@ -903,7 +903,7 @@ function mergeTutorialFromStorage(userId, prof) {
 function RouteFallback({ theme }) {
   const t = THEMES[theme] || {}
   return (
-    <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: t.bg || '#0c1037' }}>
+    <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: t.bg }}>
       <InfinityLoader size={48} />
     </div>
   )

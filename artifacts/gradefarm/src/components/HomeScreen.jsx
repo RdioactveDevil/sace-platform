@@ -12,9 +12,9 @@ import { loadCurriculumMacroGroups } from '../lib/curriculaDb'
 import { filterByFormat, questionFormat, isAiMarked } from '../lib/questionTypes'
 import HomeEngagement from './HomeEngagement'
 
-const GOLD   = '#f1be43'
-const GOLDL  = '#f9d87a'
-const NAVY_FILL = '#0c1037'
+const GOLD   = 'var(--t-accent)'
+const GOLDL  = 'var(--t-accentLight)'
+const NAVY_FILL = 'var(--t-onAccent)'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const FORMAT_KEY = 'gf-question-format'
 
@@ -277,7 +277,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
   // Selected options stay quiet: navy on light, off-white on dark. Gold is
   // kept for the Start button.
   const segOnBg = theme === 'dark' ? t.text : NAVY_FILL
-  const segOnFg = theme === 'dark' ? t.bg : '#fff'
+  const segOnFg = t.bgCard
   const fieldLabel = { display: 'block', fontSize: 12, fontWeight: 600, color: t.textMuted, marginBottom: 6 }
 
   const renderBuilder = () => (
@@ -315,7 +315,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
             <span id="exam-mode-label" style={{ fontSize: 13, fontWeight: 700, color: t.text }}>Exam mode</span>
             <button type="button" role="switch" aria-checked={examMode} aria-labelledby="exam-mode-label" onClick={() => setExamMode(v => !v)}
               style={{ width: 36, height: 20, borderRadius: 999, border: 'none', padding: 0, position: 'relative', cursor: 'pointer', background: examMode ? segOnBg : t.border, flexShrink: 0 }}>
-              <span style={{ position: 'absolute', top: 3, left: examMode ? 19 : 3, width: 14, height: 14, borderRadius: '50%', background: examMode ? segOnFg : '#fff', transition: 'left 0.15s' }} />
+              <span style={{ position: 'absolute', top: 3, left: examMode ? 19 : 3, width: 14, height: 14, borderRadius: '50%', background: t.bgCard, transition: 'left 0.15s' }} />
             </button>
           </div>
           {examMode && (
@@ -418,7 +418,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     if (!diagnostic || diagnosticDismissed) return null
     const { percentage, band, work_on: workOn = [], practise = [] } = diagnostic.summary
     return (
-      <div style={{ ...card, padding: '16px 18px', border: `1px solid rgba(241,190,67,0.35)`, background: theme === 'dark' ? 'rgba(241,190,67,0.06)' : t.bgCard }}>
+      <div style={{ ...card, padding: '16px 18px', border: `1px solid color-mix(in srgb, var(--t-accent) 35%, transparent)`, background: theme === 'dark' ? 'color-mix(in srgb, var(--t-accent) 6%, transparent)' : t.bgCard }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
           <div style={{ flex: 1, fontSize: 15, fontWeight: 700, color: GOLD, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6 }}><Target size={16} aria-hidden="true" />Your diagnostic</div>
           <button onClick={dismissDiagnostic} aria-label="Hide your diagnostic results" style={{ border: 'none', background: 'transparent', color: t.textFaint, cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 2 }}>×</button>
@@ -431,7 +431,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
         )}
         {practise.length > 0 && (
           <button onClick={() => onStartSession({ mode: 'new', subtopics: practise, expandTopics: true })}
-            style={{ padding: '8px 14px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: '#0c1037', fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
+            style={{ padding: '8px 14px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: 'var(--t-onAccent)', fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
             Practise these →
           </button>
         )}
@@ -441,14 +441,14 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
 
   const TutorInvitesCard = () => {
     if (invites.length === 0) return null
-    const btn = (primary) => ({ padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B, border: primary ? 'none' : `1px solid ${t.border}`, background: primary ? `linear-gradient(135deg,${GOLD},${GOLDL})` : 'transparent', color: primary ? '#0c1037' : t.textMuted })
+    const btn = (primary) => ({ padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B, border: primary ? 'none' : `1px solid ${t.border}`, background: primary ? `linear-gradient(135deg,${GOLD},${GOLDL})` : 'transparent', color: primary ? 'var(--t-onAccent)' : t.textMuted })
     return (
-      <div style={{ ...card, padding: '16px 18px', border: `1px solid rgba(241,190,67,0.35)`, background: theme === 'dark' ? 'rgba(241,190,67,0.06)' : t.bgCard }}>
+      <div style={{ ...card, padding: '16px 18px', border: `1px solid color-mix(in srgb, var(--t-accent) 35%, transparent)`, background: theme === 'dark' ? 'color-mix(in srgb, var(--t-accent) 6%, transparent)' : t.bgCard }}>
         <div style={{ fontSize: 15, fontWeight: 700, color: GOLD, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6 }}><GraduationCap size={16} aria-hidden="true" />Tutor invite{invites.length > 1 ? 's' : ''}</div>
         <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 12 }}>Accept to open the Student Portal. Your tutor will see your practice progress.</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {invites.map(inv => (
-            <div key={inv.token} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 10, background: theme === 'dark' ? 'rgba(255,255,255,0.03)' : '#f8f9fe', border: `1px solid ${t.border}` }}>
+            <div key={inv.token} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', borderRadius: 10, background: t.bgSubtle, border: `1px solid ${t.border}` }}>
               <div style={{ flex: 1, minWidth: 120 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{inv.tutor_name}{inv.recipient === 'parent' && inv.child_name ? <span style={{ fontWeight: 500, color: t.textMuted }}> · for {inv.child_name}</span> : null}</div>
                 {inv.subjects?.length > 0 && <div style={{ fontSize: 11, color: GOLD, marginTop: 2 }}>{inv.subjects.join(', ')} included, free</div>}
@@ -494,7 +494,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
         </div>
         <button type="button"
           onClick={() => (a ? onStartSession({ mode: 'new', subtopics: a.topics || [], assignment: a }) : onStartSession({ mode: 'review', subtopics: [], subject: f.subject, reviewIds: f.wrong_question_ids }))}
-          style={{ padding: '7px 13px', borderRadius: 8, border: 'none', background: t.accent, color: '#0c1037', fontFamily: FONT_B, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+          style={{ padding: '7px 13px', borderRadius: 8, border: 'none', background: t.accent, color: 'var(--t-onAccent)', fontFamily: FONT_B, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }}>
           {a ? (a.progress_count > 0 ? 'Continue' : 'Start') : `Redo ${f.wrong_question_ids.length} wrong`}
         </button>
         <button type="button" onClick={() => navigate('/portal')}
@@ -521,7 +521,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
 
     const daysLeft = Math.max(0, Math.ceil((new Date(next.date) - today) / 86400000))
     const isExam   = next.type === 'Exam'
-    const color    = daysLeft > 60 ? '#4ade80' : daysLeft > 21 ? GOLD : '#f87171'
+    const color    = daysLeft > 60 ? 'var(--t-success)' : daysLeft > 21 ? GOLD : 'var(--t-danger)'
     const message  = daysLeft > 60 ? 'You have time — build strong habits now.'
       : daysLeft > 21 ? 'Crunch mode. Focus on weak topics first.'
       : daysLeft > 7  ? 'Final stretch — revise, revise, revise.'
@@ -529,7 +529,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
       : 'Today! Best of luck!'
 
     return (
-      <div style={{ ...card, padding: '16px 18px', border: `1px solid ${color}30`, background: `${color}08` }}>
+      <div style={{ ...card, padding: '16px 18px', border: `1px solid color-mix(in srgb, ${color} 19%, transparent)`, background: `color-mix(in srgb, ${color} 3%, transparent)` }}>
         <div style={{ fontSize: 11, color, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
           {isExam ? <><Calendar size={13} aria-hidden="true" />Exam</> : <><ClipboardList size={13} aria-hidden="true" />{next.type}</>}
         </div>
@@ -550,7 +550,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
           <div style={{ borderTop: `1px solid ${t.border}`, paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 5 }}>
             {upcoming.slice(1, 4).map(a => {
               const d = Math.max(0, Math.ceil((new Date(a.date) - today) / 86400000))
-              const c2 = d > 60 ? '#4ade80' : d > 21 ? GOLD : '#f87171'
+              const c2 = d > 60 ? 'var(--t-success)' : d > 21 ? GOLD : 'var(--t-danger)'
               return (
                 <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontSize: 11, color: t.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '70%' }}>{a.label}</span>
@@ -617,7 +617,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     </>
   )
 
-  const rowSelected = theme === 'dark' ? 'rgba(255,255,255,0.05)' : '#fdf6e1'
+  const rowSelected = 'color-mix(in srgb, var(--t-accent) 10%, transparent)'
   const weekPct = weekStats.total > 0 ? Math.round((weekStats.correct / weekStats.total) * 100) : null
 
   return (
@@ -649,7 +649,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
         <div className="hs-main">
           {/* Comeback banner */}
           {showComeback && (
-            <div style={{ marginBottom: 16, padding: '14px 18px', borderRadius: 12, background: 'rgba(241,190,67,0.08)', border: '1px solid rgba(241,190,67,0.25)', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+            <div style={{ marginBottom: 16, padding: '14px 18px', borderRadius: 12, background: 'color-mix(in srgb, var(--t-accent) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--t-accent) 25%, transparent)', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: 200 }}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: t.text, marginBottom: 3 }}>Welcome back</div>
                 <div style={{ fontSize: 12, color: t.textMuted }}>You've been away a while. Start with the questions you got wrong last time.</div>

@@ -14,9 +14,9 @@ import QuestionRenderer from './questions/QuestionRenderer'
 import QuizToolsDock, { toolsForSubject } from './QuizToolsDock'
 import { dataBookletFor } from '../lib/subjects'
 
-const GOLD = '#f1be43'
-const GOLDL = '#f9d87a'
-const NAVY = '#0c1037'
+const GOLD = 'var(--t-accent)'
+const GOLDL = 'var(--t-accentLight)'
+const NAVY = 'var(--t-onAccent)'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const FONT_D = "'Sifonn Pro', sans-serif"
 
@@ -253,7 +253,7 @@ export default function ExamSimulator({ paper: paperIn, trackId, theme = 'dark',
                   <div style={{ fontSize: 10, color: t.textMuted, marginTop: 2 }}>{insights.band.sublabel}</div>
                 </div>
                 <div style={{ flex: 1, minWidth: 160 }}>
-                  <span style={{ display: 'inline-block', padding: '4px 12px', borderRadius: 999, fontSize: 12, fontWeight: 800, background: insights.ready.color + '22', border: `1px solid ${insights.ready.color}55`, color: insights.ready.color, marginBottom: 8 }}>
+                  <span style={{ display: 'inline-block', padding: '4px 12px', borderRadius: 999, fontSize: 12, fontWeight: 800, background: `color-mix(in srgb, ${insights.ready.color} 13%, transparent)`, border: `1px solid color-mix(in srgb, ${insights.ready.color} 33%, transparent)`, color: insights.ready.color, marginBottom: 8 }}>
                     {insights.ready.label}
                   </span>
                   <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.5 }}>

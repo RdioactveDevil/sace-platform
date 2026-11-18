@@ -18,7 +18,7 @@ import { greetingContext, pickGreeting } from '../lib/greetings'
 import { QUICK_REPLIES_RULE, splitQuickReplies } from '../lib/quickReplies'
 import { lessonKey, fetchLessons, saveLesson as saveLessonRow, fetchRecentChats, fetchChat, createChat, updateChat } from '../lib/learnStore'
 
-const GOLD   = '#f1be43'
+const GOLD   = 'var(--t-accent)'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
 const MAX_IMAGES_PER_MESSAGE = 4
@@ -844,9 +844,9 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
   // ── Shared pieces ───────────────────────────────────────────────────────────
   const card = { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12 }
   const linkBtn = { border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', fontFamily: FONT_B, fontSize: 13, fontWeight: 700, color: t.text, textDecoration: 'underline', textDecorationColor: GOLD, textDecorationThickness: 2, textUnderlineOffset: 4 }
-  const primaryBtn = (enabled = true) => ({ padding: '11px 16px', borderRadius: 10, border: 'none', background: enabled ? t.accent : t.bgHover, color: enabled ? '#0c1037' : t.textFaint, fontSize: 13.5, fontWeight: 800, cursor: enabled ? 'pointer' : 'default', fontFamily: FONT_B })
+  const primaryBtn = (enabled = true) => ({ padding: '11px 16px', borderRadius: 10, border: 'none', background: enabled ? t.accent : t.bgHover, color: enabled ? 'var(--t-onAccent)' : t.textFaint, fontSize: 13.5, fontWeight: 800, cursor: enabled ? 'pointer' : 'default', fontFamily: FONT_B })
   const secondaryBtn = { padding: '10px 14px', borderRadius: 10, border: `1px solid ${t.border}`, background: t.bgCard, color: t.text, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }
-  const segOn = theme === 'dark' ? { background: t.text, color: t.bg } : { background: '#0c1037', color: '#fff' }
+  const segOn = { background: t.text, color: t.bg }
 
   // "Explain it simply / with sport / … / with your own analogy".
   const saveCustomAnalogy = () => {
@@ -950,7 +950,7 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
   const canSend = (input.trim() || attachedImages.length > 0) && !loading && !processingImages && !aiBlocked
   const sendButton = (onSend) => (
     <button type="button" onClick={onSend} disabled={!canSend} aria-label="Send message"
-      style={{ width: 32, height: 32, borderRadius: 8, border: 'none', background: canSend ? t.accent : t.bgHover, color: canSend ? '#0c1037' : t.textFaint, fontSize: 16, fontWeight: 800, cursor: canSend ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>↑</button>
+      style={{ width: 32, height: 32, borderRadius: 8, border: 'none', background: canSend ? t.accent : t.bgHover, color: canSend ? 'var(--t-onAccent)' : t.textFaint, fontSize: 16, fontWeight: 800, cursor: canSend ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>↑</button>
   )
 
   const composer = ({ big = false, placeholder, onSend }) => (
@@ -1299,7 +1299,7 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
                 </div>
                 <span style={{ marginLeft: 'auto' }}>{styleSelect}</span>
                 <button type="button" onClick={sendFromStart} disabled={!canAsk} aria-label="Ask Titan"
-                  style={{ width: 44, height: 44, borderRadius: 999, border: 'none', flexShrink: 0, background: canAsk ? t.accent : t.bgHover, color: canAsk ? '#18181b' : t.textFaint, cursor: canAsk ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  style={{ width: 44, height: 44, borderRadius: 999, border: 'none', flexShrink: 0, background: canAsk ? t.accent : t.bgHover, color: canAsk ? 'var(--t-onAccent)' : t.textFaint, cursor: canAsk ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <ArrowUp size={20} strokeWidth={2.6} aria-hidden="true" />
                 </button>
               </div>
@@ -1332,7 +1332,7 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
                 placeholder="Type any topic"
                 style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent', color: t.text, fontSize: 16, fontFamily: FONT_B }} />
               <button type="submit" disabled={aiBlocked} className="ls-start-lesson"
-                style={{ height: 46, padding: '0 22px', borderRadius: 999, border: 'none', background: aiBlocked ? t.bgHover : t.accent, color: aiBlocked ? t.textFaint : '#18181b', fontSize: 15, fontWeight: 800, fontFamily: FONT_B, cursor: aiBlocked ? 'default' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                style={{ height: 46, padding: '0 22px', borderRadius: 999, border: 'none', background: aiBlocked ? t.bgHover : t.accent, color: aiBlocked ? t.textFaint : 'var(--t-onAccent)', fontSize: 15, fontWeight: 800, fontFamily: FONT_B, cursor: aiBlocked ? 'default' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
                 Start lesson
               </button>
             </form>
@@ -1737,7 +1737,7 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
                 <button type="button" onClick={() => setOfferDismissed(true)}
                   style={{ height: 36, padding: '0 14px', borderRadius: 999, border: `1px solid ${t.border}`, background: 'transparent', color: t.textSub, fontFamily: FONT_B, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Not now</button>
                 <button type="button" onClick={() => openLesson(topic)}
-                  style={{ height: 36, padding: '0 16px', borderRadius: 999, border: 'none', background: t.accent, color: '#18181b', fontFamily: FONT_B, fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>Start lesson</button>
+                  style={{ height: 36, padding: '0 16px', borderRadius: 999, border: 'none', background: t.accent, color: 'var(--t-onAccent)', fontFamily: FONT_B, fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>Start lesson</button>
               </span>
             </div>
           )}
@@ -1808,7 +1808,7 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
               />
               <span style={{ flexShrink: 0 }}>{styleSelect}</span>
               <button type="button" onClick={sendMessage} disabled={!canReply} aria-label="Send"
-                style={{ width: 40, height: 40, borderRadius: 999, border: 'none', flexShrink: 0, background: canReply ? t.accent : t.bgHover, color: canReply ? '#18181b' : t.textFaint, cursor: canReply ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                style={{ width: 40, height: 40, borderRadius: 999, border: 'none', flexShrink: 0, background: canReply ? t.accent : t.bgHover, color: canReply ? 'var(--t-onAccent)' : t.textFaint, cursor: canReply ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <ArrowUp size={19} strokeWidth={2.6} aria-hidden="true" />
               </button>
             </div>

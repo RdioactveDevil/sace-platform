@@ -96,7 +96,7 @@ export default function StudentPortalScreen({ profile, theme, active = true, has
   const card = { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12 }
   const btn = (primary) => ({
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 32, padding: '0 12px', borderRadius: 8, fontFamily: FONT_B, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap', textDecoration: 'none',
-    ...(primary ? { border: 'none', background: t.accent, color: '#0c1037' } : { border: `1px solid ${t.border}`, background: t.bgCard, color: t.text }),
+    ...(primary ? { border: 'none', background: t.accent, color: 'var(--t-onAccent)' } : { border: `1px solid ${t.border}`, background: t.bgCard, color: t.text }),
   })
   const link = { border: 'none', background: 'none', padding: 0, fontFamily: FONT_B, fontSize: 13, fontWeight: 700, color: t.text, cursor: 'pointer', textDecoration: 'underline', textDecorationColor: t.accent, textDecorationThickness: 2, textUnderlineOffset: 3, whiteSpace: 'nowrap' }
   const h2 = (text, extra, id) => (

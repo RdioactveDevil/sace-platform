@@ -96,7 +96,7 @@ function TutorPlanPicker({ billing, theme, onChanged }) {
               <button type="button" onClick={() => choose(plan)} disabled={!!busy || current || billing.enabled === false}
                 style={{ marginTop: 'auto', padding: '11px 14px', borderRadius: 12, border: 'none', fontFamily: FONT_B, fontSize: 14, fontWeight: 800,
                   cursor: busy || current || billing.enabled === false ? 'default' : 'pointer',
-                  background: current ? 'transparent' : 'var(--t-accent)', color: current ? t.textMuted : '#0c1037', opacity: busy && busy !== plan.name ? 0.5 : 1 }}>
+                  background: current ? 'transparent' : 'var(--t-accent)', color: current ? t.textMuted : 'var(--t-onAccent)', opacity: busy && busy !== plan.name ? 0.5 : 1 }}>
                 {busy === plan.name ? 'Opening…' : current ? 'Your plan' : billing.enabled === false ? 'Payments coming soon' : billing.plan && !billing.exempt ? `Switch to ${plan.name}` : `Choose ${plan.name}`}
               </button>
             </div>

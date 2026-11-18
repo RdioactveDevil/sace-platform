@@ -128,5 +128,5 @@ const btnPrimary = (busy) => ({
   ...btn(busy),
   border: 'none',
   background: 'var(--t-accent)',
-  color: '#0c1037',
+  color: 'var(--t-onAccent)',
 })

@@ -11,8 +11,8 @@ import {
   getTutorResourceDownloadUrl,
 } from '../lib/db'
 
-const GOLD   = '#f1be43'
-const GOLDL  = '#f9d87a'
+const GOLD   = 'var(--t-accent)'
+const GOLDL  = 'var(--t-accentLight)'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
 const RESOURCE_TYPES = [
@@ -177,7 +177,7 @@ export default function ResourcesTab({ profile, theme }) {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
         <button
           onClick={() => { setShowForm(v => !v); setFormError('') }}
-          style={{ padding: '10px 18px', borderRadius: 9, border: 'none', background: showForm ? t.bgHover : 'var(--t-accent)', color: showForm ? t.textMuted : '#0c1037', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}
+          style={{ padding: '10px 18px', borderRadius: 9, border: 'none', background: showForm ? t.bgHover : 'var(--t-accent)', color: showForm ? t.textMuted : 'var(--t-onAccent)', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}
         >
           {showForm ? 'Close' : 'Add resource'}
         </button>
@@ -305,7 +305,7 @@ export default function ResourcesTab({ profile, theme }) {
               </div>
             )}
 
-            <button type="submit" disabled={saving} style={{ padding: '11px 24px', borderRadius: 9, border: 'none', background: saving ? t.border : 'var(--t-accent)', color: saving ? t.textMuted : '#0c1037', fontSize: 14, fontWeight: 800, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}>
+            <button type="submit" disabled={saving} style={{ padding: '11px 24px', borderRadius: 9, border: 'none', background: saving ? t.border : 'var(--t-accent)', color: saving ? t.textMuted : 'var(--t-onAccent)', fontSize: 14, fontWeight: 800, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}>
               {saving ? (form.source === 'file' ? (uploadProgress !== null && uploadProgress < 100 ? `Uploading… ${uploadProgress}%` : 'Finishing…') : 'Saving…') : 'Share resource'}
             </button>
           </form>

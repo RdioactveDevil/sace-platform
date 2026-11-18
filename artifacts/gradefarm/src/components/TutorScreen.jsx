@@ -54,8 +54,8 @@ import { fetchLiveCurricula, loadCurriculumMacroGroups } from '../lib/curriculaD
 import { ASSIGNMENT_DIFFICULTIES, assignmentGoalLabel } from '../lib/engine'
 import { WEEKDAYS, defaultDueDays, describeDue, describeRepeat, localYmd } from '../lib/recurring'
 
-const GOLD   = '#f1be43'
-const GOLDL  = '#f9d87a'
+const GOLD   = 'var(--t-accent)'
+const GOLDL  = 'var(--t-accentLight)'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const FONT_D = "'Sifonn Pro', sans-serif"
 
@@ -399,7 +399,7 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
         </button>
         <button
           onClick={() => { setShowForm(v => !v); setFormError('') }}
-          style={{ padding: '8px 14px', borderRadius: 9, border: showForm ? `1px solid ${t.border}` : 'none', background: showForm ? t.bgCard : 'var(--t-accent)', color: showForm ? t.text : '#0c1037', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}
+          style={{ padding: '8px 14px', borderRadius: 9, border: showForm ? `1px solid ${t.border}` : 'none', background: showForm ? t.bgCard : 'var(--t-accent)', color: showForm ? t.text : 'var(--t-onAccent)', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}
         >
           {showForm ? 'Close' : 'New assignment'}
         </button>
@@ -695,7 +695,7 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
 
             {formError && <div style={{ marginBottom: 12, fontSize: 12, color: 'var(--t-danger)' }}>{formError}</div>}
 
-            <button type="submit" disabled={saving} style={{ padding: '11px 24px', borderRadius: 9, border: 'none', background: saving ? t.border : 'var(--t-accent)', color: saving ? t.textMuted : '#0c1037', fontSize: 14, fontWeight: 800, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}>
+            <button type="submit" disabled={saving} style={{ padding: '11px 24px', borderRadius: 9, border: 'none', background: saving ? t.border : 'var(--t-accent)', color: saving ? t.textMuted : 'var(--t-onAccent)', fontSize: 14, fontWeight: 800, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}>
               {saving ? 'Creating…' : `${form.repeat !== 'none' ? 'Create recurring assignment' : 'Create assignment'}${resolvedCount > 1 ? ` (${resolvedCount} students)` : ''}`}
             </button>
           </form>
@@ -821,7 +821,7 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
               const status = assignmentStatus(a)
               const sc = statusColor(status, t)
               return (
-                <div key={a.id} style={{ padding: indent ? '11px 20px 11px 38px' : '13px 20px', borderBottom: '1px solid var(--t-border)', display: 'flex', alignItems: 'flex-start', gap: 14, background: indent ? (theme === 'dark' ? 'var(--t-bgCard)' : 'rgba(12,16,55,0.02)') : 'transparent' }}>
+                <div key={a.id} style={{ padding: indent ? '11px 20px 11px 38px' : '13px 20px', borderBottom: '1px solid var(--t-border)', display: 'flex', alignItems: 'flex-start', gap: 14, background: indent ? 'color-mix(in srgb, var(--t-text) 3%, transparent)' : 'transparent' }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 4 }}>
                       {!indent && <span style={{ fontSize: 13, fontWeight: 800, color: t.text }}>{a.type}</span>}
@@ -1306,7 +1306,7 @@ function ClassesTab({ profile, theme, allTutors = false }) {
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <button
           onClick={() => { setShowCreate(v => !v); setCreateError('') }}
-          style={{ padding: '10px 18px', borderRadius: 9, border: 'none', background: showCreate ? t.border : 'var(--t-accent)', color: showCreate ? t.textMuted : '#0c1037', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}
+          style={{ padding: '10px 18px', borderRadius: 9, border: 'none', background: showCreate ? t.border : 'var(--t-accent)', color: showCreate ? t.textMuted : 'var(--t-onAccent)', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}
         >
           {showCreate ? 'Close' : 'New class'}
         </button>
@@ -1329,7 +1329,7 @@ function ClassesTab({ profile, theme, allTutors = false }) {
             <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: 14, marginBottom: 14 }}>
               <div>
                 <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, display: 'block', marginBottom: 6 }}>Color</label>
-                <input type="color" value={newColor || '#f1be43'} onChange={e => setNewColor(e.target.value)} style={{ ...inputStyle, padding: 4, height: 36 }} />
+                <input type="color" value={newColor || 'var(--t-accent)'} onChange={e => setNewColor(e.target.value)} style={{ ...inputStyle, padding: 4, height: 36 }} />
               </div>
               <div>
                 <label style={{ fontSize: 11, fontWeight: 700, color: t.textMuted, display: 'block', marginBottom: 6 }}>Description</label>
@@ -1337,7 +1337,7 @@ function ClassesTab({ profile, theme, allTutors = false }) {
               </div>
             </div>
             {createError && <div style={{ marginBottom: 10, fontSize: 12, color: 'var(--t-danger)' }}>{createError}</div>}
-            <button type="submit" disabled={creating} style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: creating ? t.border : 'var(--t-accent)', color: creating ? t.textMuted : '#0c1037', fontSize: 13, fontWeight: 800, cursor: creating ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}>
+            <button type="submit" disabled={creating} style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: creating ? t.border : 'var(--t-accent)', color: creating ? t.textMuted : 'var(--t-onAccent)', fontSize: 13, fontWeight: 800, cursor: creating ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}>
               {creating ? 'Creating…' : 'Create class'}
             </button>
           </form>
@@ -1368,7 +1368,7 @@ function ClassesTab({ profile, theme, allTutors = false }) {
                       {renamingId === cls.id ? (
                         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                           <input value={renameValue} onChange={e => setRenameValue(e.target.value)} style={{ ...inputStyle, maxWidth: 280 }} autoFocus />
-                          <button onClick={() => handleRename(cls)} style={{ padding: '6px 12px', borderRadius: 7, border: 'none', background: 'var(--t-accent)', color: '#0c1037', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>Save</button>
+                          <button onClick={() => handleRename(cls)} style={{ padding: '6px 12px', borderRadius: 7, border: 'none', background: 'var(--t-accent)', color: 'var(--t-onAccent)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>Save</button>
                           <button onClick={() => { setRenamingId(null); setRenameValue('') }} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>Cancel</button>
                         </div>
                       ) : (
@@ -1430,7 +1430,7 @@ function ClassesTab({ profile, theme, allTutors = false }) {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                           {memberRows.map(m => (
                             <div key={m.student_id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', borderRadius: 8, background: t.bg, border: `1px solid ${t.border}` }}>
-                              <div style={{ width: 26, height: 26, borderRadius: '50%', background: 'var(--t-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: '#0c1037', flexShrink: 0 }}>
+                              <div style={{ width: 26, height: 26, borderRadius: '50%', background: 'var(--t-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: 'var(--t-onAccent)', flexShrink: 0 }}>
                                 {(m.profile?.profiles?.display_name || '?')[0].toUpperCase()}
                               </div>
                               <div style={{ flex: 1, fontSize: 13, color: t.text }}>{m.profile?.profiles?.display_name || 'Unknown student'}</div>
@@ -1455,7 +1455,7 @@ function ClassesTab({ profile, theme, allTutors = false }) {
                             </div>
                           )}
                           <div style={{ display: 'flex', gap: 8 }}>
-                            <button onClick={() => handleAddMembers(cls)} disabled={pickerSelected.length === 0 || pickerSaving} style={{ padding: '7px 14px', borderRadius: 7, border: 'none', background: pickerSelected.length === 0 || pickerSaving ? t.border : 'var(--t-accent)', color: pickerSelected.length === 0 || pickerSaving ? t.textMuted : '#0c1037', fontSize: 12, fontWeight: 800, cursor: pickerSelected.length === 0 || pickerSaving ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}>
+                            <button onClick={() => handleAddMembers(cls)} disabled={pickerSelected.length === 0 || pickerSaving} style={{ padding: '7px 14px', borderRadius: 7, border: 'none', background: pickerSelected.length === 0 || pickerSaving ? t.border : 'var(--t-accent)', color: pickerSelected.length === 0 || pickerSaving ? t.textMuted : 'var(--t-onAccent)', fontSize: 12, fontWeight: 800, cursor: pickerSelected.length === 0 || pickerSaving ? 'not-allowed' : 'pointer', fontFamily: FONT_B }}>
                               {pickerSaving ? 'Adding…' : `Add ${pickerSelected.length} student${pickerSelected.length !== 1 ? 's' : ''}`}
                             </button>
                             <button onClick={() => { setPickerForClass(null); setPickerSelected([]) }} style={{ padding: '7px 14px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>Cancel</button>
@@ -1930,7 +1930,7 @@ function DiagnosticTab({ profile, theme }) {
               <button
                 onClick={handleGenerate}
                 disabled={generating}
-                style={{ padding: '12px 28px', borderRadius: 10, border: 'none', background: generating ? t.border : 'var(--t-accent)', color: generating ? t.textMuted : '#0c1037', fontSize: 14, fontWeight: 800, cursor: generating ? 'not-allowed' : 'pointer', fontFamily: FONT_B, alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 10 }}
+                style={{ padding: '12px 28px', borderRadius: 10, border: 'none', background: generating ? t.border : 'var(--t-accent)', color: generating ? t.textMuted : 'var(--t-onAccent)', fontSize: 14, fontWeight: 800, cursor: generating ? 'not-allowed' : 'pointer', fontFamily: FONT_B, alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 10 }}
               >
                 {generating ? <><Bot size={17} aria-hidden="true" /> Generating questions… <span style={{ opacity: 0.6 }}>(30–60 sec)</span></> : <><Bot size={17} aria-hidden="true" /> Generate test</>}
               </button>
@@ -2042,7 +2042,7 @@ function DiagnosticTab({ profile, theme }) {
               </div>
               {saveError && <div style={{ fontSize: 13, color: t.danger }}>{saveError}</div>}
               <button onClick={handleCreate} disabled={saving}
-                style={{ padding: '11px 24px', borderRadius: 9, border: 'none', background: saving ? t.border : 'var(--t-accent)', color: saving ? t.textMuted : '#0c1037', fontSize: 13, fontWeight: 800, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: FONT_B, alignSelf: 'flex-start' }}>
+                style={{ padding: '11px 24px', borderRadius: 9, border: 'none', background: saving ? t.border : 'var(--t-accent)', color: saving ? t.textMuted : 'var(--t-onAccent)', fontSize: 13, fontWeight: 800, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: FONT_B, alignSelf: 'flex-start' }}>
                 {saving ? 'Creating…' : <><CircleCheck size={15} aria-hidden="true" style={{ verticalAlign: '-3px', marginRight: 6 }} />Create and get the student's link</>}
               </button>
             </div>
@@ -2084,7 +2084,7 @@ function DiagnosticTab({ profile, theme }) {
             </div>
 
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              <button onClick={resetForm} style={{ padding: '10px 20px', borderRadius: 9, border: 'none', background: 'var(--t-accent)', color: '#0c1037', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
+              <button onClick={resetForm} style={{ padding: '10px 20px', borderRadius: 9, border: 'none', background: 'var(--t-accent)', color: 'var(--t-onAccent)', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
                 + New Assessment
               </button>
               <button onClick={() => setStep('list')} style={{ padding: '10px 20px', borderRadius: 9, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 13, cursor: 'pointer', fontFamily: FONT_B }}>
@@ -2133,7 +2133,7 @@ function DiagnosticTab({ profile, theme }) {
                         Copy Link
                       </button>
                       {completed && (
-                        <button onClick={() => handleViewReport(d)} style={{ padding: '6px 12px', borderRadius: 7, border: 'none', background: 'var(--t-accent)', color: '#0c1037', fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
+                        <button onClick={() => handleViewReport(d)} style={{ padding: '6px 12px', borderRadius: 7, border: 'none', background: 'var(--t-accent)', color: 'var(--t-onAccent)', fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
                           View Report
                         </button>
                       )}
@@ -2158,7 +2158,7 @@ function DiagnosticTab({ profile, theme }) {
             const r = reportData.report
             const a = reportData.assessment
             const pct = r.percentage
-            const bandColors = { Outstanding: t.success, High: GOLD, Satisfactory: t.blue, Developing: '#fbbf24', Beginning: t.danger }
+            const bandColors = { Outstanding: t.success, High: GOLD, Satisfactory: t.blue, Developing: 'color-mix(in srgb, var(--t-accent) 55%, var(--t-danger))', Beginning: t.danger }
             const bc = bandColors[r.performance_band] || GOLD
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -2446,7 +2446,7 @@ export default function TutorScreen({ profile, theme, subject }) {
     assignments: overdueCount ? `${overdueCount} overdue` : `${assignments.filter(a => !a.completed_at).length} open`,
   }[activeTab]
 
-  const btn = (primary) => ({ padding: '8px 14px', borderRadius: 9, fontFamily: FONT_B, fontSize: 13, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap', border: primary ? 'none' : `1px solid ${t.border}`, background: primary ? t.accent : t.bgCard, color: primary ? '#0c1037' : t.text })
+  const btn = (primary) => ({ padding: '8px 14px', borderRadius: 9, fontFamily: FONT_B, fontSize: 13, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap', border: primary ? 'none' : `1px solid ${t.border}`, background: primary ? t.accent : t.bgCard, color: primary ? 'var(--t-onAccent)' : t.text })
   const segOn = { background: 'var(--t-text)', color: 'var(--t-bg)' }
   const segment = (options, value, onChange, label) => (
     <div role="group" aria-label={label} style={{ display: 'inline-flex', border: `1px solid ${t.border}`, borderRadius: 8, overflow: 'hidden', flexShrink: 0 }}>
