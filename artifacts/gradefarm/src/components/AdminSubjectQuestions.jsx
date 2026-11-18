@@ -178,7 +178,7 @@ export default function AdminSubjectQuestions({ curriculumId, topics = [], initi
       </div>
 
       {selected.size > 0 && (
-        <div role="toolbar" aria-label="Change the ticked questions" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '9px 12px', borderRadius: 11, background: '#0c1037', color: '#ffffff', border: '1px solid rgba(255,255,255,0.12)', position: 'sticky', top: 0, zIndex: 2 }}>
+        <div role="toolbar" aria-label="Change the ticked questions" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '9px 12px', borderRadius: 11, background: 'var(--t-text)', color: 'var(--t-bg)', border: '1px solid var(--t-text)', position: 'sticky', top: 0, zIndex: 2 }}>
           <strong style={{ fontSize: 13.5 }}>{selected.size.toLocaleString('en-AU')} ticked</strong>
           {matching.length > selected.size && (
             <button type="button" onClick={() => setSelected(new Set(matching.map(q => q.id)))} style={linkBtn}>Tick all {matching.length.toLocaleString('en-AU')} matching</button>
@@ -194,8 +194,8 @@ export default function AdminSubjectQuestions({ curriculumId, topics = [], initi
             {[1, 2, 3, 4, 5].map(d => <option key={d} value={d} style={opt}>Level {d}</option>)}
           </select>
           <button type="button" onClick={hideOrShow} disabled={!!busy} style={barBtn}>{allHidden ? 'Show to students' : 'Hide from subject'}</button>
-          <button type="button" onClick={check} disabled={!!busy} style={{ ...barBtn, background: 'var(--t-accent)', color: '#0c1037' }}>{busy === 'check' ? 'Checking…' : 'AI check & fix'}</button>
-          <button type="button" onClick={remove} disabled={!!busy} style={{ ...barBtn, background: 'rgba(220,38,38,0.25)', color: '#fecaca' }}>Delete</button>
+          <button type="button" onClick={check} disabled={!!busy} style={{ ...barBtn, background: 'var(--t-accent)', color: 'var(--t-onAccent)' }}>{busy === 'check' ? 'Checking…' : 'AI check & fix'}</button>
+          <button type="button" onClick={remove} disabled={!!busy} style={{ ...barBtn, background: 'var(--t-danger)', color: '#ffffff' }}>Delete</button>
         </div>
       )}
 
@@ -223,7 +223,7 @@ export default function AdminSubjectQuestions({ curriculumId, topics = [], initi
               {page.map(q => {
                 const on = selected.has(q.id)
                 const src = questionSource(q)
-                const cell = { ...ui.td, verticalAlign: 'top', background: on ? 'rgba(241,190,67,0.12)' : undefined }
+                const cell = { ...ui.td, verticalAlign: 'top', background: on ? 'color-mix(in srgb, var(--t-accent) 12%, transparent)' : undefined }
                 const level = Math.max(0, Math.min(5, q.difficulty || 0))
                 return (
                   <Fragment key={q.id}>
@@ -239,7 +239,7 @@ export default function AdminSubjectQuestions({ curriculumId, topics = [], initi
                           <span>{questionKindLabel(q)}</span>
                           <span aria-hidden="true">·</span>
                           {src === 'paper'
-                            ? <span style={tag('rgba(241,190,67,0.2)', 'var(--t-goldText)')}>{q.source || 'Past paper'}</span>
+                            ? <span style={tag('color-mix(in srgb, var(--t-accent) 20%, transparent)', 'var(--t-goldText)')}>{q.source || 'Past paper'}</span>
                             : <span>{src === 'ai' ? 'Written by AI' : q.source}</span>}
                           {reported.has(q.id) && <span style={{ ...tag('var(--t-dangerBg)', 'var(--t-danger)'), marginLeft: 4 }}>Reported</span>}
                           {hidden.has(q.id) && <span style={{ ...tag('var(--t-bgHover)', 'var(--t-textMuted)'), marginLeft: 4 }}>Hidden</span>}
@@ -285,6 +285,6 @@ export default function AdminSubjectQuestions({ curriculumId, topics = [], initi
 }
 
 const linkBtn = { background: 'none', border: 'none', padding: 0, color: 'inherit', opacity: 0.85, textDecoration: 'underline', cursor: 'pointer', fontFamily: FONT_B, fontSize: 13 }
-const barBtn = { padding: '6px 11px', borderRadius: 8, border: 'none', background: 'rgba(255,255,255,0.12)', color: 'inherit', fontFamily: FONT_B, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }
+const barBtn = { padding: '6px 11px', borderRadius: 8, border: 'none', background: 'color-mix(in srgb, var(--t-bg) 14%, transparent)', color: 'inherit', fontFamily: FONT_B, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }
 const barSelect = { ...barBtn, appearance: 'auto', maxWidth: 220 }
-const opt = { color: '#0c1037', background: '#ffffff' }
+const opt = { color: 'var(--t-onAccent)', background: '#ffffff' }

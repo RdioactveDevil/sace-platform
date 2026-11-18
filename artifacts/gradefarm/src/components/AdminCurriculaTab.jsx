@@ -224,7 +224,7 @@ export default function AdminCurriculaTab({ onSelectCurriculum }) {
                     <td style={ui.td}><StatusBadge status={status} /></td>
                     <td style={{ ...ui.td, whiteSpace: 'nowrap' }}>
                       {waiting[c.name]?.reports > 0 && <span style={{ ...needPill, background: 'var(--t-dangerBg)', color: 'var(--t-danger)' }}>{waiting[c.name].reports} report{waiting[c.name].reports === 1 ? '' : 's'}</span>}
-                      {waiting[c.name]?.review > 0 && <span style={{ ...needPill, background: 'rgba(245,158,11,0.14)', color: '#b45309' }}>{waiting[c.name].review} to review</span>}
+                      {waiting[c.name]?.review > 0 && <span style={{ ...needPill, background: 'color-mix(in srgb, var(--t-accent) 16%, transparent)', color: 'var(--t-goldText)' }}>{waiting[c.name].review} to review</span>}
                       {!waiting[c.name]?.reports && !waiting[c.name]?.review && <span style={{ color: 'var(--t-textFaint)' }}>—</span>}
                     </td>
                     <td style={{ ...ui.td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>

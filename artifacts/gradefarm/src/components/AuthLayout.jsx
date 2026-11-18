@@ -9,8 +9,8 @@ import { THEMES } from '../lib/theme'
 
 export const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const FONT_D = "'Sifonn Pro', sans-serif"
-const GOLD = '#f1be43'
-const NAVY = '#0c1037'
+const GOLD = 'var(--t-accent)'
+const NAVY = 'var(--t-onAccent)'
 
 /** The wordmark as on the homepage: no box, navy and gold on light, white and gold on dark. */
 export function Logo({ onClick, theme = 'dark' }) {
@@ -19,7 +19,7 @@ export function Logo({ onClick, theme = 'dark' }) {
   return (
     <Tag type={onClick ? 'button' : undefined} onClick={onClick} aria-label={onClick ? 'gradefarm home' : undefined} className="af-logo"
       style={{ display: 'inline-flex', alignItems: 'baseline', border: 'none', background: 'none', padding: 0, cursor: onClick ? 'pointer' : 'default', fontFamily: FONT_D, fontSize: 28, letterSpacing: '0.08em', lineHeight: 1, whiteSpace: 'nowrap' }}>
-      <span style={{ color: dark ? '#ffffff' : NAVY }}>grade</span><span style={{ color: dark ? GOLD : '#e8ac1c' }}>farm.</span>
+      <span style={{ color: 'var(--t-text)' }}>grade</span><span style={{ color: dark ? GOLD : 'color-mix(in srgb, var(--t-accent) 85%, var(--t-text))' }}>farm.</span>
     </Tag>
   )
 }

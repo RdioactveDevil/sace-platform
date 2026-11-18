@@ -3,7 +3,7 @@ import { reportError } from '../lib/analytics'
 import { isChunkLoadError } from '../lib/chunkReload'
 import { TriangleAlert } from 'lucide-react'
 
-const GOLD   = '#f1be43'
+const GOLD   = 'var(--t-accent)'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const FONT_D = "'Sifonn Pro', sans-serif"
 
@@ -62,16 +62,16 @@ export default class ErrorBoundary extends Component {
         style={{
           minHeight: compact ? 220 : '100vh',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: 24, background: compact ? 'transparent' : '#0c1037',
+          padding: 24, background: compact ? 'transparent' : 'var(--t-onAccent)',
           fontFamily: FONT_B, textAlign: 'center', boxSizing: 'border-box',
         }}
       >
         <div style={{ maxWidth: 420 }}>
           <div style={{ marginBottom: 14, display: 'flex', justifyContent: 'center' }}><TriangleAlert size={compact ? 34 : 48} color={GOLD} aria-hidden="true" /></div>
-          <div style={{ fontFamily: FONT_D, fontSize: compact ? 18 : 22, color: '#f1f5f9', letterSpacing: 0.5, marginBottom: 8 }}>
+          <div style={{ fontFamily: FONT_D, fontSize: compact ? 18 : 22, color: 'var(--t-text)', letterSpacing: 0.5, marginBottom: 8 }}>
             Something went wrong
           </div>
-          <p style={{ fontSize: 14, color: '#94a3b8', lineHeight: 1.6, margin: '0 0 22px' }}>
+          <p style={{ fontSize: 14, color: 'var(--t-textMuted)', lineHeight: 1.6, margin: '0 0 22px' }}>
             {label
               ? `The ${label} screen hit an unexpected error. `
               : 'This screen hit an unexpected error. '}
@@ -82,7 +82,7 @@ export default class ErrorBoundary extends Component {
               onClick={this.handleRetry}
               style={{
                 padding: '11px 22px', borderRadius: 11, border: 'none',
-                background: GOLD, color: '#0c1037', fontSize: 14, fontWeight: 800,
+                background: GOLD, color: 'var(--t-onAccent)', fontSize: 14, fontWeight: 800,
                 cursor: 'pointer', fontFamily: FONT_B,
               }}
             >
@@ -93,8 +93,8 @@ export default class ErrorBoundary extends Component {
                 onClick={this.handleReload}
                 style={{
                   padding: '11px 22px', borderRadius: 11,
-                  border: '1px solid rgba(255,255,255,0.15)', background: 'transparent',
-                  color: '#94a3b8', fontSize: 14, fontWeight: 600,
+                  border: '1px solid var(--t-border)', background: 'transparent',
+                  color: 'var(--t-textMuted)', fontSize: 14, fontWeight: 600,
                   cursor: 'pointer', fontFamily: FONT_B,
                 }}
               >
@@ -104,13 +104,13 @@ export default class ErrorBoundary extends Component {
           </div>
           {error?.message && (
             <details style={{ marginTop: 20, textAlign: 'left' }}>
-              <summary style={{ fontSize: 12, color: '#64748b', cursor: 'pointer', userSelect: 'none' }}>
+              <summary style={{ fontSize: 12, color: 'var(--t-textMuted)', cursor: 'pointer', userSelect: 'none' }}>
                 Technical details
               </summary>
               <pre style={{
                 marginTop: 8, padding: 12, borderRadius: 8, overflowX: 'auto',
                 background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.08)',
-                fontSize: 11, color: '#cbd5e1', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                fontSize: 11, color: 'var(--t-borderMid)', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
               }}>
                 {String(error.message)}
               </pre>

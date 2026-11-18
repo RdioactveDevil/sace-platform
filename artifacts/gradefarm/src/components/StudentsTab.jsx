@@ -27,7 +27,7 @@ import {
 } from '../lib/db'
 import { parseEmailList, gettingStartedStatus } from '../lib/rosterOnboarding'
 
-const GOLD = '#f1be43'
+const GOLD = 'var(--t-accent)'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
 const YEAR_LEVELS = ['Year 7', 'Year 8', 'Year 9', 'Year 10', 'Year 11', 'Year 12']
@@ -365,10 +365,10 @@ export default function StudentsTab({ profile, theme, allTutors = false, onNavig
   const divider = t.border
   const ctrl = { padding: '8px 11px', borderRadius: 9, border: `1px solid ${t.border}`, background: t.bgInput, color: t.text, fontSize: 13, fontFamily: FONT_B, outline: 'none' }
   const chipStyle = (active) => ({ padding: '6px 12px', borderRadius: 999, border: `1px solid ${active ? t.text : t.border}`, background: active ? t.text : t.bgCard, color: active ? t.bg : t.textMuted, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B, whiteSpace: 'nowrap' })
-  const btn = (primary) => ({ padding: '8px 14px', borderRadius: 9, fontFamily: FONT_B, fontSize: 13, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap', border: primary ? 'none' : `1px solid ${t.border}`, background: primary ? t.accent : t.bgCard, color: primary ? '#0c1037' : t.text })
+  const btn = (primary) => ({ padding: '8px 14px', borderRadius: 9, fontFamily: FONT_B, fontSize: 13, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap', border: primary ? 'none' : `1px solid ${t.border}`, background: primary ? t.accent : t.bgCard, color: primary ? 'var(--t-onAccent)' : t.text })
   const linkBtn = (color = t.textSub) => ({ padding: 0, border: 'none', background: 'none', color, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B })
   const tag = (text, color, key) => (
-    <span key={key} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: `${color}1f`, color, whiteSpace: 'nowrap' }}>{text}</span>
+    <span key={key} style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: `color-mix(in srgb, ${color} 12%, transparent)`, color, whiteSpace: 'nowrap' }}>{text}</span>
   )
   const accColor = (pct) => pct == null ? t.textFaint : pct >= 70 ? t.success : pct >= 50 ? t.goldText : t.danger
   const th = (label, right, title) => (

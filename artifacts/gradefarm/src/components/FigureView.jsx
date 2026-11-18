@@ -18,7 +18,7 @@ import { THEMES } from '../lib/theme'
 import { XYPlot, TLCPlate, FlowChart, Apparatus, Particles, ChemString } from './ChemFigure'
 import { labelPlain } from '../lib/chemText'
 
-const GOLD = '#f1be43'
+const GOLD = 'var(--t-accent)'
 const FONT = "'Plus Jakarta Sans', sans-serif"
 const MAX_ITEMS = 40
 
@@ -276,9 +276,9 @@ export default function FigureView({ figure, theme = 'dark' }) {
     bg: t.bgSubtle,
     text: t.text,
     muted: t.textMuted,
-    stroke: light ? '#334155' : '#cbd5e1',
+    stroke: light ? 'var(--t-textSub)' : 'var(--t-borderMid)',
     grid: t.border,
-    fill: light ? '#fff8e6' : 'rgba(241,190,67,0.08)',
+    fill: 'color-mix(in srgb, var(--t-accent) 8%, transparent)',
     accentText: t.goldText,
   }
   if (figure.type === 'geometry') return <Geometry fig={figure} c={c} />

@@ -37,7 +37,7 @@ function writeCountsCache(counts) {
  * show. `fullAccess` (tutors/admins) unlocks and lists them all. A calm
  * moving background (CalmBackground) sits behind the page.
  */
-export default function SubjectPicker({ profile, subscriptions = [], fullAccess = false, onSelect, onGetAccess, onProfileUpdated, theme = 'dark', onToggleTheme }) {
+export default function SubjectPicker({ profile, subscriptions = [], fullAccess = false, onSelect, onGetAccess, onStartFree, onProfileUpdated, theme = 'dark', onToggleTheme }) {
   const t = THEMES[theme]
   const [liveQuestionCounts, setCounts] = useState(() => readCountsCache())
   const [dynamicSubjects, setDynamic]   = useState([])
@@ -45,6 +45,8 @@ export default function SubjectPicker({ profile, subscriptions = [], fullAccess 
   const [billing, setBilling]           = useState(null)
   const [stateSaving, setStateSaving]   = useState(false)
   const [stateError, setStateError]     = useState('')
+  const [starting, setStarting]         = useState(null) // the subject being made their free one
+  const [startError, setStartError]     = useState('')
 
   useEffect(() => {
     if (fullAccess) return
@@ -134,10 +136,22 @@ export default function SubjectPicker({ profile, subscriptions = [], fullAccess 
     if (access === 'none') return hasFreeSubject ? priceLabel : null
     return !fullAccess && access === 'free' ? `Free · ${freeDaily} a day` : null
   }
-  const actionOf = (subj) => (accessOf(subj) === 'none' ? (hasFreeSubject ? 'Unlock' : 'Start free') : hasOwn && !fullAccess ? 'Continue' : 'Start')
-  const go = (subj) => {
+  const actionOf = (subj) => (starting === subj.id ? 'Starting…' : accessOf(subj) === 'none' ? (hasFreeSubject ? 'Unlock' : 'Start free') : hasOwn && !fullAccess ? 'Continue' : 'Start')
+  // "Start free" starts the subject straight away as their free one: no
+  // payment page in between. Only a subject past their free one goes there.
+  const go = async (subj) => {
+    if (starting) return
+    if (accessOf(subj) !== 'none') return onSelect(subj)
+    if (!hasFreeSubject && onStartFree) {
+      setStarting(subj.id); setStartError('')
+      try { await onStartFree(subj) } catch (e) {
+        setStartError(e?.message && !/fetch/i.test(e.message) ? e.message : "We couldn't start that subject. Check your connection and try again.")
+        setStarting(null)
+      }
+      return
+    }
     const count = liveQuestionCounts?.[subj.id]
-    return accessOf(subj) === 'none' ? onGetAccess?.({ ...subj, questionCount: count ?? subj.questionCount }) : onSelect(subj)
+    onGetAccess?.({ ...subj, questionCount: count ?? subj.questionCount })
   }
   const pill = (status) => status && (
     <span className="sp-pill" data-free={status.startsWith('Free')}>{status}</span>
@@ -249,6 +263,7 @@ export default function SubjectPicker({ profile, subscriptions = [], fullAccess 
             )}
 
             <div className="sp-card">{hero}</div>
+            {startError && <p role="alert" style={{ margin: 0, fontSize: 13, color: t.danger }}>{startError}</p>}
 
             {ownOthers.length > 0 && (
               <>

@@ -13,8 +13,8 @@ const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`
 
 const FILTERS = [['all', 'All'], ['unchecked', 'Not checked'], ['partway', 'Part way'], ['checked', 'Checked']]
 const STATUS = {
-  checked: { Icon: CheckCircle2, bg: 'var(--t-successBg, rgba(22,163,74,0.12))', fg: 'var(--t-success)' },
-  partway: { Icon: Loader, bg: 'rgba(241,190,67,0.2)', fg: 'var(--t-goldText)' },
+  checked: { Icon: CheckCircle2, bg: 'var(--t-successBg)', fg: 'var(--t-success)' },
+  partway: { Icon: Loader, bg: 'color-mix(in srgb, var(--t-accent) 20%, transparent)', fg: 'var(--t-goldText)' },
   unchecked: { Icon: CircleDashed, bg: 'var(--t-bgHover)', fg: 'var(--t-textMuted)' },
 }
 
@@ -100,7 +100,7 @@ export default function AdminLoadedPapers({ curriculumId }) {
                 <div style={{ flex: '1 1 260px', minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--t-text)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                     {p.label}
-                    <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: p.kind === 'trial' ? 'var(--t-bgHover)' : 'rgba(241,190,67,0.2)', color: p.kind === 'trial' ? 'var(--t-textMuted)' : 'var(--t-goldText)' }}>{p.kind === 'trial' ? 'Trial' : 'Past paper'}</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: p.kind === 'trial' ? 'var(--t-bgHover)' : 'color-mix(in srgb, var(--t-accent) 20%, transparent)', color: p.kind === 'trial' ? 'var(--t-textMuted)' : 'var(--t-goldText)' }}>{p.kind === 'trial' ? 'Trial' : 'Past paper'}</span>
                     <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: S.bg, color: S.fg, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                       <S.Icon size={12} aria-hidden="true" /> {statusText(p.status)}
                     </span>

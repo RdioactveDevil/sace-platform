@@ -123,7 +123,7 @@ export default function StudentLessonsScreen({ theme, active = true }) {
     </div>
   )
   const emptyLine = (text) => <div style={{ ...card, padding: '16px 18px', fontSize: 13, color: t.textMuted, lineHeight: 1.5 }}>{text}</div>
-  const goldButton = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, height: 38, padding: '0 16px', borderRadius: 9, border: 'none', background: t.accent, color: '#0c1037', fontFamily: FONT_B, fontSize: 13.5, fontWeight: 800, cursor: 'pointer', textDecoration: 'none', whiteSpace: 'nowrap' }
+  const goldButton = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, height: 38, padding: '0 16px', borderRadius: 9, border: 'none', background: t.accent, color: 'var(--t-onAccent)', fontFamily: FONT_B, fontSize: 13.5, fontWeight: 800, cursor: 'pointer', textDecoration: 'none', whiteSpace: 'nowrap' }
   const linkAction = { border: 'none', background: 'none', padding: 0, fontFamily: FONT_B, fontSize: 13, fontWeight: 700, color: t.text, cursor: 'pointer', textDecoration: 'underline', textDecorationColor: t.accent, textDecorationThickness: 2, textUnderlineOffset: 3, whiteSpace: 'nowrap' }
   const dateLabel = (d) => d.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })
 
@@ -286,7 +286,7 @@ export default function StudentLessonsScreen({ theme, active = true }) {
             <div style={{ aspectRatio: '16 / 9', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               {playing.url
                 ? <video src={playing.url} controls autoPlay playsInline style={{ width: '100%', height: '100%' }} />
-                : <Loader size={28} color="#f1be43" aria-label="Loading" />}
+                : <Loader size={28} color="var(--t-accent)" aria-label="Loading" />}
             </div>
           </div>
         </div>

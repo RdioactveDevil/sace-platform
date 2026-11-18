@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
+import { shellFor } from '../lib/theme'
 import { Users, Check, Plus, ChevronDown } from 'lucide-react'
 import { addFamilyChild, fetchFamily, switchToChild } from '../lib/db'
 
-const GOLD = '#f1be43'
+const GOLD = 'var(--t-accent)'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
 // One load per page: the family only changes by adding a child, which reloads.
@@ -27,10 +28,9 @@ export function useFamily(profile) {
  * For a parent's account: which child is open, a list to switch to another
  * one (no password), and adding a child. Sits in the sidebar footer.
  */
-// Sidebar colours (App.jsx shellColors); the dark set by default.
-const DARK_SIDEBAR = { raise: '#1f1f23', line: '#2a2a30', fg: '#ececef', sub: '#a1a1aa', dim: '#8a8a94', icon: '#e2b54c' }
+// Sidebar colours (App.jsx shellColors); the dark set of the palette in use by default.
 
-export default function FamilySwitcher({ profile, sb = DARK_SIDEBAR }) {
+export default function FamilySwitcher({ profile, sb = shellFor('dark') }) {
   const family = useFamily(profile)
   const [open, setOpen] = useState(false)
   const [adding, setAdding] = useState(false)
@@ -86,7 +86,7 @@ export default function FamilySwitcher({ profile, sb = DARK_SIDEBAR }) {
               <input autoFocus value={name} onChange={e => setName(e.target.value)} maxLength={40} placeholder="Child's first name" aria-label="Child's first name"
                 style={{ flex: 1, minWidth: 0, padding: '7px 9px', borderRadius: 7, border: `1px solid ${sb.line}`, background: 'transparent', color: sb.fg, fontSize: 12.5, fontFamily: FONT_B, outline: 'none' }} />
               <button type="submit" disabled={!name.trim() || !!busy}
-                style={{ padding: '0 10px', borderRadius: 7, border: 'none', background: GOLD, color: '#0c1037', fontSize: 12, fontWeight: 800, fontFamily: FONT_B, cursor: 'pointer', opacity: !name.trim() || busy ? 0.6 : 1 }}>
+                style={{ padding: '0 10px', borderRadius: 7, border: 'none', background: GOLD, color: 'var(--t-onAccent)', fontSize: 12, fontWeight: 800, fontFamily: FONT_B, cursor: 'pointer', opacity: !name.trim() || busy ? 0.6 : 1 }}>
                 {busy === 'add' ? '…' : 'Add'}
               </button>
             </form>
@@ -95,7 +95,7 @@ export default function FamilySwitcher({ profile, sb = DARK_SIDEBAR }) {
               <Plus size={14} aria-hidden="true" style={{ flexShrink: 0 }} /> Add a child
             </button>
           )}
-          {error && <div role="alert" style={{ fontSize: 11.5, color: '#f87171', padding: '6px 10px 0', lineHeight: 1.4 }}>{error}</div>}
+          {error && <div role="alert" style={{ fontSize: 11.5, color: 'var(--t-danger)', padding: '6px 10px 0', lineHeight: 1.4 }}>{error}</div>}
         </div>
       )}
     </div>

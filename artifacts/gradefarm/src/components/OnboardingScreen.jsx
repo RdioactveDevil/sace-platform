@@ -137,8 +137,9 @@ export default function OnboardingScreen({ profile, userEmail, onDone, needsPass
     state: !!studyState,
     dob: dobValid,
     parent: !!parentEmailClean && !parentEmailError,
-    school: true,
-    goal: termsAccepted && !saving,
+    school: !!school.trim(),
+    // An ATAR target is needed wherever it's asked (Year 11 and up).
+    goal: termsAccepted && !saving && (!SHOWS_ATAR(yearLevel) || !!atarTarget),
   }[screen]
   const isLast = at === screens.length - 1
   const advance = async () => {
@@ -263,7 +264,7 @@ export default function OnboardingScreen({ profile, userEmail, onDone, needsPass
     school: (
       <>
         <H>{you('Which school do you go to?', `Which school does ${child} go to?`)}</H>
-        <Sub>Optional.</Sub>
+        <Sub>Pick it from the list, or type it if it isn't there.</Sub>
         <Field id="onb-school" label="School" theme={theme}>
           {/* Their state's schools, so it's a real school; "isn't listed" lets them type one. */}
           <SchoolPicker id="onb-school" state={studyState} value={school} onChange={setSchool} theme={theme} autoFocus />
@@ -273,13 +274,13 @@ export default function OnboardingScreen({ profile, userEmail, onDone, needsPass
     goal: (
       <>
         <H>{you('What are you aiming for?', `What is ${child} aiming for?`)}</H>
-        <Sub>Optional. You can change these later in Account.</Sub>
+        <Sub>You can change these later in Account.</Sub>
         {SHOWS_ATAR(yearLevel) && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <span id="onb-atar" style={{ fontSize: 13, fontWeight: 700, color: t.textSub }}>ATAR target</span>
             <div role="radiogroup" aria-labelledby="onb-atar" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {ATAR_TARGETS.map(v => (
-                <button key={v} type="button" role="radio" aria-checked={atarTarget === v} className="af-chip" onClick={() => setAtarTarget(atarTarget === v ? null : v)} style={choiceChip(t, atarTarget === v)}>{v}+</button>
+                <button key={v} type="button" role="radio" aria-checked={atarTarget === v} className="af-chip" onClick={() => setAtarTarget(v)} style={choiceChip(t, atarTarget === v)}>{v}+</button>
               ))}
             </div>
           </div>
@@ -312,7 +313,6 @@ export default function OnboardingScreen({ profile, userEmail, onDone, needsPass
     ),
   }[screen]
 
-  const optionalScreen = screen === 'school'
   // Year and state are one tap each: picking a chip moves on, so no Next button.
   // One already picked (the state from the pricing page, or coming Back) gets Next.
   const chipScreen = (screen === 'year' || screen === 'state') && (!valid || tapped)
@@ -332,7 +332,6 @@ export default function OnboardingScreen({ profile, userEmail, onDone, needsPass
             <button type="submit" className="af-btn" disabled={!valid} style={authBtn(t, 'primary', { disabled: !valid })}>
               {isLast ? (saving ? 'Setting up…' : 'Start') : pwSaving ? 'Saving…' : 'Next'}
             </button>
-            {optionalScreen && !school.trim() && <button type="button" className="af-btn" onClick={next} style={authBtn(t, 'secondary')}>Skip</button>}
             {at > 0 && <button type="button" className="af-link" onClick={back} style={{ ...linkStyle(t), fontSize: 13.5, fontWeight: 600, textDecorationColor: t.border, color: t.textMuted, marginLeft: 6 }}>Back</button>}
             {!isLast && <span style={{ fontSize: 12.5, color: t.textFaint, marginLeft: 4 }} className="onb-kbd">or press Enter</span>}
           </div>

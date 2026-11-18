@@ -6,7 +6,7 @@ import { saveParentDetails } from '../lib/db'
 import { awaitingParent } from '../lib/parentConsent'
 import { THEMES } from '../lib/theme'
 
-const GOLD = '#f1be43'
+const GOLD = 'var(--t-accent)'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 /** How often to look for the parent's OK while the banner shows. */
 const CHECK_MS = 60_000
@@ -51,11 +51,11 @@ export default function ParentConsentBanner({ profile, theme, onProfileUpdated }
 
   const btn = (primary) => ({
     height: 32, padding: '0 12px', borderRadius: 9, fontFamily: FONT_B, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', flexShrink: 0,
-    border: primary ? 'none' : `1px solid ${t.border}`, background: primary ? GOLD : 'transparent', color: primary ? '#171724' : t.text,
+    border: primary ? 'none' : `1px solid ${t.border}`, background: primary ? GOLD : 'transparent', color: primary ? 'var(--t-onAccent)' : t.text,
   })
 
   return (
-    <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '10px 20px', flexShrink: 0, fontFamily: FONT_B, borderBottom: `1px solid ${t.border}`, background: theme === 'dark' ? 'rgba(241,190,67,0.10)' : '#fff8e6' }}>
+    <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '10px 20px', flexShrink: 0, fontFamily: FONT_B, borderBottom: `1px solid ${t.border}`, background: 'color-mix(in srgb, var(--t-accent) 10%, transparent)' }}>
       <ShieldCheck size={17} color={t.goldText} aria-hidden="true" style={{ flexShrink: 0 }} />
       <div style={{ flex: '1 1 260px', minWidth: 0, fontSize: 13, color: t.text, lineHeight: 1.45 }}>
         {profile.parent_email ? (

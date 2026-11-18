@@ -127,7 +127,7 @@ export default function AdminTutorSection({ tutor, students, onChange }) {
           </select>
           <button type="button" disabled={!addStudentId || !!busy}
             onClick={() => changeLink(async () => { await adminLinkTutor(t.id, addStudentId); setAddStudentId('') })}
-            style={{ padding: '7px 13px', borderRadius: 9, border: 'none', background: 'var(--t-accent)', color: '#0c1037', fontSize: 12.5, fontWeight: 800, fontFamily: FONT_B, cursor: 'pointer', opacity: !addStudentId || busy ? 0.5 : 1 }}>
+            style={{ padding: '7px 13px', borderRadius: 9, border: 'none', background: 'var(--t-accent)', color: 'var(--t-onAccent)', fontSize: 12.5, fontWeight: 800, fontFamily: FONT_B, cursor: 'pointer', opacity: !addStudentId || busy ? 0.5 : 1 }}>
             Assign
           </button>
         </div>

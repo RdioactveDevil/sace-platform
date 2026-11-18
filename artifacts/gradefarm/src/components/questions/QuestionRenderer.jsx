@@ -18,8 +18,8 @@ const markedThisVisit = new Map()
 // (bank__<parent>__<id>) and keep the original in bank_question_id.
 const bankId = (q) => q.bank_question_id || q.id
 
-const GOLD = '#f1be43'
-const NAVY = '#0c1037'
+const GOLD = 'var(--t-accent)'
+const NAVY = 'var(--t-onAccent)'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const FONT_M = "'JetBrains Mono', monospace"
 

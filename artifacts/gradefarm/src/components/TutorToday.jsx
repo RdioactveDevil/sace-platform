@@ -3,7 +3,7 @@ import { THEMES } from '../lib/theme'
 import { fetchRosterActivity, fetchMessageThreads } from '../lib/db'
 import { isJoinable } from './StudentLessonsScreen'
 
-const GOLD = '#f1be43'
+const GOLD = 'var(--t-accent)'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const DAY_MS = 86400000
 const QUIET_DAYS = 7
@@ -135,7 +135,7 @@ export default function TutorToday({ theme, roster, assignments, sessions, onNav
   // ── Styles ────────────────────────────────────────────────────────────────
   const card = { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, padding: '12px 16px' }
   const cardTitle = { fontSize: 14.5, fontWeight: 800, color: t.text }
-  const btn = (primary) => ({ padding: '7px 13px', borderRadius: 8, fontFamily: FONT_B, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0, border: primary ? 'none' : `1px solid ${t.border}`, background: primary ? t.accent : t.bgCard, color: primary ? '#0c1037' : t.text })
+  const btn = (primary) => ({ padding: '7px 13px', borderRadius: 8, fontFamily: FONT_B, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0, border: primary ? 'none' : `1px solid ${t.border}`, background: primary ? t.accent : t.bgCard, color: primary ? 'var(--t-onAccent)' : t.text })
   const row = (first) => ({ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '10px 0', borderTop: first ? 'none' : `1px solid ${t.border}` })
   const kindChip = { fontSize: 11, fontWeight: 700, color: t.textSub, padding: '1px 8px', border: `1px solid ${t.border}`, borderRadius: 999, marginRight: 8, whiteSpace: 'nowrap' }
   const fact = (value, text) => (

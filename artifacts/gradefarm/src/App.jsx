@@ -9,20 +9,22 @@ import { clearPendingInvite, pendingInvite } from './lib/pendingInvite'
 import { takePendingCheckout, startCheckout, rememberCheckoutRetry, checkoutRetry } from './lib/pendingCheckout'
 import ErrorBoundary from './components/ErrorBoundary'
 import { lazyWithReload, reloadForNewVersion } from './lib/chunkReload'
-import { getProfile, getStruggleMap, signOut, getQuestionsForSubjectTile, getSubscriptions, updateProfile, hasTutoringAccess, fetchTutoringSessions, fetchUnreadMessageCount, syncCheckout, getFreeQuestionUsage, countFreeQuestion, respondToInvite, fetchMyDiagnostics, prepareDiagnostic } from './lib/db'
+import { getProfile, getStruggleMap, signOut, getQuestionsForSubjectTile, getSubscriptions, chooseFreeSubject, updateProfile, hasTutoringAccess, fetchTutoringSessions, fetchUnreadMessageCount, syncCheckout, getFreeQuestionUsage, countFreeQuestion, respondToInvite, fetchMyDiagnostics, prepareDiagnostic } from './lib/db'
 import { refreshManagedTopicsCache } from './lib/adminTopics'
 import { loadManagedCurriculaTopics, fetchLiveCurricula } from './lib/curriculaDb'
-import { THEMES } from './lib/theme'
-import { getLevelProgress, rankAccuracy, RANKS } from './lib/engine'
+import { THEMES, shellFor, modeOf, paletteById, setActivePalette } from './lib/theme'
+import { getLevel, getLevelProgress, rankAccuracy, RANKS } from './lib/engine'
 import { Sun, Moon, Lock, Radio, Video, ClipboardList, Check, ChevronsUpDown, Ellipsis, LogOut, UserRound, IdCard, CreditCard } from 'lucide-react'
 import RankIcon from './components/RankIcon'
 import { curriculumToSubjectTile, findTileForSubjectString, formatSubjectLabel, subjectHasFeature, writingSubjectFor, subjectAccess, yearFromStage } from './lib/subjects'
 import { compareSubjects } from './lib/subjectFilter'
+import { signupAsParent, forgetParentSignup } from './lib/oauth'
 import { getTopicConfigForSubject } from './lib/topicConfig'
 import { filterByFormat } from './lib/questionTypes'
 import StudentLessonsScreen, { isJoinable } from './components/StudentLessonsScreen'
 import StudentPortalScreen, { PORTAL_PATHS } from './components/StudentPortalScreen'
 import PageTips from './components/PageTips'
+import ThemeCard from './components/ThemeCard'
 import { PAGE_TIPS, tipPageFor, seenTips, markTipsSeen, resetTips } from './lib/pageTips'
 import ParentConsentBanner from './components/ParentConsentBanner'
 import FamilySwitcher from './components/FamilySwitcher'
@@ -94,8 +96,8 @@ function prefetchStudyScreens() {
   else setTimeout(run, 1500)
 }
 
-const GOLD   = '#f1be43'
-const GOLDL  = '#f9d87a'
+const GOLD   = 'var(--t-accent)'
+const GOLDL  = 'var(--t-accentLight)'
 const FONT_D = "'Sifonn Pro', sans-serif"
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
@@ -220,16 +222,15 @@ function NavIcon({ name, size = 18, color = 'currentColor' }) {
 // The window colour: the sidebar sits on it and the page is an inset sheet on
 // top (the page sheet itself is the theme's bg). One raised shade marks the
 // active row and the menus; gold only on the logo, the active icon and badges.
+// The colours come from the palette in use (lib/theme.js shellFor).
 function shellColors(theme) {
-  return theme === 'dark'
-    ? { bg: '#111113', raise: '#1f1f23', hover: 'rgba(255,255,255,0.04)', line: '#2a2a30', fg: '#ececef', sub: '#a1a1aa', dim: '#8a8a94', icon: '#e2b54c', menuShadow: '0 12px 32px rgba(0,0,0,0.5)' }
-    : { bg: '#eef0f7', raise: '#ffffff', hover: '#e5e8f2', line: '#e2e6f0', fg: '#0c1037', sub: '#4d5578', dim: '#6b7393', icon: '#b07d0c', menuShadow: '0 12px 32px rgba(12,16,55,0.12)' }
+  return shellFor(theme)
 }
 
 function UnreadBadge({ count }) {
   if (count <= 0) return null
   return (
-    <span aria-label={`${count} unread message${count === 1 ? '' : 's'}`} style={{ minWidth: 18, height: 18, padding: '0 5px', borderRadius: 9, background: GOLD, color: '#06091f', fontSize: 10.5, fontWeight: 800, lineHeight: '18px', textAlign: 'center', flexShrink: 0 }}>
+    <span aria-label={`${count} unread message${count === 1 ? '' : 's'}`} style={{ minWidth: 18, height: 18, padding: '0 5px', borderRadius: 9, background: GOLD, color: 'var(--t-onAccent)', fontSize: 10.5, fontWeight: 800, lineHeight: '18px', textAlign: 'center', flexShrink: 0 }}>
       {count > 9 ? '9+' : count}
     </span>
   )
@@ -376,8 +377,8 @@ function SidebarContent({ profile, subject, onChangeSubject, onSwitchSubject, su
           same shape as the subject row below it */}
       <div style={{ padding: '14px 12px 10px', flexShrink: 0 }}>
         <button type="button" className="gf-logo" onClick={() => go('/home')} aria-label="gradefarm home"
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: 48, borderRadius: 9, border: `1px solid ${theme === 'dark' ? SB.line : '#0c1037'}`, background: theme === 'dark' ? SB.raise : '#0c1037', cursor: 'pointer', fontFamily: FONT_D, fontSize: 19, letterSpacing: 1.5, lineHeight: 1 }}>
-          <span style={{ color: '#ffffff' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: 48, borderRadius: 9, border: `1px solid ${theme === 'dark' ? SB.line : 'var(--t-text)'}`, background: theme === 'dark' ? SB.raise : 'var(--t-text)', cursor: 'pointer', fontFamily: FONT_D, fontSize: 19, letterSpacing: 1.5, lineHeight: 1 }}>
+          <span style={{ color: theme === 'dark' ? 'var(--t-text)' : 'var(--t-bgCard)' }}>grade</span><span style={{ color: GOLD }}>farm.</span>
         </button>
       </div>
 
@@ -500,8 +501,8 @@ function SidebarContent({ profile, subject, onChangeSubject, onSwitchSubject, su
             <button type="button" className="gf-side-btn" role="switch" aria-checked={theme === 'dark'} style={menuItem} onClick={onToggleTheme}>
               <Moon size={16} color={SB.sub} aria-hidden="true" />
               <span style={{ flex: 1 }}>Dark mode</span>
-              <span aria-hidden="true" style={{ width: 28, height: 16, borderRadius: 999, background: theme === 'dark' ? SB.fg : '#c8cee0', position: 'relative', flexShrink: 0 }}>
-                <span style={{ position: 'absolute', top: 2, left: theme === 'dark' ? 14 : 2, width: 12, height: 12, borderRadius: '50%', background: theme === 'dark' ? SB.bg : '#ffffff', transition: 'left 0.15s' }} />
+              <span aria-hidden="true" style={{ width: 28, height: 16, borderRadius: 999, background: theme === 'dark' ? SB.fg : SB.dim, position: 'relative', flexShrink: 0 }}>
+                <span style={{ position: 'absolute', top: 2, left: theme === 'dark' ? 14 : 2, width: 12, height: 12, borderRadius: '50%', background: theme === 'dark' ? SB.bg : SB.raise, transition: 'left 0.15s' }} />
               </span>
             </button>
             <button type="button" className="gf-side-btn" style={menuItem} onClick={onSignOut}>
@@ -517,7 +518,7 @@ function SidebarContent({ profile, subject, onChangeSubject, onSwitchSubject, su
           onClick={() => setAccountOpen(v => !v)}
           style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: 10, borderRadius: 9, border: 'none', background: accountOpen ? SB.raise : 'transparent', cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left' }}
         >
-          <span style={{ width: 30, height: 30, borderRadius: '50%', background: GOLD, color: '#06091f', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, flexShrink: 0 }}>
+          <span style={{ width: 30, height: 30, borderRadius: '50%', background: GOLD, color: 'var(--t-onAccent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, flexShrink: 0 }}>
             {profile.display_name[0].toUpperCase()}
           </span>
           <span style={{ flex: 1, minWidth: 0 }}>
@@ -554,7 +555,7 @@ function LockedSubjectScreen({ subject, reason = 'locked', onChangeSubject, them
             : <>Full practice exams aren't part of the free subject. Subscribe to <strong style={{ color: t.text }}>{formatSubjectLabel(subject)}</strong> to sit them — you can cancel any time.</>
           : <>You don't have access to <strong style={{ color: t.text }}>{formatSubjectLabel(subject)}</strong> yet. Try it as your free subject or subscribe — you can cancel any time.</>}
       </p>
-      <button onClick={() => navigate('/get-access', { state: { subject } })} style={{ padding: '12px 24px', borderRadius: 12, border: 'none', background: GOLD, color: '#0c1037', fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+      <button onClick={() => navigate('/get-access', { state: { subject } })} style={{ padding: '12px 24px', borderRadius: 12, border: 'none', background: GOLD, color: 'var(--t-onAccent)', fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
         See plans →
       </button>
       <button onClick={onChangeSubject} style={{ padding: '10px 20px', borderRadius: 10, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 13, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -577,7 +578,7 @@ function DiagnosticDueScreen({ subject, diagnostic, onChangeSubject, theme }) {
         Your tutor wants to see where you're at in <strong style={{ color: t.text }}>{formatSubjectLabel(subject)}</strong> before you start practising.
         It's 20 questions with no time limit. Your results go to your tutor and set up your practice.
       </p>
-      <button onClick={() => navigate(`/diagnostic/${encodeURIComponent(diagnostic.token)}`)} style={{ padding: '12px 24px', borderRadius: 12, border: 'none', background: GOLD, color: '#0c1037', fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
+      <button onClick={() => navigate(`/diagnostic/${encodeURIComponent(diagnostic.token)}`)} style={{ padding: '12px 24px', borderRadius: 12, border: 'none', background: GOLD, color: 'var(--t-onAccent)', fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: FONT }}>
         Start the diagnostic →
       </button>
       <button onClick={onChangeSubject} style={{ padding: '10px 20px', borderRadius: 10, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
@@ -661,14 +662,14 @@ function LiveLessonBanner({ profile, theme }) {
   if (!lesson || location.pathname === '/lessons') return null
   const started = lesson.status === 'active' || now >= new Date(lesson.scheduled_at).getTime()
   return (
-    <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 20px', flexShrink: 0, fontFamily: FONT_B, borderBottom: `1px solid ${t.border}`, background: theme === 'dark' ? 'rgba(241,190,67,0.10)' : '#fff8e6' }}>
+    <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 20px', flexShrink: 0, fontFamily: FONT_B, borderBottom: `1px solid ${t.border}`, background: 'color-mix(in srgb, var(--t-accent) 10%, transparent)' }}>
       <Radio size={17} color={t.goldText} aria-hidden="true" style={{ flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         <strong>{lesson.title || 'Your lesson'}</strong>
         <span style={{ color: t.textMuted }}> {started ? 'is happening now' : 'is about to start'} · with {lesson.other_party_name || 'your tutor'}</span>
       </div>
       <button type="button" onClick={() => navigate(`/session/${lesson.id}`)}
-        style={{ display: 'inline-flex', alignItems: 'center', gap: 7, height: 34, padding: '0 14px', borderRadius: 9, border: 'none', background: GOLD, color: '#171724', fontFamily: FONT_B, fontSize: 13, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 7, height: 34, padding: '0 14px', borderRadius: 9, border: 'none', background: GOLD, color: 'var(--t-onAccent)', fontFamily: FONT_B, fontSize: 13, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>
         <Video size={15} aria-hidden="true" /> Join
       </button>
     </div>
@@ -770,7 +771,7 @@ function AppShell({ children, profile, subject, onChangeSubject, onSwitchSubject
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <button onClick={onToggleTheme} title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 15, display: 'flex', alignItems: 'center', color: GOLD }}>{theme === 'dark' ? <Moon size={17} aria-hidden="true" /> : <Sun size={17} aria-hidden="true" />}</button>
-              <div style={{ width: 30, height: 30, borderRadius: '50%', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: '#080d28' }}>
+              <div style={{ width: 30, height: 30, borderRadius: '50%', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: 'var(--t-onAccent)' }}>
                 {profile.display_name[0].toUpperCase()}
               </div>
             </div>
@@ -797,7 +798,7 @@ function AppShell({ children, profile, subject, onChangeSubject, onSwitchSubject
 // Bank doesn't also load History, the leaderboard, Titan AI's quota, etc.
 function AppShellScreens({
   profile, questions, struggleMap, setStruggleMap, subject,
-  onStartSession, onChangeSubject, onSwitchSubject, subscriptions, fullAccess, onSignOut, theme, onToggleTheme, quizSubtopics, setQuizSubtopics,
+  onStartSession, onChangeSubject, onSwitchSubject, subscriptions, fullAccess, onSignOut, theme, onToggleTheme, palette, onChoosePalette, quizSubtopics, setQuizSubtopics,
   assignmentsVersion, lastSessionAt, onOpenLearn,
   onReplayFeatureTour,
   onProfileUpdated,
@@ -810,11 +811,11 @@ function AppShellScreens({
   const navigate   = useNavigate()
   const location   = useLocation()
   const screen     = location.pathname.replace('/', '') // e.g. 'question-bank'
-  const commonProps = { theme, onToggleTheme }
+  const commonProps = { theme, onToggleTheme, palette, onChoosePalette }
   const learnState  = { phase, setPhase, topic, setTopic, messages, setMessages, interests, setInterests, docContext, setDocContext, docName, setDocName, questionContext, setQuestionContext, onConsolidate, learnRequest, setLearnRequest }
   const openInLearn = (request) => { setLearnRequest({ ...request, at: Date.now() }); navigate('/learn') }
   const shellProps  = { ...commonProps, profile, subject, onChangeSubject, onSwitchSubject, subscriptions, fullAccess, onSignOut, onProfileUpdated }
-  const GOLD = '#f1be43'
+  const GOLD = 'var(--t-accent)'
   const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
   const onLessons = LESSON_PATHS.includes(location.pathname)
@@ -902,7 +903,7 @@ function mergeTutorialFromStorage(userId, prof) {
 function RouteFallback({ theme }) {
   const t = THEMES[theme] || {}
   return (
-    <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: t.bg || '#0c1037' }}>
+    <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: t.bg }}>
       <InfinityLoader size={48} />
     </div>
   )
@@ -927,16 +928,27 @@ function AppInner() {
     } catch { return null }
   })
   const [showAuth, setShowAuth]               = useState(false)
-  const [theme, setTheme]                     = useState(() => { try { return localStorage.getItem('gf-theme') || 'light' } catch { return 'light' } })
+  // The student's palette (lib/theme.js PALETTES); `theme` is its base mode,
+  // 'dark' or 'light', which the rest of the app goes by. Before palettes the
+  // choice was only light / dark, kept as gf-theme.
+  const [palette, setPalette]                 = useState(() => {
+    try {
+      const saved = localStorage.getItem('gf-palette') || localStorage.getItem('gf-theme')
+      return paletteById(saved) ? saved : 'light'
+    } catch { return 'light' }
+  })
+  setActivePalette(palette) // before anything below reads THEMES
+  const theme = modeOf(palette)
   // Every theme token as a CSS variable (--t-bg, --t-text, ...), plus the ink
   // colour as an RGB triple for translucent lines and fills, so screens can
   // style with var() and follow light and dark without their own palettes.
   useEffect(() => {
     const root = document.documentElement
     root.dataset.theme = theme
+    root.dataset.palette = palette
     for (const [key, value] of Object.entries(THEMES[theme])) root.style.setProperty(`--t-${key}`, value)
     root.style.setProperty('--ink-rgb', theme === 'dark' ? '255,255,255' : '12,16,55')
-  }, [theme])
+  }, [theme, palette])
   const [subscriptions, setSubscriptions]     = useState([])
   const [subscriptionsLoaded, setSubscriptionsLoaded] = useState(false)
 
@@ -1158,13 +1170,14 @@ function AppInner() {
   const [lastSessionAt, setLastSessionAt] = useState(null)
   const [assignmentsVersion, setAssignmentsVersion] = useState(0)
 
-  const toggleTheme = () => {
-    setTheme(prev => {
-      const next = prev === 'dark' ? 'light' : 'dark'
-      try { localStorage.setItem('gf-theme', next) } catch {}
-      return next
-    })
+  // Choose a palette (Make gradefarm yours, Account → Appearance); remembered on this device.
+  const choosePalette = (id) => {
+    if (!paletteById(id)) return
+    setPalette(id)
+    try { localStorage.setItem('gf-palette', id); localStorage.setItem('gf-theme', modeOf(id)) } catch {}
   }
+  // The light / dark switch: from any palette to plain Light or Dark.
+  const toggleTheme = () => choosePalette(theme === 'dark' ? 'light' : 'dark')
 
   const t = THEMES[theme]
 
@@ -1408,7 +1421,7 @@ function AppInner() {
     } catch {}
   }
 
-  const commonProps  = { theme, onToggleTheme: toggleTheme }
+  const commonProps  = { theme, onToggleTheme: toggleTheme, palette, onChoosePalette: choosePalette }
   const quizState = {
     currentQ: quizQ,           setCurrentQ: setQuizQ,
     selected: quizSelected,    setSelected: setQuizSelected,
@@ -1450,6 +1463,20 @@ function AppInner() {
   useEffect(() => {
     if (quizFinished && quizAnswered.length > 0) setLastSessionAt(Date.now())
   }, [quizFinished, quizAnswered.length])
+
+  // "Make gradefarm yours" (components/ThemeCard.jsx): once, over the results
+  // of a student's first finished session. Seen is kept with the page tips.
+  const [themeCardClosed, setThemeCardClosed] = useState(false)
+  const showThemeCard = !!(user && profile?.onboarding_completed && !profile.is_tutor && !themeCardClosed
+    && quizFinished && quizAnswered.length > 0 && !seenTips(profile)['theme-card'])
+  const closeThemeCard = ({ kept, previewOnly, later }) => {
+    setThemeCardClosed(true)
+    markTipsSeen(profile, 'theme-card').then(next => setProfile(prev => (prev ? { ...prev, tours_seen: next } : prev))).catch(() => {})
+    const name = paletteById(kept)?.name || 'Light'
+    notify.success(later ? 'Themes are in Account → Preferences whenever you want one.'
+      : previewOnly ? `That one unlocks with your rank, so you've got ${name} for now. Change it any time in Account.`
+      : `${name} it is. Change it any time in Account.`)
+  }
 
   const learnState   = {
     phase: learnPhase,       setPhase: setLearnPhase,
@@ -1736,7 +1763,8 @@ function AppInner() {
             : <OnboardingScreen {...commonProps} profile={profile} userEmail={user?.user_metadata?.family_email || user?.email}
                 needsPassword={user?.user_metadata?.password_set === false}
                 suggestedYearLevel={subscriptions.filter(sub => sub.source === 'tutor').map(sub => yearFromStage(sub.stage)).find(Boolean) ?? null}
-                asParent={user?.user_metadata?.signup_path === 'parent'}
+                // "For my child" from the email form, or from before a Google / Apple sign-up (lib/oauth.js).
+                asParent={user?.user_metadata?.signup_path === 'parent' || signupAsParent()}
                 parentName={user?.user_metadata?.parent_name || ''}
                 onDone={async (updates = {}) => {
                 try {
@@ -1745,6 +1773,7 @@ function AppInner() {
                   setSubscriptionsLoaded(true)
                 } catch {}
                 setProfile(prev => ({ ...prev, ...updates, onboarding_completed: true }))
+                forgetParentSignup()
                 // A plan whose checkout didn't open after sign-up comes back to try again.
                 navigate(checkoutRetry() ? '/get-access' : '/subject-picker', { replace: true })
               }} />
@@ -1779,6 +1808,13 @@ function AppInner() {
           : !profile.onboarding_completed
             ? <Navigate to={onboardingDest} replace />
           : <SubjectPicker {...commonProps} profile={profile} subscriptions={subscriptions} fullAccess={hasFullAccess} onSelect={handleSelectSubject} onGetAccess={subj => navigate('/get-access', { state: { subject: subj } })}
+            onStartFree={async (subj) => {
+              // Their first subject: free straight away, then into it.
+              await chooseFreeSubject(String(subj.id).replace(/^curriculum_/, ''))
+              await refreshSubscriptions()
+              const { questionCount, ...tile } = subj // eslint-disable-line no-unused-vars
+              await handleSelectSubject(tile)
+            }}
             onProfileUpdated={updates => setProfile(prev => (prev ? { ...prev, ...updates } : prev))} />
       } />
 
@@ -1999,6 +2035,10 @@ function AppInner() {
     </ErrorBoundary>
     {/* In-app confirm and alert dialogs (lib/dialog.js), instead of the browser's own. */}
     <DialogHost theme={theme} />
+    {showThemeCard && (
+      <ThemeCard palette={palette} onChoose={choosePalette} onClose={closeThemeCard}
+        level={getLevel(profile.xp, rankAccuracy(profile))} staff={!!(profile.is_admin || profile.is_tutor)} />
+    )}
     </>
   )
 }

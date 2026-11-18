@@ -6,7 +6,7 @@ import { seenQuestionChecker } from '../lib/engine'
 import { markExam, fetchExamPercentile, fetchMyExamAttempts } from '../lib/db'
 import ExamSimulator from './ExamSimulator'
 
-const GOLD = '#f1be43'
+const GOLD = 'var(--t-accent)'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const FONT_D = "'Sifonn Pro', sans-serif"
@@ -79,7 +79,7 @@ export default function ExamModeScreen({ theme = 'dark', questions = [], struggl
           <button onClick={onExit} style={{ marginBottom: 14, padding: '7px 14px', borderRadius: 9, border: `1px solid ${t.border}`, background: t.bgCard, color: t.textMuted, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>← Back</button>
         )}
         <div style={{ textAlign: 'center', marginBottom: 30 }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '5px 14px', borderRadius: 999, background: t.accentGlow, border: `1px solid ${t.borderAccent}`, color: '#f1be43', fontSize: 11, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '5px 14px', borderRadius: 999, background: t.accentGlow, border: `1px solid ${t.borderAccent}`, color: 'var(--t-accent)', fontSize: 11, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>
             <Timer size={13} aria-hidden="true" />
             Exam Mode
           </div>
@@ -99,7 +99,7 @@ export default function ExamModeScreen({ theme = 'dark', questions = [], struggl
             </div>
           ) : (
             <button onClick={start}
-              style={{ width: '100%', padding: '12px', borderRadius: 11, border: 'none', background: GOLD, color: '#0c1037', fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
+              style={{ width: '100%', padding: '12px', borderRadius: 11, border: 'none', background: GOLD, color: 'var(--t-onAccent)', fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
               Start exam →
             </button>
           )}

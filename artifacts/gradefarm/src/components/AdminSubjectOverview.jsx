@@ -1,7 +1,7 @@
 import { ui, FONT_B } from '../lib/adminUi'
 import { topicCounts, subjectNeeds } from '../lib/subjectHealth'
 
-const TONES = { red: 'var(--t-danger)', amber: '#f59e0b', grey: 'var(--t-textFaint)' }
+const TONES = { red: 'var(--t-danger)', amber: 'var(--t-goldText)', grey: 'var(--t-textFaint)' }
 
 /**
  * A subject at a glance: questions by topic (thin topics in amber) and what
@@ -27,9 +27,9 @@ export default function AdminSubjectOverview({ health, topics, features, examCon
               <div key={t.name} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.2fr) minmax(0, 1fr) 40px', gap: 10, alignItems: 'center', fontSize: 12.5, color: 'var(--t-textSub)' }}>
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={t.name}>{t.name}</span>
                 <span style={{ height: 8, borderRadius: 99, background: 'var(--t-bgHover)', overflow: 'hidden' }}>
-                  <span style={{ display: 'block', height: '100%', width: `${Math.max(2, Math.round((t.count / max) * 100))}%`, borderRadius: 99, background: t.thin ? '#f59e0b' : '#7c8bd6' }} />
+                  <span style={{ display: 'block', height: '100%', width: `${Math.max(2, Math.round((t.count / max) * 100))}%`, borderRadius: 99, background: t.thin ? 'var(--t-accent)' : 'var(--t-blue)' }} />
                 </span>
-                <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: t.thin ? '#b45309' : 'var(--t-textSub)', fontWeight: t.thin ? 700 : 500 }}>{t.count}</span>
+                <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: t.thin ? 'var(--t-goldText)' : 'var(--t-textSub)', fontWeight: t.thin ? 700 : 500 }}>{t.count}</span>
               </div>
             ))}
           </div>

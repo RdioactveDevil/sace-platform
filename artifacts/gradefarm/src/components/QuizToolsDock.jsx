@@ -4,7 +4,7 @@ import { appZoom } from '../lib/appZoom'
 import { THEMES } from '../lib/theme'
 import { evaluate, formatResult, CalcError } from '../lib/calculator'
 
-const NAVY = '#0c1037'
+const NAVY = 'var(--t-onAccent)'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const FONT_M = "'JetBrains Mono', monospace"
 

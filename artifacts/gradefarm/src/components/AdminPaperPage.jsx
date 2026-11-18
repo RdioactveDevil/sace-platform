@@ -26,7 +26,7 @@ const strip = (name = '') => String(name).replace(/^(VCE|SACE)\s+/i, '').replace
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : '')
 const isMcq = (q) => q.exam_section === 'A' || q.question_type === 'mcq'
-const STATE = { pending: ['To review', 'rgba(241,190,67,0.2)', 'var(--t-goldText)'], approved: ['Approved', 'var(--t-successBg, rgba(22,163,74,0.12))', 'var(--t-success)'], rejected: ['Rejected', 'var(--t-bgHover)', 'var(--t-textMuted)'] }
+const STATE = { pending: ['To review', 'color-mix(in srgb, var(--t-accent) 20%, transparent)', 'var(--t-goldText)'], approved: ['Approved', 'var(--t-successBg)', 'var(--t-success)'], rejected: ['Rejected', 'var(--t-bgHover)', 'var(--t-textMuted)'] }
 
 function Chip({ bg, fg, children }) {
   return <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: bg || 'var(--t-bgHover)', color: fg || 'var(--t-textMuted)', whiteSpace: 'nowrap' }}>{children}</span>
@@ -377,7 +377,7 @@ export default function AdminPaperPage({ curriculum, label, onBack }) {
           <div style={{ fontSize: 17, fontWeight: 800, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             {label}
             <Chip>{questions[0]?.source_kind === 'commercial' ? 'Trial' : 'Past paper'}</Chip>
-            <Chip bg={status.state === 'checked' ? 'var(--t-successBg, rgba(22,163,74,0.12))' : status.state === 'partway' ? 'rgba(241,190,67,0.2)' : undefined}
+            <Chip bg={status.state === 'checked' ? 'var(--t-successBg)' : status.state === 'partway' ? 'color-mix(in srgb, var(--t-accent) 20%, transparent)' : undefined}
               fg={status.state === 'checked' ? 'var(--t-success)' : status.state === 'partway' ? 'var(--t-goldText)' : undefined}>{statusText}</Chip>
           </div>
           <div style={{ fontSize: 12.5, color: 'var(--t-textMuted)', marginTop: 3 }}>
@@ -426,7 +426,7 @@ export default function AdminPaperPage({ curriculum, label, onBack }) {
         <div className="pp-col" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <b style={{ fontSize: 13 }}>{whole ? 'Whole paper, as it prints' : q.set_key ? `Set ${setName(q)} as it prints` : `${name(q)} as it prints`}</b>
-            {editing && (draft || sharedDirty) && !whole && <Chip bg="rgba(37,99,235,0.12)" fg="#2563eb">Showing your unsaved changes</Chip>}
+            {editing && (draft || sharedDirty) && !whole && <Chip bg="var(--t-blueBg)" fg="var(--t-blue)">Showing your unsaved changes</Chip>}
             <span style={{ flex: 1 }} />
             {!whole && (
               <span role="group" aria-label={`Maths size for ${name(q)}`} title="How big this question's equations print: superscripts, fractions, integrals and all"
@@ -463,7 +463,7 @@ export default function AdminPaperPage({ curriculum, label, onBack }) {
           {!whole && q && (
             <>
               {flags.length > 0 && reviewState(q) !== 'rejected' && (
-                <div role="note" style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '8px 10px', borderRadius: 8, background: 'rgba(241,190,67,0.12)', border: '1px solid rgba(241,190,67,0.4)', fontSize: 12.5 }}>
+                <div role="note" style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '8px 10px', borderRadius: 8, background: 'color-mix(in srgb, var(--t-accent) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--t-accent) 40%, transparent)', fontSize: 12.5 }}>
                   {flags.map((f, i) => (
                     <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
                       <AlertTriangle size={13} aria-hidden="true" style={{ flexShrink: 0, marginTop: 2, color: 'var(--t-goldText)' }} /><span>{f.message}</span>

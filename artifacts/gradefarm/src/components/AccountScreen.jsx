@@ -1,7 +1,9 @@
 import { confirmDialog, alertDialog } from '../lib/dialog'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { THEMES } from '../lib/theme'
+import { THEMES, PALETTES, paletteUnlocked } from '../lib/theme'
+import { getLevel, rankAccuracy, RANKS } from '../lib/engine'
+import { PaletteSwatch } from './ThemeCard'
 import { updateProfile, getSubscriptions, getBillingConfig, openBillingPortal, removePaidSubject, switchBillingInterval, changeEmail, deleteMyAccount, syncBillingEmail, saveParentDetails, addFamilyChild, switchToChild, removeFamilyChild } from '../lib/db'
 import { AU_STATES, stateLabel } from '../lib/subjectFilter'
 import { applySoundsSetting, playSound } from '../lib/sounds'
@@ -406,10 +408,14 @@ function BillingCard({ profile, theme, onChangeSubject }) {
   )
 }
 
-export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut, onChangeSubject, onReplayFeatureTour, onProfileUpdated }) {
+export default function AccountScreen({ profile, theme, onToggleTheme, palette, onChoosePalette, onSignOut, onChangeSubject, onReplayFeatureTour, onProfileUpdated }) {
   const t = THEMES[theme]
   const navigate = useNavigate()
   const isStudent = !profile.is_tutor && !profile.is_admin
+  // Themes (Preferences): a rank-locked one opens at that rank; staff have them all.
+  const isStaff = !!(profile.is_tutor || profile.is_admin)
+  const rankLevel = getLevel(profile.xp, rankAccuracy(profile))
+  const [themeNote, setThemeNote] = useState('')
 
   // The section list on the left jumps to a section and shows where you are.
   const scrollRef = useRef(null)
@@ -518,7 +524,7 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
   const btn = (variant = 'primary', disabled = false) => ({
     padding: '8px 16px', borderRadius: 9, fontFamily: FONT_B, fontSize: 13, fontWeight: 800,
     cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.55 : 1,
-    ...(variant === 'primary' ? { border: 'none', background: t.accent, color: '#0c1037' }
+    ...(variant === 'primary' ? { border: 'none', background: t.accent, color: 'var(--t-onAccent)' }
       : variant === 'danger' ? { border: `1px solid ${t.danger}`, background: 'transparent', color: t.danger }
       : { border: `1px solid ${t.border}`, background: t.bgCard, color: t.text }),
   })
@@ -829,7 +835,23 @@ export default function AccountScreen({ profile, theme, onToggleTheme, onSignOut
       )}
       <Row t={t} first={!('emails_unsubscribed_at' in profile)} label="Sound effects" note={soundsMsg || 'Chimes for right answers, streaks and finishing.'} noteTone={soundsMsg ? 'danger' : null}
         action={<Toggle on={soundsOn} onClick={handleToggleSounds} disabled={savingSounds} label="Sound effects" />} />
-      {typeof onToggleTheme === 'function' && (
+      {typeof onChoosePalette === 'function' ? (
+        <Row t={t} label="Theme" note={themeNote || 'How gradefarm looks on this device.'}
+          editor={(
+            <div role="radiogroup" aria-label="Theme" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(118px, 1fr))', gap: 8, marginTop: 10 }}>
+              {PALETTES.map(p => {
+                const locked = !paletteUnlocked(p, { level: rankLevel, staff: isStaff })
+                return (
+                  <PaletteSwatch key={p.id} palette={p} compact on={palette === p.id} locked={locked} unlockRank={locked ? RANKS[p.locked] : ''}
+                    onPick={() => {
+                      if (locked) { setThemeNote(`${p.name} unlocks when you reach ${RANKS[p.locked]}.`); return }
+                      setThemeNote(''); onChoosePalette(p.id)
+                    }} />
+                )
+              })}
+            </div>
+          )} />
+      ) : typeof onToggleTheme === 'function' && (
         <Row t={t} label="Dark mode"
           action={<Toggle on={theme === 'dark'} onClick={onToggleTheme} label="Dark mode" />} />
       )}

@@ -8,7 +8,7 @@ import RankIcon from './RankIcon'
 import LeagueView from './LeagueView'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
-const GOLD = '#f1be43'
+const GOLD = 'var(--t-accent)'
 
 const CLASS_KEY = 'gf-leaderboard-class'
 
@@ -49,7 +49,7 @@ export default function LeaderboardScreen({ profile, theme, embedded }) {
 
   // How far behind the person above: the gap that's worth chasing.
   const above = me && me.position > 1 ? visibleBoard.find(r => r.position === me.position - 1) : null
-  const segOn = theme === 'dark' ? { background: t.text, color: t.bg } : { background: '#0c1037', color: '#fff' }
+  const segOn = { background: t.text, color: t.bg }
   const card = { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12 }
   const cell = { padding: '10px 12px', borderTop: `1px solid ${t.border}`, fontSize: 13.5, textAlign: 'left' }
 
@@ -122,7 +122,7 @@ export default function LeaderboardScreen({ profile, theme, embedded }) {
                   {visibleBoard.map(p => {
                     const isMe = p.id === profile.id
                     const lvl = getLevel(p.xp, rankAccuracy(p))
-                    const rowBg = isMe ? (theme === 'dark' ? 'rgba(255,255,255,0.05)' : t.bgSubtle) : 'transparent'
+                    const rowBg = isMe ? t.bgSubtle : 'transparent'
                     return (
                       <tr key={p.id} aria-current={isMe ? 'true' : undefined} style={{ background: rowBg }}>
                         <td style={{ ...cell, fontWeight: 700, color: t.textMuted }}>{p.position}</td>

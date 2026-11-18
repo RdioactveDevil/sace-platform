@@ -929,7 +929,7 @@ function Btn({ children, onClick, disabled, variant, title }) {
         padding: '7px 13px', borderRadius: 9,
         border: isPrimary ? 'none' : '1px solid var(--t-border)',
         background: isPrimary ? 'var(--t-accent)' : 'var(--t-bgCard)',
-        color: isPrimary ? '#0c1037' : 'var(--t-text)',
+        color: isPrimary ? 'var(--t-onAccent)' : 'var(--t-text)',
         fontSize: 12.5, fontWeight: 800, cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? 0.5 : 1,
         fontFamily: FONT_B,

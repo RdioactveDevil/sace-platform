@@ -93,7 +93,7 @@ export default function PageTips({ steps, theme = 'dark', onClose }) {
   const pos = cardPosition(rect, cardH, isMobile)
   const btn = (primary) => ({
     padding: '7px 13px', borderRadius: 8, fontFamily: FONT_B, fontSize: 12.5, fontWeight: 800, cursor: 'pointer',
-    ...(primary ? { border: 'none', background: t.accent, color: '#0c1037' } : { border: `1px solid ${t.border}`, background: t.bgCard, color: t.text }),
+    ...(primary ? { border: 'none', background: t.accent, color: 'var(--t-onAccent)' } : { border: `1px solid ${t.border}`, background: t.bgCard, color: t.text }),
   })
 
   return (

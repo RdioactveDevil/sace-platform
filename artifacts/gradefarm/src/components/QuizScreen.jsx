@@ -70,8 +70,8 @@ import { breakDue, nextBreakAt, rankUp, BREAK_EVERY } from '../lib/engagement'
 import { addDays, localDate } from '../lib/streak'
 import InfinityLoader from './InfinityLoader'
 
-const GOLD = '#f1be43'
-const GOLDL = '#f9d87a'
+const GOLD = 'var(--t-accent)'
+const GOLDL = 'var(--t-accentLight)'
 // Question-area width from which a reading passage sits beside the question
 // (a ~340px question column + gap + a comfortable reading column). Laptops at
 // 125% zoom only have ~890px here, and stacking the passage inside the 600px
@@ -80,7 +80,7 @@ const SIDE_PASSAGE_MIN_WIDTH = 760
 // Start generating more questions in the background once this few questions
 // new to the student are left in the session.
 const PREFETCH_LOW_WATER = 8
-const NAVY = '#0c1037'
+const NAVY = 'var(--t-onAccent)'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const FONT_D = "'Sifonn Pro', sans-serif"
 

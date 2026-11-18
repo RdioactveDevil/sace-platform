@@ -2,9 +2,9 @@ import { useState, useEffect, useRef } from 'react'
 import { PenLine, RefreshCw, Sparkles, Timer } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 
-const GOLD = '#f1be43'
-const GOLDL = '#f9d87a'
-const NAVY = '#0c1037'
+const GOLD = 'var(--t-accent)'
+const GOLDL = 'var(--t-accentLight)'
+const NAVY = 'var(--t-onAccent)'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const FONT_D = "'Sifonn Pro', sans-serif"
 

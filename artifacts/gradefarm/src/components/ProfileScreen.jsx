@@ -11,7 +11,7 @@ import { getAnswerLogSince, getAssessments, addAssessment, deleteAssessment } fr
 import { useCurriculumTopicConfig } from '../lib/useCurriculumTopicConfig'
 import { fetchLessons } from '../lib/learnStore'
 
-const GOLD = '#f1be43'
+const GOLD = 'var(--t-accent)'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const WEEKS = 8
 const DAY_MS = 86400000
@@ -201,7 +201,7 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
   const card = { background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12 }
   const cardTitle = { fontSize: 14.5, fontWeight: 800, color: t.text }
   const linkBtn = { border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', fontFamily: FONT_B, fontSize: 12.5, fontWeight: 700, color: t.text, textDecoration: 'underline', textDecorationColor: GOLD, textDecorationThickness: 2, textUnderlineOffset: 4 }
-  const btn = (primary) => ({ padding: '7px 13px', borderRadius: 8, fontFamily: FONT_B, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap', border: primary ? 'none' : `1px solid ${t.border}`, background: primary ? t.accent : t.bgCard, color: primary ? '#0c1037' : t.text })
+  const btn = (primary) => ({ padding: '7px 13px', borderRadius: 8, fontFamily: FONT_B, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap', border: primary ? 'none' : `1px solid ${t.border}`, background: primary ? t.accent : t.bgCard, color: primary ? 'var(--t-onAccent)' : t.text })
   const input = { padding: '8px 10px', borderRadius: 8, border: `1px solid ${t.border}`, background: t.bgInput, color: t.text, fontSize: 13, fontFamily: FONT_B, outline: 'none', colorScheme: theme === 'dark' ? 'dark' : 'light' }
 
   // Accuracy-by-week chart: line on a 0–100% scale, bars scaled to the busiest week.
@@ -297,7 +297,7 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
                   return (
                     <div key={item.id} className="po-item">
                       <label style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, cursor: 'pointer' }}>
-                        <input type="checkbox" checked={done} onChange={() => toggleDone(item.id)} style={{ width: 16, height: 16, accentColor: theme === 'dark' ? t.text : '#0c1037', flexShrink: 0 }} />
+                        <input type="checkbox" checked={done} onChange={() => toggleDone(item.id)} style={{ width: 16, height: 16, accentColor: t.text, flexShrink: 0 }} />
                         <span style={{ minWidth: 0 }}>
                           <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: done ? t.textFaint : t.text, textDecoration: done ? 'line-through' : 'none' }}>{item.label}</span>
                           <span style={{ display: 'block', fontSize: 12, color: t.textFaint }}>{item.note}</span>

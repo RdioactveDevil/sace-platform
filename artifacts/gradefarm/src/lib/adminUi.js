@@ -31,7 +31,7 @@ export const btn = (kind = 'secondary', disabled = false) => ({
   padding: '8px 14px', borderRadius: 9, fontFamily: FONT_B, fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap',
   cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1,
   ...(kind === 'primary'
-    ? { border: 'none', background: 'var(--t-accent)', color: '#0c1037' }
+    ? { border: 'none', background: 'var(--t-accent)', color: 'var(--t-onAccent)' }
     : kind === 'danger'
       ? { border: '1px solid var(--t-danger)', background: 'transparent', color: 'var(--t-danger)' }
       : { border: '1px solid var(--t-border)', background: 'var(--t-bgCard)', color: 'var(--t-text)' }),

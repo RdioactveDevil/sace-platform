@@ -150,7 +150,7 @@ export default function CurriculumResourcesPanel({ curriculumId }) {
         style={{
           marginBottom: 12, padding: '22px 16px', borderRadius: 12, textAlign: 'center',
           border: `2px dashed ${dragOver ? 'var(--t-accent)' : 'var(--t-borderStrong, var(--t-border))'}`,
-          background: dragOver ? 'rgba(241,190,67,0.10)' : 'var(--t-bgSubtle)',
+          background: dragOver ? 'color-mix(in srgb, var(--t-accent) 10%, transparent)' : 'var(--t-bgSubtle)',
           cursor: uploading ? 'not-allowed' : 'pointer', opacity: uploading ? 0.6 : 1, transition: 'background 0.12s, border-color 0.12s',
         }}
       >

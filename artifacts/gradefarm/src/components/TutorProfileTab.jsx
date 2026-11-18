@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react'
 import { THEMES } from '../lib/theme'
 import { fetchTutorProfile, saveTutorProfile } from '../lib/db'
 
-const GOLD = '#f1be43'
-const GOLDL = '#f9d87a'
+const GOLD = 'var(--t-accent)'
+const GOLDL = 'var(--t-accentLight)'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
 const FIELDS = [
@@ -62,7 +62,7 @@ export default function TutorProfileTab({ profile, theme }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button type="submit" disabled={!dirty || state === 'saving'}
             style={{ padding: '10px 20px', borderRadius: 10, border: 'none', fontFamily: FONT_B, fontSize: 13.5, fontWeight: 800, cursor: !dirty || state === 'saving' ? 'default' : 'pointer',
-              background: !dirty || state === 'saving' ? t.border : 'var(--t-accent)', color: !dirty || state === 'saving' ? t.textMuted : '#0c1037' }}>
+              background: !dirty || state === 'saving' ? t.border : 'var(--t-accent)', color: !dirty || state === 'saving' ? t.textMuted : 'var(--t-onAccent)' }}>
             {state === 'saving' ? 'Saving…' : 'Save profile'}
           </button>
           {state === 'saved' && <span style={{ fontSize: 12.5, color: t.success, fontWeight: 600 }}>Saved</span>}
@@ -74,7 +74,7 @@ export default function TutorProfileTab({ profile, theme }) {
       <div style={{ ...card, overflow: 'hidden' }}>
         <div style={{ padding: '10px 18px', fontSize: 11, fontWeight: 800, letterSpacing: '0.1em', color: t.textMuted, borderBottom: `1px solid ${t.border}` }}>PREVIEW</div>
         <div style={{ padding: 20, display: 'flex', gap: 14, alignItems: 'center' }}>
-          <div style={{ width: 54, height: 54, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 22, color: '#0c1037', background: 'var(--t-accent)' }}>
+          <div style={{ width: 54, height: 54, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 22, color: 'var(--t-onAccent)', background: 'var(--t-accent)' }}>
             {(profile.display_name || '?')[0].toUpperCase()}
           </div>
           <div style={{ minWidth: 0 }}>
