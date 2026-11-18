@@ -12,6 +12,23 @@ const PAPER = '#fffefa'
 const MUTED = '#6f6455'
 const PEN = '#c2362d'
 
+// The price, loaded before the pop-up opens (App calls prefetchUpgrade for a
+// free subject), so it opens with the right offer instead of swapping in.
+let configPromise = null
+let configValue = null
+let configFor = null // the account it was loaded for
+export function prefetchUpgrade(accountId) {
+  if (accountId !== undefined && accountId !== configFor) { configFor = accountId; configPromise = null; configValue = null }
+  configPromise ??= getBillingConfig()
+    .then(c => { configValue = c; return c })
+    .catch(err => { configPromise = null; throw err })
+  return configPromise
+}
+/** After upgrading the offer changes (a plan now): load it afresh next time. */
+function forgetUpgrade() { configPromise = null; configValue = null }
+
+const SKELETON = { display: 'block', height: 12, borderRadius: 4, background: '#e8dfd0' }
+
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&display=swap');
 .us-back { position: fixed; inset: 0; z-index: 60; background: rgba(30,24,19,0.5); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); overflow-y: auto; display: flex; padding: 32px 20px; box-sizing: border-box; font-family: ${FONT_B}; }
@@ -59,7 +76,7 @@ const CSS = `
  * `ctx`: { doneLabel, onDone }. `onUpgraded` refreshes the app's access first.
  */
 export default function UpgradeSheet({ subject, curriculumId, ctx = {}, onClose, onUpgraded }) {
-  const [config, setConfig] = useState(null)
+  const [config, setConfig] = useState(() => configValue)
   const [step, setStep] = useState('offer') // offer | starting | pay | finishing | done
   const [error, setError] = useState('')
   const [compare, setCompare] = useState(false)
@@ -76,7 +93,7 @@ export default function UpgradeSheet({ subject, curriculumId, ctx = {}, onClose,
 
   useEffect(() => {
     let alive = true
-    getBillingConfig().then(c => { if (alive) setConfig(c) }).catch(() => { if (alive) setError("Couldn't load the price. Check your connection and try again.") })
+    prefetchUpgrade().then(c => { if (alive) setConfig(c) }).catch(() => { if (alive) setError("Couldn't load the price. Check your connection and try again.") })
     return () => { alive = false }
   }, [])
 
@@ -91,6 +108,7 @@ export default function UpgradeSheet({ subject, curriculumId, ctx = {}, onClose,
   }, [busy, onClose])
 
   const finish = async (sessionId) => {
+    forgetUpgrade()
     setStep('finishing')
     if (sessionId) await syncCheckout(sessionId).catch(() => {})
     await Promise.resolve(onUpgraded?.()).catch(() => {})
@@ -201,8 +219,18 @@ export default function UpgradeSheet({ subject, curriculumId, ctx = {}, onClose,
       <div className={`us-row${compare ? ' us-open' : ''}`}>
         <button ref={closeRef} type="button" className="us-close" aria-label="Close" onClick={onClose} disabled={busy}>×</button>
         <div className="us-head">
-          <h2 id="us-h">{headline}</h2>
-          {sub && <div style={{ fontSize: 15, color: MUTED, lineHeight: 1.55 }}>{sub}</div>}
+          {quote ? (
+            <>
+              <h2 id="us-h">{headline}</h2>
+              {sub && <div style={{ fontSize: 15, color: MUTED, lineHeight: 1.55 }}>{sub}</div>}
+            </>
+          ) : (
+            <div aria-hidden="true" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <span id="us-h" style={{ ...SKELETON, height: 30, width: '90%' }} />
+              <span style={{ ...SKELETON, height: 30, width: '70%' }} />
+              <span style={{ ...SKELETON, height: 14, width: '55%', marginTop: 6 }} />
+            </div>
+          )}
         </div>
 
         <div className="us-receipt">
@@ -213,7 +241,13 @@ export default function UpgradeSheet({ subject, curriculumId, ctx = {}, onClose,
             {rows.map(r => <div key={r.key} className="us-line"><span>{r.receipt}</span><span>INCL</span></div>)}
             <div className="us-rule" />
             {!quote ? (
-              <div className="us-line" style={{ color: MUTED }}><span>{error ? '' : 'LOADING PRICE…'}</span><span /></div>
+              error ? null : (
+                <div aria-hidden="true" style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '2px 0 6px' }}>
+                  <span style={{ ...SKELETON, width: '100%' }} />
+                  <span style={{ ...SKELETON, width: '80%' }} />
+                  <span style={{ ...SKELETON, width: '100%', height: 16 }} />
+                </div>
+              )
             ) : quote.mode === 'intro' ? (
               <>
                 <div className="us-line"><span>WEEK 1</span><span><s style={{ color: '#9c8f7c' }}>{dollars(quote.weekly)}.00</s> {Number(quote.intro).toFixed(2)}</span></div>
@@ -236,7 +270,7 @@ export default function UpgradeSheet({ subject, curriculumId, ctx = {}, onClose,
             )}
             {error && <div role="alert" style={{ fontFamily: FONT_B, fontSize: 13, color: PEN, marginTop: 4 }}>{error}</div>}
             <button type="button" className="us-btn" onClick={pay} disabled={!quote || busy} style={{ marginTop: 12, background: INK, color: '#f6efe4', opacity: !quote ? 0.6 : 1 }}>
-              {busy ? 'One moment…' : payLabel(quote)}
+              {busy || !quote ? 'One moment…' : payLabel(quote)}
             </button>
             <div style={{ textAlign: 'center', fontFamily: FONT_B, fontSize: 12, color: MUTED }}>Card, Apple Pay or Google Pay. Cancel any time.</div>
             <button type="button" onClick={() => setCompare(v => !v)} aria-expanded={compare}
