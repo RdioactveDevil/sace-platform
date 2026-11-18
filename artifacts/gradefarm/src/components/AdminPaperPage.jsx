@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, ArrowLeft, Crop, ExternalLink, Eye, FileText, Minus, PanelRightClose, PanelRightOpen, Plus, Trash2, Upload } from 'lucide-react'
 import ExamPaper from './ExamPaper'
 import CropTool from './CropTool'
+import EditorTools, { useEditorSize } from './EditorTools'
 import ExtendedQuestionEditor from './ExtendedQuestionEditor'
 import { QuestionEditor } from './AdminQuestionPanel'
 import { confirmDialog } from '../lib/dialog'
@@ -80,6 +81,8 @@ export default function AdminPaperPage({ curriculum, label, onBack }) {
   const [draft, setDraft] = useState(null) // the editor's latest draft, for the preview (debounced)
   const [cropping, setCropping] = useState(null) // { setUrl }
   const [sharedDraft, setSharedDraft] = useState(null) // { info, image } while editing a set's shared information
+  const [editorSize, changeEditorSize] = useEditorSize()
+  const lastField = useRef(null) // the edit box last typed in, for the symbol bar
   const [busy, setBusy] = useState('')
   const [msg, setMsg] = useState(null)
   const latest = useRef(null) // the newest draft, before the debounce
@@ -456,6 +459,9 @@ export default function AdminPaperPage({ curriculum, label, onBack }) {
             {/* The editor stays mounted while the original is shown, so nothing typed is lost. */}
             {editing && q && (
               <div style={{ display: side === 'editor' ? 'block' : 'none' }}>
+                <EditorTools getTarget={() => lastField.current} size={editorSize} onSize={changeEditorSize} />
+                {/* The editing side at the chosen text size; the printed preview stays the real size. */}
+                <div style={{ zoom: editorSize }} onFocusCapture={e => { if (e.target.matches?.('textarea, input:not([type]), input[type="text"]')) lastField.current = e.target }}>
                 {q.set_key && sharedDraft && (
                   // The set's shared information lives on its first question; it's saved on its own.
                   <div style={{ border: '1px solid var(--t-border)', borderRadius: 10, padding: 12, marginBottom: 12, display: 'flex', flexDirection: 'column', gap: 8, background: 'var(--t-bgSubtle)' }}>
@@ -475,6 +481,7 @@ export default function AdminPaperPage({ curriculum, label, onBack }) {
                 {isMcq(q)
                   ? <QuestionEditor key={q.id} q={q} busy={busy === 'edit' ? 'edit' : ''} onSave={save} onCancel={async () => { await leaveEdit() }} onChange={onDraft} renderFigure={renderFigure} />
                   : <ExtendedQuestionEditor key={q.id} question={q} busy={busy === 'edit'} onSave={save} onCancel={async () => { await leaveEdit() }} onChange={onDraft} renderFigure={renderFigure} />}
+                </div>
               </div>
             )}
             {(side === 'pdf' || !editing) && (
