@@ -2,7 +2,8 @@ import { useMemo, useRef, useLayoutEffect } from 'react'
 import katex from 'katex'
 import 'katex/dist/katex.min.css'
 import 'katex/contrib/mhchem/mhchem.js' // enables \ce{} for chemical equations
-import { parseMathText, restoreLiteralNewlines, katexSafeLatex } from '../lib/mathMarkup.js'
+import { restoreLiteralNewlines, katexSafeLatex } from '../lib/mathMarkup.js'
+import { parseSized } from '../lib/textSize.js'
 import { splitMarkdownBlocks, applyBold } from '../lib/markdownBlocks.js'
 import { markParts } from '../lib/advice.js'
 
@@ -13,6 +14,7 @@ import { markParts } from '../lib/advice.js'
  *   3. Auto-detected chemical equations:  SO2 + H2O → H2SO3 → H2SO4
  *   4. Auto-detected inline chemical formulas:  SO2, H2SO4, Ca(OH)2
  *   5. Markdown pipe tables and **bold**, as written by generated questions
+ *   6. <big>…</big> and <small>…</small>: printed larger or smaller (lib/textSize.js)
  *
  * All parsing and repair lives in lib/mathMarkup.js (unit-tested); this
  * component only renders the resulting tokens.
@@ -93,13 +95,13 @@ function groupMarked(parts) {
 
 function InlineMath({ text, tokens, style, marks }) {
   const parts = useMemo(
-    () => (tokens || applyBold(parseMathText(text))).map(p => (p.type === 'math' ? { ...p, html: renderToken(p) } : p)),
+    () => (tokens || applyBold(parseSized(text))).map(p => (p.type === 'math' ? { ...p, html: renderToken(p) } : p)),
     [text, tokens],
   )
 
   if (!parts.length) return null
 
-  if (!marks && !parts.some(p => p.type === 'math' || p.bold)) {
+  if (!marks && !parts.some(p => p.type === 'math' || p.bold || p.scale)) {
     return <span style={{ whiteSpace: 'pre-line', ...style }}>{parts.map(p => p.content).join('')}</span>
   }
 
@@ -109,12 +111,18 @@ function InlineMath({ text, tokens, style, marks }) {
   const Tag = hasDisplay ? 'div' : 'span'
 
   const renderPart = (part, i) => {
-    const weight = part.bold ? { fontWeight: 700 } : undefined
+    const weight = part.bold || part.scale
+      ? { ...(part.bold ? { fontWeight: 700 } : null), ...(part.scale ? { fontSize: `${part.scale}em` } : null) }
+      : undefined
     if (part.type === 'text') return <span key={i} style={weight}>{part.content}</span>
     const { html } = part
     if (html === null) return <span key={i} style={weight}>{part.content}</span>
     // data-tex: the segment's source, so Titan's Advice can find it on screen.
-    if (part.display) return <DisplayMath key={i} html={html} tex={part.content} />
+    // (DisplayMath sets its own font size to fit, so a scale goes on a wrapper.)
+    if (part.display) {
+      const math = <DisplayMath key={i} html={html} tex={part.content} />
+      return part.scale ? <div key={i} style={{ fontSize: `${part.scale}em` }}>{math}</div> : math
+    }
     return (
       <span
         key={i}
@@ -177,7 +185,7 @@ export default function MathText({ text = '', style = {}, marks }) {
     const all = []
     textBlocks.forEach((b, block) => {
       if (block) all.push({ type: 'break', content: '' })
-      if (b.type === 'text') applyBold(parseMathText(b.content)).forEach(p => all.push({ ...p, block }))
+      if (b.type === 'text') applyBold(parseSized(b.content)).forEach(p => all.push({ ...p, block }))
     })
     const { parts } = markParts(all, quotes)
     return textBlocks.map((b, block) => parts.filter(p => p.block === block && p.type !== 'break'))

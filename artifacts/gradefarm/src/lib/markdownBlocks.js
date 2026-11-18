@@ -87,7 +87,7 @@ export function applyBold(tokens) {
     if (tok.type !== 'text') { out.push(bold ? { ...tok, bold } : tok); continue }
     tok.content.split('**').forEach((piece, k) => {
       if (k > 0) bold = !bold
-      if (piece) out.push(bold ? { type: 'text', content: piece, bold } : { type: 'text', content: piece })
+      if (piece) out.push(bold ? { ...tok, content: piece, bold } : { ...tok, content: piece })
     })
   }
   return out
