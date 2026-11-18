@@ -11,25 +11,24 @@ const INK = '#2a2118'
 const PAPER = '#fffefa'
 const MUTED = '#6f6455'
 const PEN = '#c2362d'
-const PEN_LIGHT = '#f3b0a8' // red pen on the dark backdrop
 
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&display=swap');
-.us-back { position: fixed; inset: 0; z-index: 60; background: rgba(30,24,19,0.66); overflow-y: auto; display: flex; padding: 32px 20px; box-sizing: border-box; font-family: ${FONT_B}; }
-.us-row { margin: auto; display: flex; align-items: center; justify-content: center; gap: 44px; flex-wrap: wrap; max-width: 1180px; }
-.us-head { width: 320px; color: #f6efe4; display: flex; flex-direction: column; gap: 14px; }
+.us-back { position: fixed; inset: 0; z-index: 60; background: rgba(30,24,19,0.5); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); overflow-y: auto; display: flex; padding: 32px 20px; box-sizing: border-box; font-family: ${FONT_B}; }
+/* The tray: a warm card around the receipt, so it stands apart from the app behind. */
+.us-row { margin: auto; position: relative; display: flex; align-items: center; justify-content: center; gap: 44px; flex-wrap: wrap; max-width: 1180px; box-sizing: border-box; padding: 52px 68px 44px 52px; background: #efe6d8; border: 1px solid #dccdb6; border-radius: 26px; box-shadow: 0 40px 100px rgba(0,0,0,0.45); }
+.us-head { width: 320px; color: ${INK}; display: flex; flex-direction: column; gap: 14px; }
 .us-head h2 { margin: 0; font-size: 38px; line-height: 1.08; font-weight: 800; letter-spacing: -0.02em; }
-.us-receipt { width: 380px; transform: rotate(1.5deg); filter: drop-shadow(0 30px 50px rgba(0,0,0,0.45)); }
+.us-receipt { width: 380px; transform: rotate(1.5deg); filter: drop-shadow(0 16px 24px rgba(60,40,10,0.22)); }
 .us-paper { background: ${PAPER}; padding: 24px 26px 18px; font-family: ${MONO}; font-size: 13px; color: ${INK}; display: flex; flex-direction: column; gap: 9px; position: relative; }
 .us-line { display: flex; justify-content: space-between; gap: 12px; }
 .us-rule { border-top: 1px dashed #bdb1a0; margin: 4px 0 2px; }
 .us-btn { height: 50px; border-radius: 10px; border: none; font-family: ${FONT_B}; font-size: 15.5px; font-weight: 800; cursor: pointer; }
-.us-note { font-family: ${HAND}; font-weight: 700; color: ${PEN_LIGHT}; background: none; border: none; cursor: pointer; text-align: left; padding: 0; }
-.us-slip { width: 470px; background: ${PAPER}; transform: rotate(-1.5deg); box-shadow: 0 26px 50px rgba(0,0,0,0.4); padding: 22px 24px 18px; box-sizing: border-box; color: ${INK}; position: relative; }
+.us-slip { width: 470px; background: ${PAPER}; transform: rotate(-1.5deg); box-shadow: 0 16px 30px rgba(60,40,10,0.2); padding: 22px 24px 18px; box-sizing: border-box; color: ${INK}; position: relative; }
 .us-slip table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13.5px; }
 .us-slip td, .us-slip th { padding: 9px 6px 9px 0; text-align: left; }
 .us-slip tbody tr { border-top: 1px dashed #d6c9b4; }
-.us-close { position: absolute; right: 18px; top: 18px; width: 40px; height: 40px; border-radius: 50%; border: none; background: rgba(255,255,255,0.12); color: #efe6d6; font-size: 22px; cursor: pointer; z-index: 2; }
+.us-close { position: absolute; right: 16px; top: 16px; width: 40px; height: 40px; border-radius: 50%; border: none; background: #e2d6c3; color: #5e5345; font-size: 22px; cursor: pointer; z-index: 2; }
 .us-card { width: min(460px, 100%); background: ${PAPER}; color: ${INK}; border-radius: 22px; box-shadow: 0 30px 80px rgba(0,0,0,0.35); padding: 32px 30px 24px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; margin: auto; }
 .us-pay { width: min(520px, 100%); background: #ffffff; color: ${INK}; border-radius: 20px; box-shadow: 0 30px 80px rgba(0,0,0,0.35); padding: 18px 18px 22px; box-sizing: border-box; margin: auto; }
 .us-open .us-head { width: 100%; max-width: 900px; text-align: center; align-items: center; }
@@ -37,13 +36,13 @@ const CSS = `
 @media (max-width: 960px) { .us-head { width: 100%; max-width: 380px; } .us-head h2 { font-size: 30px; } .us-slip { transform: none; width: 100%; max-width: 470px; } }
 @media (max-width: 560px) {
   .us-back { padding: 0; align-items: flex-end; }
-  .us-row { margin: auto 0 0; width: 100%; gap: 0; }
+  .us-row { margin: auto 0 0; width: 100%; gap: 0; padding: 56px 12px 0; border-radius: 20px 20px 0 0; border-bottom: none; }
   .us-head { display: none; }
   .us-receipt { width: 100%; transform: none; filter: none; }
   .us-paper { border-radius: 20px 20px 0 0; padding: 22px 20px 20px; }
   .us-zig { display: none; }
   .us-slip { box-shadow: none; border-top: 1px dashed #d6c9b4; }
-  .us-close { top: 12px; right: 12px; }
+  .us-close { top: 10px; right: 10px; }
   .us-pay, .us-card { border-radius: 20px 20px 0 0; margin: auto 0 0; width: 100%; }
 }
 `
@@ -199,11 +198,11 @@ export default function UpgradeSheet({ subject, curriculumId, ctx = {}, onClose,
   return (
     <div className="us-back" role="dialog" aria-modal="true" aria-labelledby="us-h" onClick={e => { if (e.target === e.currentTarget && !busy) onClose() }}>
       <style>{CSS}</style>
-      <button ref={closeRef} type="button" className="us-close" aria-label="Close" onClick={onClose} disabled={busy}>×</button>
       <div className={`us-row${compare ? ' us-open' : ''}`}>
+        <button ref={closeRef} type="button" className="us-close" aria-label="Close" onClick={onClose} disabled={busy}>×</button>
         <div className="us-head">
           <h2 id="us-h">{headline}</h2>
-          {sub && <div style={{ fontSize: 15, color: '#cdbfa9', lineHeight: 1.55 }}>{sub}</div>}
+          {sub && <div style={{ fontSize: 15, color: MUTED, lineHeight: 1.55 }}>{sub}</div>}
         </div>
 
         <div className="us-receipt">
