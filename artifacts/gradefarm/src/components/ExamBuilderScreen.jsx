@@ -1,6 +1,6 @@
 import { confirmDialog } from '../lib/dialog'
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Printer, Shuffle, RefreshCw, X, ChevronUp, ChevronDown, Plus, Save, Link2, Trash2 } from 'lucide-react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { ArrowLeft, Lock, Check, Printer, Shuffle, RefreshCw, X, ChevronUp, ChevronDown, Plus, Save, Link2, Trash2 } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 import { getExamBankForTile, fetchTutorClasses, fetchMyClasses, fetchSolutions } from '../lib/db'
 import { listBuiltExams, getBuiltExam, saveBuiltExam, deleteBuiltExam } from '../lib/builtExams'
@@ -53,10 +53,31 @@ function fullPaper(board, subjectName, paper) {
  * (built_exam_attempts). New exams prefer questions the student hasn't had in
  * an exam before. Links from Exams: ?topics=A|B (an exam on those topics) and
  * ?from=<attempt>&redo=lost|skipped (the questions they lost marks on or skipped).
+ *
+ * `preview` (the free subject): the whole builder to try, but Save and
+ * Download open "Unlock" (the exam's real cover, what a plan adds, See plans),
+ * the paper shows its cover and first page with the rest blurred, and there
+ * are no solutions. The exam they built is kept in this browser and opens
+ * again next time, after they subscribe too.
  */
+// The free subject's exam, kept in this browser so it's there after they subscribe.
+const draftKey = (subjectName) => `gf-exam-draft:${subjectName}`
+function readDraft(subjectName) {
+  try {
+    const d = JSON.parse(localStorage.getItem(draftKey(subjectName)) || 'null')
+    return d && d.questions && (d.questions.A?.length || d.questions.B?.length) ? d : null
+  } catch { return null }
+}
+function writeDraft(subjectName, draft) { try { localStorage.setItem(draftKey(subjectName), JSON.stringify(draft)) } catch {} }
+function clearDraft(subjectName) { try { localStorage.removeItem(draftKey(subjectName)) } catch {} }
+
+// A4 at 96 dpi, and the gap between pages (ExamPaper .xp-page).
+const PAGE_H = 1122.5
+const PAGE_GAP = 37.8
+
 const DEFAULT_STORE = { list: listBuiltExams, get: getBuiltExam, save: saveBuiltExam, remove: deleteBuiltExam }
 
-export default function ExamBuilderScreen({ theme = 'dark', subject, profile, onExit, onMark = null, onSit = null, loadBank = getExamBankForTile, store = DEFAULT_STORE, loadClasses = null, loadSolutions = fetchSolutions, attemptStore = ATTEMPT_STORE }) {
+export default function ExamBuilderScreen({ theme = 'dark', subject, profile, onExit, onMark = null, onSit = null, preview = false, exitLabel = 'Exams', onUnlock = null, loadBank = getExamBankForTile, store = DEFAULT_STORE, loadClasses = null, loadSolutions = fetchSolutions, attemptStore = ATTEMPT_STORE }) {
   const t = THEMES[theme]
   const subjectName = subject?.name || ''
   const board = boardOf(subject)
@@ -135,6 +156,12 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, profile, on
       setTopics(wantTopics.filter(x => summary.topics.some(tp => tp.name === x)))
       return
     }
+    const draft = !want ? readDraft(subjectName) : null
+    if (draft) {
+      applySaved(draft)
+      if (!preview) clearDraft(subjectName)
+      return
+    }
     const open = (row) => {
       if (row && row.subject === subjectName) { applySaved(row); return }
       if (row) setNotice(`That exam is for ${row.subject}. Switch subject to open it.`)
@@ -192,10 +219,10 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, profile, on
     setSubjectTitle(st.subjectTitle || strip(subjectName)); setPaperTitle(st.paperTitle || ''); setMaterials(st.materials || '')
     setPicked({ A: row.questions?.A || [], B: row.questions?.B || [] })
     setEdited(false)
-    setCurrent({ id: row.id, title: row.title, classId: row.class_id, ownerId: row.owner_id })
+    setCurrent(row.id ? { id: row.id, title: row.title, classId: row.class_id, ownerId: row.owner_id } : null)
     const missing = [...(row.questions?.A || []), ...(row.questions?.B || [])].filter(id => !byIdRef.current.has(id)).length
-    setNotice(missing ? `${missing} question${missing === 1 ? ' is' : 's are'} no longer in the bank, so ${missing === 1 ? 'it was' : 'they were'} left out.` : '')
-    try { window.history.replaceState(null, '', `${window.location.pathname}?exam=${row.id}`) } catch {}
+    setNotice(missing ? `${missing} question${missing === 1 ? ' is' : 's are'} no longer in the bank, so ${missing === 1 ? 'it was' : 'they were'} left out.` : row.id ? '' : "Here's the exam you built last time.")
+    if (row.id) try { window.history.replaceState(null, '', `${window.location.pathname}?exam=${row.id}`) } catch {}
   }
 
   /** An exam of these questions (from Exams: the ones a student lost marks on or skipped), across every paper and source. */
@@ -229,7 +256,7 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, profile, on
   const askedSolutions = useRef(new Set())
   const examIds = [...exam.A, ...exam.B].map(q => q.id).join(',')
   useEffect(() => {
-    if (!solutions || !examIds) return
+    if (preview || !solutions || !examIds) return
     const want = examIds.split(',').filter(id => !askedSolutions.current.has(id))
     if (!want.length) return
     want.forEach(id => askedSolutions.current.add(id))
@@ -293,6 +320,13 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, profile, on
     setSaveOpen(true)
   }
   const settingsNow = () => ({ board, paper, sources, topics, mcCount, bMarks, showSources, answerSheet, solutions, subjectTitle, paperTitle, materials })
+
+  // Preview: Save and Download open Unlock, and the exam is kept for later.
+  const [unlockOpen, setUnlockOpen] = useState(false)
+  const openUnlock = () => {
+    writeDraft(subjectName, { title: '', settings: { ...settingsNow(), solutions: true }, questions: picked })
+    setUnlockOpen(true)
+  }
   const doSave = async (asNew) => {
     if (!myId || !saveTitle.trim()) return
     setSaveState('saving')
@@ -442,6 +476,7 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, profile, on
     .eb-preview { min-width: 0; background: color-mix(in srgb, var(--t-bg) 86%, #000); border-radius: 12px; padding: 16px 4px; overflow: hidden; }
     @media screen and (max-width: 960px) { .eb-grid { grid-template-columns: 1fr; padding: 12px; } .eb-side { position: static; max-height: none; overflow: visible; } }
     @media screen and (max-width: 560px) { .eb-title { display: none; } }
+    ${preview ? '@media print { .eb { display: none !important; } }' : ''}
     @media print { .eb-bar, .eb-side { display: none !important; } .eb-preview { background: none; padding: 0; } .eb-zoom { zoom: 1 !important; } }
   `
 
@@ -450,10 +485,25 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, profile, on
       <style>{css}</style>
       <div className="eb-bar">
         <button type="button" onClick={onExit} style={{ display: 'flex', alignItems: 'center', gap: 6, border: 'none', background: 'transparent', color: t.text, fontFamily: FONT_B, fontSize: 13.5, fontWeight: 700, cursor: 'pointer', padding: 0, whiteSpace: 'nowrap' }}>
-          <ArrowLeft size={16} aria-hidden="true" /> Exams
+          <ArrowLeft size={16} aria-hidden="true" /> {exitLabel}
         </button>
-        <div className="eb-title" style={{ fontSize: 15, fontWeight: 800 }}>{current ? current.title : 'Exam builder'}</div>
+        <div className="eb-title" style={{ fontSize: 15, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 10 }}>
+          {current ? current.title : 'Exam builder'}
+          {preview && <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', padding: '4px 9px', borderRadius: 999, background: 'color-mix(in srgb, var(--t-accent) 22%, transparent)', color: t.goldText }}>Preview</span>}
+        </div>
         <div style={{ display: 'flex', gap: 8 }}>
+        {preview ? (
+          <>
+            <button type="button" onClick={openUnlock} disabled={!totals.total}
+              style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 14px', borderRadius: 10, border: `1px solid ${t.border}`, background: t.bgCard, color: t.textSub, fontFamily: FONT_B, fontSize: 13.5, fontWeight: 700, cursor: totals.total ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap' }}>
+              <Lock size={14} aria-hidden="true" /> Save
+            </button>
+            <button type="button" onClick={openUnlock} disabled={!totals.total}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 10, border: 'none', background: totals.total ? t.accent : t.bgHover, color: totals.total ? 'var(--t-onAccent)' : t.textFaint, fontFamily: FONT_B, fontSize: 13.5, fontWeight: 800, cursor: totals.total ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap' }}>
+              <Lock size={15} aria-hidden="true" /> Unlock to download
+            </button>
+          </>
+        ) : <>
         {myId && (
           <button type="button" onClick={openSave} disabled={!totals.total}
             style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 14px', borderRadius: 10, border: `1px solid ${t.border}`, background: t.bgCard, color: totals.total ? t.text : t.textFaint, fontFamily: FONT_B, fontSize: 13.5, fontWeight: 700, cursor: totals.total ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap' }}>
@@ -465,6 +515,7 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, profile, on
           <Printer size={16} aria-hidden="true" />
           {pdfProgress ? (pdfProgress.total ? `Downloading… ${pdfProgress.done}/${pdfProgress.total}` : 'Downloading…') : 'Download PDF'}
         </button>
+        </>}
         </div>
       </div>
 
@@ -498,6 +549,11 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, profile, on
         </div>
       )}
 
+      {unlockOpen && (
+        <UnlockDialog t={t} subjectName={subjectName} totals={totals} minutes={minutes} pageRoot={previewRef}
+          onPlans={() => { setUnlockOpen(false); onUnlock?.() }} onClose={() => setUnlockOpen(false)} />
+      )}
+
       {!bank ? (
         <p role="status" style={{ padding: 24, color: loadError ? t.danger : t.textMuted }}>{loadError || 'Loading exam questions…'}</p>
       ) : (
@@ -511,6 +567,12 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, profile, on
                   {onExit && !downloaded && <button type="button" onClick={onExit} style={{ padding: '8px 14px', borderRadius: 10, border: 'none', background: t.accent, color: 'var(--t-onAccent)', fontFamily: FONT_B, fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>Go to my Exams</button>}
                   {onMark && downloaded && <button type="button" onClick={() => onMark(downloaded.id)} style={{ padding: '8px 14px', borderRadius: 10, border: `1px solid ${t.borderMid}`, background: 'transparent', color: t.text, fontFamily: FONT_B, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Mark it now</button>}
                 </div>
+              </div>
+            )}
+            {preview && (
+              <div className="eb-card" style={{ background: 'color-mix(in srgb, var(--t-accent) 14%, var(--t-bgCard))', borderColor: 'transparent', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <b style={{ fontSize: 13.5 }}>Build as much as you like</b>
+                <span style={{ fontSize: 12.5, color: t.textSub, lineHeight: 1.55 }}>Downloading, saving and marking against the solutions come with a plan for {subjectName}.</span>
               </div>
             )}
             {notice && <div className="eb-card" role="status" style={{ fontSize: 12.5, color: t.textSub, lineHeight: 1.55 }}>{notice}</div>}
@@ -666,7 +728,7 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, profile, on
               <label style={{ fontSize: 12, color: t.textMuted }}>{board === 'sace' ? 'Instructions' : 'Approved materials'} (one per line)<textarea value={materials} onChange={e => setMaterials(e.target.value)} rows={4} style={{ ...input, marginTop: 4, resize: 'vertical' }} /></label>
               {[
                 ...(board === 'vce' ? [['Multiple-choice answer sheet', answerSheet, setAnswerSheet]] : []),
-                ['Solutions at the end', solutions, setSolutions],
+                ...(preview ? [] : [['Solutions at the end', solutions, setSolutions]]),
                 ['Show where each question is from', showSources, setShowSources],
               ].map(([text, on, set]) => (
                 <label key={text} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, color: t.textSub, cursor: 'pointer' }}>
@@ -677,23 +739,119 @@ export default function ExamBuilderScreen({ theme = 'dark', subject, profile, on
             <div style={{ fontSize: 12, color: t.textFaint, lineHeight: 1.5 }}>Download PDF saves an A4 PDF ready to print. It takes a few seconds for a long exam.</div>
           </div>
 
-          <div className="eb-preview" ref={previewRef}>
+          <div className="eb-preview" ref={previewRef} style={preview ? { position: 'relative' } : undefined}>
             <div className="eb-zoom" style={{ zoom }}>
               {totals.total > 0 ? (
+                <PreviewClip on={preview}>
                 <ExamPaper exam={exam} meta={{
                   board, subjectTitle: subjectTitle || strip(subjectName), paperTitle, paperNumber: paperNumber(paper || ''),
                   headerTitle: `GradeFarm Practice ${subjectTitle || strip(subjectName)} ${paperTitle}`.trim(),
                   materials: materials.split('\n').map(s => s.trim()).filter(Boolean),
                   readingMinutes, writingMinutes: minutes, isMaths: isMathsSubject(subjectName),
-                  showSources, answerSheet: board === 'vce' && answerSheet, solutions, totals,
+                  showSources, answerSheet: board === 'vce' && answerSheet, solutions: solutions && !preview, totals,
                 }} />
+                </PreviewClip>
               ) : (
                 <p style={{ color: t.textMuted, textAlign: 'center', padding: 40 }}>No questions match these settings.</p>
               )}
             </div>
+            {preview && totals.total > 0 && (
+              <div style={{ position: 'absolute', left: '50%', bottom: 28, transform: 'translateX(-50%)', width: 'min(440px, calc(100% - 32px))', boxSizing: 'border-box', background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 16, boxShadow: '0 12px 40px rgba(0,0,0,0.18)', padding: 22, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <b style={{ fontSize: 17, lineHeight: 1.3 }}>Your exam is ready: {totals.aCount + totals.bCount} questions, {totals.total} marks</b>
+                <span style={{ fontSize: 13.5, lineHeight: 1.55, color: t.textSub }}>Unlock it to download a print-ready PDF, sit it timed and mark it against the worked solutions.</span>
+                <div>
+                  <button type="button" onClick={openUnlock} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '11px 18px', borderRadius: 10, border: 'none', background: t.accent, color: 'var(--t-onAccent)', fontFamily: FONT_B, fontSize: 13.5, fontWeight: 800, cursor: 'pointer' }}>
+                    <Lock size={15} aria-hidden="true" /> Unlock to download
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+
+/**
+ * Preview: the cover and first page of the paper as they print, then the rest
+ * blurred out under a fade, with "PREVIEW" across the first page.
+ */
+function PreviewClip({ on, children }) {
+  if (!on) return children
+  const twoPages = 2 * (PAGE_H + PAGE_GAP)
+  return (
+    <div style={{ position: 'relative', height: twoPages + 460, overflow: 'hidden' }}>
+      {children}
+      <div aria-hidden="true" style={{ position: 'absolute', left: '50%', top: PAGE_H + PAGE_GAP + PAGE_H / 2, transform: 'translate(-50%, -50%) rotate(-28deg)', fontFamily: FONT_B, fontSize: 120, fontWeight: 800, letterSpacing: '0.06em', color: 'rgba(160,160,160,0.16)', pointerEvents: 'none', userSelect: 'none', whiteSpace: 'nowrap' }}>PREVIEW</div>
+      <div aria-hidden="true" style={{
+        position: 'absolute', left: 0, right: 0, top: twoPages - 140, bottom: 0,
+        backdropFilter: 'blur(9px)', WebkitBackdropFilter: 'blur(9px)',
+        background: 'linear-gradient(to bottom, transparent, color-mix(in srgb, var(--t-bg) 55%, transparent) 220px)',
+        maskImage: 'linear-gradient(to bottom, transparent, #000 140px)', WebkitMaskImage: 'linear-gradient(to bottom, transparent, #000 140px)',
+      }} />
+    </div>
+  )
+}
+
+/**
+ * Unlock (preview): the exam's own cover, small, beside what a plan adds and
+ * See plans. The cover is a copy of the first page in the preview, so it is
+ * exactly the SACE or VCE front page they built.
+ */
+function UnlockDialog({ t, subjectName, totals, minutes, pageRoot, onPlans, onClose }) {
+  const coverRef = useRef(null)
+  const closeRef = useRef(null)
+  useLayoutEffect(() => {
+    const page = pageRoot.current?.querySelector('.xp-print .xp-page')
+    const host = coverRef.current
+    if (!page || !host) return
+    const paper = document.createElement('div')
+    paper.className = page.closest('.xp')?.className || 'xp'
+    paper.appendChild(page.cloneNode(true))
+    host.replaceChildren(paper)
+  }, [pageRoot])
+  useEffect(() => {
+    closeRef.current?.focus()
+    const onKey = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+  const SCALE = 0.29
+  const perks = [
+    'Download this exam as a print-ready PDF',
+    'Sit it timed, then mark it against worked solutions',
+    'Make as many exams as you like, full papers too',
+    'Track your exam scores over the year',
+  ]
+  return (
+    <div role="dialog" aria-modal="true" aria-labelledby="eb-unlock-h" onClick={e => { if (e.target === e.currentTarget) onClose() }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 20, padding: 16 }}>
+      <div className="eb-unlock" style={{ background: t.bgCard, color: t.text, borderRadius: 20, boxShadow: '0 24px 70px rgba(0,0,0,0.3)', width: '100%', maxWidth: 780, maxHeight: 'calc(100vh - 32px)', overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', fontFamily: FONT_B }}>
+        <div style={{ background: 'color-mix(in srgb, var(--t-text) 6%, var(--t-bgCard))', padding: 28, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+          <div aria-hidden="true" style={{ width: 794 * SCALE, height: PAGE_H * SCALE, transform: 'rotate(-3deg)', boxShadow: '0 6px 22px rgba(0,0,0,0.22)', background: '#fff', overflow: 'hidden', flexShrink: 0 }}>
+            <div ref={coverRef} style={{ width: 794, transform: `scale(${SCALE})`, transformOrigin: 'top left', pointerEvents: 'none' }} />
+          </div>
+          <span style={{ fontSize: 12.5, color: t.textSub, textAlign: 'center', lineHeight: 1.5, maxWidth: 240 }}>Your exam is kept. It&rsquo;ll be waiting here when you come back.</span>
+        </div>
+        <div style={{ padding: 30, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <h2 id="eb-unlock-h" style={{ margin: 0, fontSize: 22, fontWeight: 800, lineHeight: 1.25 }}>You built it. Now sit it.</h2>
+          <div style={{ fontSize: 13, color: t.textMuted }}>{totals.aCount + totals.bCount} questions · {totals.total} marks · {minutes} minutes</div>
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {perks.map(p => (
+              <li key={p} style={{ display: 'flex', gap: 10, fontSize: 14, lineHeight: 1.45 }}>
+                <Check size={17} aria-hidden="true" style={{ color: t.success, flexShrink: 0, marginTop: 1 }} />{p}
+              </li>
+            ))}
+          </ul>
+          <div style={{ fontSize: 13, color: t.textSub }}>Included with a plan for <b style={{ color: t.text }}>{subjectName}</b>. Cancel any time.</div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <button type="button" onClick={onPlans} style={{ padding: '12px 20px', borderRadius: 12, border: 'none', background: t.accent, color: 'var(--t-onAccent)', fontFamily: FONT_B, fontSize: 14, fontWeight: 800, cursor: 'pointer' }}>See plans →</button>
+            <button type="button" ref={closeRef} onClick={onClose} style={{ padding: '12px 14px', borderRadius: 12, border: 'none', background: 'none', color: t.textSub, fontFamily: FONT_B, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Not now</button>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

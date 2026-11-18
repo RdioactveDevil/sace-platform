@@ -1678,11 +1678,14 @@ function AppInner() {
       <Route path="/exam-builder" element={
         !(user && profile)
           ? <Navigate to="/home" replace />
-        : subjectLocked || selectedAccess === 'free'
+        : subjectLocked
           ? <LockedSubjectScreen subject={selectedSubject} reason="test" onChangeSubject={() => navigate('/question-bank')} theme={theme} />
-        : subjectHasFeature(selectedSubject, 'test_maker')
-          ? <ExamBuilderScreen theme={theme} subject={selectedSubject} profile={profile} onExit={() => navigate('/exams')} onMark={(id) => navigate(`/exams/${id}/mark`)} onSit={(id) => navigate(`/exams/${id}/sit`)} />
-          : <Navigate to="/question-bank" replace />
+        : !subjectHasFeature(selectedSubject, 'test_maker')
+          ? <Navigate to="/question-bank" replace />
+        : selectedAccess === 'free'
+          // The free subject: the whole builder to try, with downloading and saving behind a plan.
+          ? <ExamBuilderScreen theme={theme} subject={selectedSubject} profile={profile} preview exitLabel="Practice" onExit={() => navigate('/home')} onUnlock={() => navigate('/get-access', { state: { subject: selectedSubject } })} />
+          : <ExamBuilderScreen theme={theme} subject={selectedSubject} profile={profile} onExit={() => navigate('/exams')} onMark={(id) => navigate(`/exams/${id}/mark`)} onSit={(id) => navigate(`/exams/${id}/sit`)} />
       } />
 
       {/* Exams: the student's downloaded exams, self-marking and their scores. In AppShell, with the sidebar. */}
@@ -1690,6 +1693,8 @@ function AppInner() {
         <Route key={path} path={path} element={
           !(user && profile)
             ? <Navigate to="/home" replace />
+          : selectedAccess === 'free' && view === 'dashboard' && !subjectLocked && subjectHasFeature(selectedSubject, 'test_maker')
+            ? <Navigate to="/exam-builder" replace />
           : subjectLocked || selectedAccess === 'free'
             ? <LockedSubjectScreen subject={selectedSubject} reason="test" onChangeSubject={() => navigate('/question-bank')} theme={theme} />
           : subjectHasFeature(selectedSubject, 'test_maker')
