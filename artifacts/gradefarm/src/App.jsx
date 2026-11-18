@@ -1,5 +1,5 @@
 import DialogHost from './components/DialogHost'
-import { useState, useEffect, useCallback, useRef, useMemo, Suspense } from 'react'
+import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, Suspense } from 'react'
 import { Routes, Route, Navigate, useNavigate, useLocation, useParams, createBrowserRouter, RouterProvider } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { supabase } from './lib/supabase'
@@ -595,47 +595,93 @@ function DiagnosticDueScreen({ subject, diagnostic, onChangeSubject, theme }) {
 /** Year level (7–12) a subject's stage points to: "Year 11" → 11, SACE "Stage 1"/"Stage 2" → 11/12. */
 
 // ── AppShell ──────────────────────────────────────────────────────────────────
-/** Tabs for the sub-pages of the current sidebar section (e.g. Progress → Overview · Study Plan · …). */
+/** Links to the sub-pages of the current sidebar section (e.g. Progress → Overview · Your Statistics · …), with a gold bar that slides to the current one. */
 function SectionTabs({ theme, subject }) {
+  const t = THEMES[theme]
   const navigate = useNavigate()
   const location = useLocation()
-  const t = THEMES[theme]
+  const stripRef = useRef(null)
   const activeRef = useRef(null)
   const section = sectionForPath(location.pathname)
   const pages = section ? visiblePages(section, subject) : []
   const current = tabPath(location.pathname)
-  // On narrow screens the strip scrolls sideways; keep the current tab in view.
-  useEffect(() => {
-    const el = activeRef.current
-    const strip = el?.parentElement
-    if (el && strip && strip.scrollWidth > strip.clientWidth) {
-      const offset = el.getBoundingClientRect().left - strip.getBoundingClientRect().left
-      strip.scrollLeft += offset - (strip.clientWidth - el.offsetWidth) / 2
+  const unread = useUnreadMessages(section?.id === 'portal')
+  // The gold bar under the current page: measured from its link, it slides
+  // between pages (only after its first placement, so it doesn't fly in).
+  const [bar, setBar] = useState(null)
+  const [animate, setAnimate] = useState(false)
+  // Which edges have more tabs past them (narrow screens): those edges fade.
+  const [more, setMore] = useState({ left: false, right: false })
+
+  useLayoutEffect(() => {
+    const strip = stripRef.current
+    if (!strip) return undefined
+    const measure = () => {
+      const el = activeRef.current
+      setBar(el ? { x: el.offsetLeft, w: el.offsetWidth } : null)
+      setMore({ left: strip.scrollLeft > 2, right: strip.scrollLeft + strip.clientWidth < strip.scrollWidth - 2 })
     }
-  }, [current])
+    measure()
+    // Keep the current tab in view when the strip scrolls sideways.
+    const el = activeRef.current
+    if (el && strip.scrollWidth > strip.clientWidth) {
+      const left = el.offsetLeft - (strip.clientWidth - el.offsetWidth) / 2
+      strip.scrollTo({ left: Math.max(0, left), behavior: animate ? 'smooth' : 'auto' })
+    }
+    const id = requestAnimationFrame(() => setAnimate(true))
+    strip.addEventListener('scroll', measure, { passive: true })
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null
+    ro?.observe(strip)
+    return () => { cancelAnimationFrame(id); strip.removeEventListener('scroll', measure); ro?.disconnect() }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current, pages.length])
+
   if (pages.length < 2) return null
+  const fade = (on) => (on ? 'transparent, #000 28px' : '#000, #000')
+  const mask = `linear-gradient(to right, ${fade(more.left)}, ${more.right ? '#000 calc(100% - 28px), transparent' : '#000, #000'})`
   return (
-    // The bottom rule is an inset shadow (painted under the tabs) rather than a
-    // border the active underline overlaps with a negative margin: that 1px
-    // overflow gave the strip a scrollbar on Windows.
-    <div role="tablist" aria-label={section.label} data-tutorial-target={`tabs-${section.id}`} className="gf-section-tabs"
-      style={{ display: 'flex', gap: 4, padding: '10px 20px 0', boxShadow: `inset 0 -1px 0 ${t.border}`, flexShrink: 0, overflowX: 'auto', overflowY: 'hidden', scrollbarWidth: 'none', fontFamily: FONT_B }}>
-      {pages.map(page => {
-        const active = page.path === current
-        return (
-          <button key={page.id} type="button" role="tab" aria-selected={active} ref={active ? activeRef : undefined}
-            onClick={() => navigate(page.path)}
-            style={{
-              padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', whiteSpace: 'nowrap',
-              fontFamily: FONT_B, fontSize: 13, fontWeight: active ? 700 : 500,
-              color: active ? GOLD : t.textMuted,
-              borderBottom: `2px solid ${active ? GOLD : 'transparent'}`,
-            }}>
-            {page.label}
-          </button>
-        )
-      })}
-    </div>
+    // Page links (not tabs): each is its own address. The bottom rule is an
+    // inset shadow painted under the links rather than a border, which gave
+    // the strip a scrollbar on Windows.
+    <nav aria-label={section.label} data-tutorial-target={`tabs-${section.id}`}
+      style={{ flexShrink: 0, boxShadow: `inset 0 -1px 0 ${t.border}`, fontFamily: FONT_B }}>
+      <style>{`
+        .gf-tab { position: relative; display: inline-flex; align-items: center; gap: 7px; height: 44px; padding: 0 14px; margin-bottom: 0;
+          border-radius: 8px 8px 0 0; color: var(--t-textMuted); font-size: 14px; font-weight: 700; text-decoration: none; white-space: nowrap;
+          transition: color 0.2s ease, background-color 0.2s ease; }
+        .gf-tab:hover { color: var(--t-text); background: color-mix(in srgb, var(--t-text) 5%, transparent); }
+        .gf-tab[aria-current="page"], .gf-tab[aria-current="page"]:hover { color: var(--t-text); background: transparent; cursor: default; }
+        .gf-tab:focus-visible { outline: 2px solid var(--t-accent); outline-offset: -2px; }
+        .gf-tab-bar { position: absolute; left: 0; bottom: 0; height: 3px; border-radius: 3px 3px 0 0; background: var(--t-accent); pointer-events: none; }
+        .gf-tab-bar.slide { transition: transform 0.3s cubic-bezier(.3,.7,.2,1), width 0.3s cubic-bezier(.3,.7,.2,1); }
+        .gf-tab-badge { min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: 999px; display: inline-grid; place-items: center;
+          background: var(--t-accent); color: var(--t-onAccent); font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; }
+        .gf-section-tabs { padding: 6px 32px 0; }
+        @media (max-width: 860px) { .gf-section-tabs { padding: 4px 10px 0; } .gf-tab { padding: 0 12px; } }
+        @media (prefers-reduced-motion: reduce) { .gf-tab, .gf-tab-bar.slide { transition: none; } }
+      `}</style>
+      <div ref={stripRef} className="gf-section-tabs"
+        style={{ position: 'relative', display: 'flex', gap: 2, overflowX: 'auto', overflowY: 'hidden', scrollbarWidth: 'none', WebkitMaskImage: mask, maskImage: mask }}>
+        {pages.map(page => {
+          const active = page.path === current
+          const badge = page.id === 'messages' && unread > 0 ? unread : 0
+          return (
+            <a key={page.id} href={page.path} ref={active ? activeRef : undefined} className="gf-tab"
+              aria-current={active ? 'page' : undefined}
+              onClick={(e) => {
+                // A modified click opens a new tab as usual; a plain one stays in the app.
+                if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return
+                e.preventDefault()
+                if (!active) navigate(page.path)
+              }}>
+              {page.label}
+              {badge > 0 && <span className="gf-tab-badge">{badge > 99 ? '99+' : badge}<span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}> unread</span></span>}
+            </a>
+          )
+        })}
+        {bar && <span aria-hidden="true" className={`gf-tab-bar${animate ? ' slide' : ''}`} style={{ width: bar.w, transform: `translateX(${bar.x}px)` }} />}
+      </div>
+    </nav>
   )
 }
 
