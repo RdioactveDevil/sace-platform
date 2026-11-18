@@ -131,8 +131,7 @@ export default function AuthScreen({ onAuth, onBack, theme = 'dark', onToggleThe
     ? `${mode === 'signin' ? 'Sign in' : 'Create an account'} to accept ${invite.invitedBy}'s invite.`
     : mode === 'reset' ? "We'll email you a link to choose a new one."
     : mode === 'signup' && asParent ? "You sign in with your email, and we send you their progress each week. Their first subject is free."
-    : mode === 'signup' ? 'Your first subject is free.'
-    : 'Sign in to pick up where you left off.'
+    : null
   const emailLabel = mode === 'signup' && asParent ? 'Your email' : 'Email'
   const submitLabel = loading
     ? (mode === 'signin' ? 'Signing in…' : mode === 'reset' ? 'Sending…' : 'Creating your account…')
