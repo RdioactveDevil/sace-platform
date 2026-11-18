@@ -113,6 +113,10 @@ type Extracted = {
   difficulty: number;
   /** The total printed with the question ("Question 4 (9 marks)" → 9); 0 if none. */
   printed_marks: number;
+  /** Questions sharing information with this one, by number (e.g. [29, 30]); empty if none. */
+  set_numbers: number[];
+  /** On a set's first question: the information the set shares, without the "Use the following information…" sentence. */
+  shared_info: string;
   figure_page: number;
   figure_bbox: BBox;
 };
@@ -190,10 +194,12 @@ function outputSchema(topicNames: string[]) {
             subtopic: { type: "string" },
             difficulty: { type: "integer" },
             printed_marks: { type: "integer" },
+            set_numbers: { type: "array", items: { type: "integer" } },
+            shared_info: { type: "string" },
             figure_page: { type: "integer" },
             figure_bbox: bboxSchema,
           },
-          required: ["number", "question", "options", "answer_index", "solution", "parts", "topic", "subtopic", "difficulty", "printed_marks", "figure_page", "figure_bbox"],
+          required: ["number", "question", "options", "answer_index", "solution", "parts", "topic", "subtopic", "difficulty", "printed_marks", "set_numbers", "shared_info", "figure_page", "figure_bbox"],
           additionalProperties: false,
         },
       },
@@ -218,7 +224,7 @@ function systemPrompt(args: Args, section: "A" | "B", course: Course, hasSolutio
     "Never copy page headers, footers or margins into any text: page numbers, 'SECTION B – Question 1 – continued', 'Continued', 'TURN OVER', 'Do not write in this area', copyright lines.",
     "Copy each piece of text once. Text printed once on the paper appears once in the output: not in both the question and a part, and not twice in one field.",
     "Labels printed on or under an equation or figure (such as '(purple)' under a formula) go with it, on the same line as the thing they label or in brackets after it.",
-    "Questions must stand alone, because they are mixed into new exams. When information is shared ('Use the following information to answer Questions 3 and 4'), copy that information into each question that uses it, leave out the 'Use the following information…' sentence, and give each question the shared figure.",
+    "Questions that share information ('Use the following information to answer Questions 3 and 4', then the information) are a set, kept together in new exams. On every question of the set, set_numbers lists the set's question numbers (e.g. [3, 4]). The set's first question holds the shared information, once, in shared_info (without the 'Use the following information…' sentence, which is printed with the new numbers), and the shared figure as its figure; its question and each other question of the set hold only that question's own text. Questions that share nothing have set_numbers [] and shared_info ''.",
     FIGURE_BOX_RULE,
     "Tables that are plain text may be written as a markdown table in the text instead of a figure.",
     `topic must be one of the course topics below, and subtopic one of that topic's subtopics (exactly as written). Course:\n${courseList}`,
@@ -645,6 +651,11 @@ async function ingestOne(admin: any, client: Anthropic, args: Args): Promise<Out
       image_url: await figure(q.figure_page, q.figure_bbox, `${section}${num}`, q.question || "", "", flags),
       // Saved for review: kept from students until an admin approves it (migration 20261118000000).
       review_status: "pending",
+      // Not in a set unless the reading says so (below); a reload replaces old links.
+      set_key: null as string | null,
+      set_position: null as number | null,
+      shared_info: null as string | null,
+      shared_image_url: null as string | null,
       review: { printed_marks: Math.max(0, Math.round(q.printed_marks || 0)), page: pageOf(q), flags },
       created_at: new Date().toISOString(),
     };
@@ -679,7 +690,36 @@ async function ingestOne(admin: any, client: Anthropic, args: Args): Promise<Out
     }
   }
 
-  console.log(`Prepared ${rows.length} question(s); ${figures} figure(s) cropped.${skipped.length ? ` Skipped (incomplete): ${skipped.join(", ")}` : ""}`);
+  // Sets of multiple-choice questions sharing information (migration
+  // 20261118000002): set_key (the first question's id) and set_position on
+  // each; the shared information and figure on the first question only.
+  const mcByNumber = new Map(rows.filter((r) => r.exam_section === "A").map((r) => [Number(String(r.source_question).replace(/\D+/g, "")), r]));
+  const extractedByNumber = new Map(all.filter((x) => x.section === "A").map((x) => [Number(String(x.q.number).replace(/\D+/g, "")), x.q]));
+  const linked = new Set<number>();
+  for (const [n, q] of extractedByNumber) {
+    const nums = [...new Set((q.set_numbers || []).map(Number).filter((x) => Number.isInteger(x) && x > 0))].sort((a, b) => a - b);
+    if (nums.length < 2 || nums[0] !== n || linked.has(n)) continue;
+    const members = nums.map((x) => mcByNumber.get(x));
+    const first = members[0];
+    if (!first) continue;
+    const missing = nums.filter((x, i) => !members[i]);
+    members.forEach((m, i) => {
+      if (!m) return;
+      linked.add(nums[i]);
+      m.set_key = first.id;
+      m.set_position = i + 1;
+      if (missing.length) {
+        const review = m.review as { flags: Flag[] };
+        review.flags.push({ code: "set_incomplete", where: "", message: `This question shares information with Question ${missing.join(", ")}, which wasn't read from the paper. Check the set on the paper.` });
+      }
+    });
+    first.shared_info = String(extractedByNumber.get(nums[0])?.shared_info || "").trim() || null;
+    // The first question's figure is the set's shared figure.
+    first.shared_image_url = first.image_url || null;
+    first.image_url = null;
+  }
+
+  console.log(`Prepared ${rows.length} question(s); ${figures} figure(s) cropped${linked.size ? `; ${linked.size} in sets sharing information` : ""}.${skipped.length ? ` Skipped (incomplete): ${skipped.join(", ")}` : ""}`);
   const marks = rows.reduce((s, r) => s + (r.exam_section === "A" ? 1 : Number(r.total_marks) || 0), 0);
   console.log(`Total marks: ${marks}`);
 
