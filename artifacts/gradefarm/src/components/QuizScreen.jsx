@@ -69,6 +69,7 @@ import SessionWins from './SessionWins'
 import { breakDue, nextBreakAt, rankUp, BREAK_EVERY } from '../lib/engagement'
 import { addDays, localDate } from '../lib/streak'
 import InfinityLoader from './InfinityLoader'
+import FreeLimitScreen from './FreeLimitScreen'
 
 const GOLD = 'var(--t-accent)'
 const GOLDL = 'var(--t-accentLight)'
@@ -2035,31 +2036,10 @@ export default function QuizScreen({
     )
   }
 
-  // Free subject: once today's questions are used up, stop before the next one.
+  // Free subject: once today's questions are used up, stop before the next one,
+  // with the next question waiting behind the lock.
   if (freeQuota && freeQuota.used >= freeQuota.limit && !showAns) {
-    return (
-      <div style={{ minHeight: '100%', background: t.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, fontFamily: FONT_B }}>
-        <div style={{ maxWidth: 420, textAlign: 'center', background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 20, padding: '32px 28px', boxShadow: t.shadowCard }}>
-          <div style={{ width: 52, height: 52, borderRadius: 14, margin: '0 auto 14px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: NAVY }}>
-            <Lock size={24} aria-hidden="true" />
-          </div>
-          <div style={{ fontSize: 19, fontWeight: 800, color: t.text, marginBottom: 6 }}>That's your {freeQuota.limit} free questions for today</div>
-          <p style={{ fontSize: 13.5, color: t.textMuted, lineHeight: 1.6, margin: '0 0 20px' }}>
-            Nice work! Come back tomorrow for {freeQuota.limit} more, or subscribe for unlimited questions, Exam Mode and more.
-          </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <button type="button" onClick={freeQuota.onUpgrade}
-              style={{ height: 44, borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: NAVY, fontFamily: FONT_B, fontSize: 14, fontWeight: 800, cursor: 'pointer' }}>
-              Get unlimited questions
-            </button>
-            <button type="button" onClick={onHome}
-              style={{ height: 40, borderRadius: 12, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontFamily: FONT_B, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-              Back to Practice
-            </button>
-          </div>
-        </div>
-      </div>
-    )
+    return <FreeLimitScreen t={t} limit={freeQuota.limit} nextQ={currentQ} results={sessionResults} onUpgrade={freeQuota.onUpgrade} onHome={onHome} />
   }
 
   const { pct } = getLevelProgress(profile.xp, rankAccuracy(profile))
