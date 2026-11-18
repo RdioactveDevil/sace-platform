@@ -68,6 +68,7 @@ import RankUpModal from './RankUpModal'
 import SessionWins from './SessionWins'
 import { breakDue, nextBreakAt, rankUp, BREAK_EVERY } from '../lib/engagement'
 import { addDays, localDate } from '../lib/streak'
+import InfinityLoader from './InfinityLoader'
 
 const GOLD = '#f1be43'
 const GOLDL = '#f9d87a'
@@ -2016,8 +2017,7 @@ export default function QuizScreen({
     return (
       <div style={{ minHeight: '100%', background: t.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: t.textFaint, fontFamily: FONT_B }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-          <style>{`@keyframes gf-spin { to { transform: rotate(360deg); } }`}</style>
-          <div style={{ width: 36, height: 36, borderRadius: '50%', border: `2px solid rgba(241,190,67,0.18)`, borderTopColor: GOLD, animation: 'gf-spin 0.8s linear infinite' }} />
+          <InfinityLoader size={56} label={null} />
           <div style={{ fontSize: 13 }}>Generating more questions…</div>
         </div>
       </div>
