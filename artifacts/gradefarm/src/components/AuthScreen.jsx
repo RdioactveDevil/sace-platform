@@ -10,6 +10,14 @@ import CalmBackground from './CalmBackground'
 // Which of Google and Apple to offer (lib/oauth.js): set once each is switched on in Supabase.
 const PROVIDERS = enabledProviders(import.meta.env?.VITE_OAUTH_PROVIDERS)
 
+// Grades drifting slowly behind the headline: [text, where, size px, tilt deg, seconds, delay s].
+const FLOATERS = [
+  ['A+', { top: -78, left: -18 }, 68, -10, 19, 0],
+  ['100%', { top: 18, right: -6 }, 40, 6, 23, -6],
+  ['95%', { bottom: -54, left: '38%' }, 46, -4, 21, -11],
+  ['A', { bottom: -92, right: '4%' }, 76, 8, 25, -3],
+]
+
 // What GradeFarm does for a student, beside the form (wide screens; below it on a phone).
 const HELPS = [
   { Icon: Search, title: 'Find your weak spots before your test does', body: 'Every answer shows which parts of your course need more work.' },
@@ -138,16 +146,28 @@ export default function AuthScreen({ onAuth, onBack, theme = 'dark', onToggleThe
       right={onBack && <button type="button" className="af-link" onClick={onBack} style={{ ...linkStyle(t), fontWeight: 600, textDecorationColor: t.border, color: t.textMuted }}>Back to home</button>}>
       <style>{`
         .au-wrap { width: 100%; max-width: 1040px; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: clamp(32px, 6vw, 88px); }
-        .au-why { flex: 1 1 380px; max-width: 500px; display: flex; flex-direction: column; gap: 28px; }
+        .au-why { position: relative; flex: 1 1 380px; max-width: 500px; display: flex; flex-direction: column; gap: 28px; }
+        .au-why > :not(.au-float) { position: relative; z-index: 1; }
+        .au-float { position: absolute; z-index: 0; pointer-events: none; user-select: none; font-weight: 800; letter-spacing: -0.03em; line-height: 1;
+          color: ${t.goldText}; opacity: ${theme === 'dark' ? 0.14 : 0.2}; transform: rotate(var(--r)); animation: auFloat var(--d) ease-in-out var(--delay) infinite; }
+        @keyframes auFloat {
+          0%, 100% { transform: translate(0, 0) rotate(var(--r)); }
+          50% { transform: translate(8px, -16px) rotate(calc(var(--r) + 4deg)); }
+        }
+        @media (prefers-reduced-motion: reduce) { .au-float { animation: none; } }
         .au-card { flex: 0 1 410px; }
         .au-sso { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px; border-radius: 10px; font-family: ${FONT_B}; font-size: 14px; font-weight: 700; cursor: pointer; }
         .au-sso:disabled { opacity: 0.6; cursor: default; }
-        @media (max-width: 860px) { .au-why { order: 2; gap: 18px; } .au-why h2 { font-size: 24px !important; } }
+        @media (max-width: 860px) { .au-why { order: 2; gap: 18px; } .au-why h2 { font-size: 24px !important; } .au-float { display: none; } }
       `}</style>
       <div className="au-wrap">
         <section className="au-why af-in" aria-label="What GradeFarm does">
+          {FLOATERS.map(([text, at, size, tilt, secs, delay]) => (
+            <span key={text} className="au-float" aria-hidden="true"
+              style={{ ...at, fontSize: size, '--r': `${tilt}deg`, '--d': `${secs}s`, '--delay': `${delay}s` }}>{text}</span>
+          ))}
           <h2 style={{ margin: 0, fontSize: 'clamp(30px, 3.6vw, 44px)', fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.1, color: t.text, textWrap: 'balance' }}>
-            Every question makes the next one <span style={{ color: t.goldText }}>smarter</span>.
+            Textbooks had a good run<span style={{ color: t.goldText }}>.</span>
           </h2>
           <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 20 }}>
             {HELPS.map(({ Icon, title: head, body }) => (
