@@ -7,6 +7,7 @@ import { buildQuestionUpdate, parseOptions } from "../lib/question-edit";
 import { parseBulkRequest, conceptTag, chunks } from "../lib/question-bulk";
 import { buildExtendedUpdate } from "../lib/extended-edit";
 import { parseReviewRequest, dropFigureFlags } from "../lib/question-review";
+import { parseSetUpdate } from "../lib/question-sets";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -1382,6 +1383,27 @@ router.post("/admin/questions/:id/figure-changed", async (req, res) => {
     if (!q) return res.status(404).json({ error: "No question with that ID" });
     const { error: upd } = await ctx.admin.from("questions").update({ review: dropFigureFlags((q as { review: unknown }).review, where) }).eq("id", req.params.id);
     if (upd) return res.status(500).json({ error: upd.message });
+    return res.json({ ok: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
+// PATCH /admin/questions/:id/set — a loaded exam question's set (questions
+// that share information, lib/question-sets.ts): { set_key, set_position,
+// shared_info, shared_image_url }, any of them; null clears one. Only
+// exam-paper questions (with a source).
+router.patch("/admin/questions/:id/set", async (req, res) => {
+  try {
+    const ctx = await requireAdmin(req, res);
+    if (!ctx) return;
+    const parsed = parseSetUpdate(req.body);
+    if ("error" in parsed) return res.status(400).json({ error: parsed.error });
+    const { data, error } = await ctx.admin.from("questions").update(parsed.update)
+      .eq("id", req.params.id).not("source", "is", null).select("id");
+    if (error) return res.status(500).json({ error: error.message });
+    if (!data?.length) return res.status(404).json({ error: "No exam-paper question with that ID" });
     return res.json({ ok: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";

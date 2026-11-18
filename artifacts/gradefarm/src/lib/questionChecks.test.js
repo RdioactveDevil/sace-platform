@@ -50,8 +50,13 @@ test('a figure the text points to but that is missing (paper 1, Q5c)', () => {
 
 test('a reference to another question by number (paper 1, MC Q4)', () => {
   const mc = { id: 'm', question_type: 'mcq', exam_section: 'A', question: 'Use the following information to answer Questions 3 and 4.\n3.40 g of biscuit was burnt.', options: ['a', 'b', 'c', 'd'], answer_index: 0, image_url: 'https://x/y.png' }
-  assert.deepEqual(codes(mc), ['other_question'])
-  assert.match(checkQuestion(mc)[0].message, /"Questions 3 and 4"/)
+  // The lead sentence of a set that isn't linked: the more specific flag.
+  assert.deepEqual(codes(mc), ['set_not_linked'])
+  assert.match(checkQuestion(mc)[0].message, /Questions 3, 4/)
+  // Any other reference to a question by number.
+  const other = { ...mc, question: 'Compare your answer with Questions 3 and 4.' }
+  assert.deepEqual(codes(other), ['other_question'])
+  assert.match(checkQuestion(other)[0].message, /"Questions 3 and 4"/)
   // "part a.iii" stays inside the question: fine.
   assert.deepEqual(codes(ext('Stem.', [part('a', 'Explain the voltage calculated in part a.iii.', 2)])), [])
 })
@@ -114,4 +119,15 @@ test('a paper is checked when every question is approved or rejected', () => {
   assert.deepEqual([part.state, part.checked, part.total], ['partway', 1, 3])
   const done = paperStatus([q('approved', '2026-11-18T01:00:00Z', 'u1'), q('rejected', '2026-11-18T03:00:00Z', 'u2'), q('approved', '2026-11-18T02:00:00Z', 'u1')])
   assert.deepEqual(done, { state: 'checked', checked: 3, total: 3, lastAt: '2026-11-18T03:00:00Z', lastBy: 'u2' })
+})
+
+test('question sets: no shared information, a leftover lead sentence, or a lead that isn\'t linked', () => {
+  const mc = (extra) => ({ question_type: 'mcq', exam_section: 'A', question: 'Which?', options: ['a', 'b', 'c', 'd'], answer_index: 0, ...extra })
+  // Linked and complete: nothing to say.
+  assert.deepEqual(codes(mc({ set_key: 's', set_position: 1, shared_info: 'A titration.' })), [])
+  assert.deepEqual(codes(mc({ set_key: 's', set_position: 2, shared_image_url: 'https://x/f.png' })), [])
+  assert.deepEqual(codes(mc({ set_key: 's', set_position: 1 })), ['set_no_info'])
+  assert.deepEqual(codes(mc({ set_key: 's', set_position: 1, shared_info: 'x', question: 'Use the following information to answer Questions 3 and 4.\nWhich?' })), ['set_sentence_left'])
+  // Not linked: say so, instead of the general "refers to another question".
+  assert.deepEqual(codes(mc({ question: 'Use the following information to answer Questions 3 and 4.\nA titration.\nWhich?' })), ['set_not_linked'])
 })
