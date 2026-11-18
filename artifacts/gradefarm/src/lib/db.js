@@ -263,6 +263,18 @@ export async function adminListAssignments(filters = {}) {
   return adminFetch(`/api/admin/assignments${qs ? `?${qs}` : ''}`)
 }
 
+/**
+ * Sign in or sign up with Google or Apple: leaves for the provider and comes
+ * back to /auth signed in, which sends a new account on to onboarding.
+ */
+export async function signInWithProvider(provider) {
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider,
+    options: { redirectTo: `${window.location.origin}/auth` },
+  })
+  if (error) throw error
+}
+
 export async function signIn(email, password) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password })
   if (error) throw error

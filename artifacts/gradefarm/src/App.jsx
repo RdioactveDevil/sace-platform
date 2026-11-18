@@ -18,6 +18,7 @@ import { Sun, Moon, Lock, Radio, Video, ClipboardList, Check, ChevronsUpDown, El
 import RankIcon from './components/RankIcon'
 import { curriculumToSubjectTile, findTileForSubjectString, formatSubjectLabel, subjectHasFeature, writingSubjectFor, subjectAccess, yearFromStage } from './lib/subjects'
 import { compareSubjects } from './lib/subjectFilter'
+import { signupAsParent, forgetParentSignup } from './lib/oauth'
 import { getTopicConfigForSubject } from './lib/topicConfig'
 import { filterByFormat } from './lib/questionTypes'
 import StudentLessonsScreen, { isJoinable } from './components/StudentLessonsScreen'
@@ -1736,7 +1737,8 @@ function AppInner() {
             : <OnboardingScreen {...commonProps} profile={profile} userEmail={user?.user_metadata?.family_email || user?.email}
                 needsPassword={user?.user_metadata?.password_set === false}
                 suggestedYearLevel={subscriptions.filter(sub => sub.source === 'tutor').map(sub => yearFromStage(sub.stage)).find(Boolean) ?? null}
-                asParent={user?.user_metadata?.signup_path === 'parent'}
+                // "For my child" from the email form, or from before a Google / Apple sign-up (lib/oauth.js).
+                asParent={user?.user_metadata?.signup_path === 'parent' || signupAsParent()}
                 parentName={user?.user_metadata?.parent_name || ''}
                 onDone={async (updates = {}) => {
                 try {
@@ -1745,6 +1747,7 @@ function AppInner() {
                   setSubscriptionsLoaded(true)
                 } catch {}
                 setProfile(prev => ({ ...prev, ...updates, onboarding_completed: true }))
+                forgetParentSignup()
                 // A plan whose checkout didn't open after sign-up comes back to try again.
                 navigate(checkoutRetry() ? '/get-access' : '/subject-picker', { replace: true })
               }} />
