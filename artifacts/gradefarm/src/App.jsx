@@ -12,8 +12,8 @@ import { lazyWithReload, reloadForNewVersion } from './lib/chunkReload'
 import { getProfile, getStruggleMap, signOut, getQuestionsForSubjectTile, getSubscriptions, chooseFreeSubject, updateProfile, hasTutoringAccess, fetchTutoringSessions, fetchUnreadMessageCount, syncCheckout, getFreeQuestionUsage, countFreeQuestion, respondToInvite, fetchMyDiagnostics, prepareDiagnostic } from './lib/db'
 import { refreshManagedTopicsCache } from './lib/adminTopics'
 import { loadManagedCurriculaTopics, fetchLiveCurricula } from './lib/curriculaDb'
-import { THEMES } from './lib/theme'
-import { getLevelProgress, rankAccuracy, RANKS } from './lib/engine'
+import { THEMES, shellFor, modeOf, paletteById, setActivePalette } from './lib/theme'
+import { getLevel, getLevelProgress, rankAccuracy, RANKS } from './lib/engine'
 import { Sun, Moon, Lock, Radio, Video, ClipboardList, Check, ChevronsUpDown, Ellipsis, LogOut, UserRound, IdCard, CreditCard } from 'lucide-react'
 import RankIcon from './components/RankIcon'
 import { curriculumToSubjectTile, findTileForSubjectString, formatSubjectLabel, subjectHasFeature, writingSubjectFor, subjectAccess, yearFromStage } from './lib/subjects'
@@ -24,6 +24,7 @@ import { filterByFormat } from './lib/questionTypes'
 import StudentLessonsScreen, { isJoinable } from './components/StudentLessonsScreen'
 import StudentPortalScreen, { PORTAL_PATHS } from './components/StudentPortalScreen'
 import PageTips from './components/PageTips'
+import ThemeCard from './components/ThemeCard'
 import { PAGE_TIPS, tipPageFor, seenTips, markTipsSeen, resetTips } from './lib/pageTips'
 import ParentConsentBanner from './components/ParentConsentBanner'
 import FamilySwitcher from './components/FamilySwitcher'
@@ -221,10 +222,9 @@ function NavIcon({ name, size = 18, color = 'currentColor' }) {
 // The window colour: the sidebar sits on it and the page is an inset sheet on
 // top (the page sheet itself is the theme's bg). One raised shade marks the
 // active row and the menus; gold only on the logo, the active icon and badges.
+// The colours come from the palette in use (lib/theme.js shellFor).
 function shellColors(theme) {
-  return theme === 'dark'
-    ? { bg: '#111113', raise: '#1f1f23', hover: 'rgba(255,255,255,0.04)', line: '#2a2a30', fg: '#ececef', sub: '#a1a1aa', dim: '#8a8a94', icon: '#e2b54c', menuShadow: '0 12px 32px rgba(0,0,0,0.5)' }
-    : { bg: '#eef0f7', raise: '#ffffff', hover: '#e5e8f2', line: '#e2e6f0', fg: '#0c1037', sub: '#4d5578', dim: '#6b7393', icon: '#b07d0c', menuShadow: '0 12px 32px rgba(12,16,55,0.12)' }
+  return shellFor(theme)
 }
 
 function UnreadBadge({ count }) {
@@ -798,7 +798,7 @@ function AppShell({ children, profile, subject, onChangeSubject, onSwitchSubject
 // Bank doesn't also load History, the leaderboard, Titan AI's quota, etc.
 function AppShellScreens({
   profile, questions, struggleMap, setStruggleMap, subject,
-  onStartSession, onChangeSubject, onSwitchSubject, subscriptions, fullAccess, onSignOut, theme, onToggleTheme, quizSubtopics, setQuizSubtopics,
+  onStartSession, onChangeSubject, onSwitchSubject, subscriptions, fullAccess, onSignOut, theme, onToggleTheme, palette, onChoosePalette, quizSubtopics, setQuizSubtopics,
   assignmentsVersion, lastSessionAt, onOpenLearn,
   onReplayFeatureTour,
   onProfileUpdated,
@@ -811,7 +811,7 @@ function AppShellScreens({
   const navigate   = useNavigate()
   const location   = useLocation()
   const screen     = location.pathname.replace('/', '') // e.g. 'question-bank'
-  const commonProps = { theme, onToggleTheme }
+  const commonProps = { theme, onToggleTheme, palette, onChoosePalette }
   const learnState  = { phase, setPhase, topic, setTopic, messages, setMessages, interests, setInterests, docContext, setDocContext, docName, setDocName, questionContext, setQuestionContext, onConsolidate, learnRequest, setLearnRequest }
   const openInLearn = (request) => { setLearnRequest({ ...request, at: Date.now() }); navigate('/learn') }
   const shellProps  = { ...commonProps, profile, subject, onChangeSubject, onSwitchSubject, subscriptions, fullAccess, onSignOut, onProfileUpdated }
@@ -928,16 +928,27 @@ function AppInner() {
     } catch { return null }
   })
   const [showAuth, setShowAuth]               = useState(false)
-  const [theme, setTheme]                     = useState(() => { try { return localStorage.getItem('gf-theme') || 'light' } catch { return 'light' } })
+  // The student's palette (lib/theme.js PALETTES); `theme` is its base mode,
+  // 'dark' or 'light', which the rest of the app goes by. Before palettes the
+  // choice was only light / dark, kept as gf-theme.
+  const [palette, setPalette]                 = useState(() => {
+    try {
+      const saved = localStorage.getItem('gf-palette') || localStorage.getItem('gf-theme')
+      return paletteById(saved) ? saved : 'light'
+    } catch { return 'light' }
+  })
+  setActivePalette(palette) // before anything below reads THEMES
+  const theme = modeOf(palette)
   // Every theme token as a CSS variable (--t-bg, --t-text, ...), plus the ink
   // colour as an RGB triple for translucent lines and fills, so screens can
   // style with var() and follow light and dark without their own palettes.
   useEffect(() => {
     const root = document.documentElement
     root.dataset.theme = theme
+    root.dataset.palette = palette
     for (const [key, value] of Object.entries(THEMES[theme])) root.style.setProperty(`--t-${key}`, value)
     root.style.setProperty('--ink-rgb', theme === 'dark' ? '255,255,255' : '12,16,55')
-  }, [theme])
+  }, [theme, palette])
   const [subscriptions, setSubscriptions]     = useState([])
   const [subscriptionsLoaded, setSubscriptionsLoaded] = useState(false)
 
@@ -1159,13 +1170,14 @@ function AppInner() {
   const [lastSessionAt, setLastSessionAt] = useState(null)
   const [assignmentsVersion, setAssignmentsVersion] = useState(0)
 
-  const toggleTheme = () => {
-    setTheme(prev => {
-      const next = prev === 'dark' ? 'light' : 'dark'
-      try { localStorage.setItem('gf-theme', next) } catch {}
-      return next
-    })
+  // Choose a palette (Make gradefarm yours, Account → Appearance); remembered on this device.
+  const choosePalette = (id) => {
+    if (!paletteById(id)) return
+    setPalette(id)
+    try { localStorage.setItem('gf-palette', id); localStorage.setItem('gf-theme', modeOf(id)) } catch {}
   }
+  // The light / dark switch: from any palette to plain Light or Dark.
+  const toggleTheme = () => choosePalette(theme === 'dark' ? 'light' : 'dark')
 
   const t = THEMES[theme]
 
@@ -1409,7 +1421,7 @@ function AppInner() {
     } catch {}
   }
 
-  const commonProps  = { theme, onToggleTheme: toggleTheme }
+  const commonProps  = { theme, onToggleTheme: toggleTheme, palette, onChoosePalette: choosePalette }
   const quizState = {
     currentQ: quizQ,           setCurrentQ: setQuizQ,
     selected: quizSelected,    setSelected: setQuizSelected,
@@ -1451,6 +1463,20 @@ function AppInner() {
   useEffect(() => {
     if (quizFinished && quizAnswered.length > 0) setLastSessionAt(Date.now())
   }, [quizFinished, quizAnswered.length])
+
+  // "Make gradefarm yours" (components/ThemeCard.jsx): once, over the results
+  // of a student's first finished session. Seen is kept with the page tips.
+  const [themeCardClosed, setThemeCardClosed] = useState(false)
+  const showThemeCard = !!(user && profile?.onboarding_completed && !profile.is_tutor && !themeCardClosed
+    && quizFinished && quizAnswered.length > 0 && !seenTips(profile)['theme-card'])
+  const closeThemeCard = ({ kept, previewOnly, later }) => {
+    setThemeCardClosed(true)
+    markTipsSeen(profile, 'theme-card').then(next => setProfile(prev => (prev ? { ...prev, tours_seen: next } : prev))).catch(() => {})
+    const name = paletteById(kept)?.name || 'Light'
+    notify.success(later ? 'Themes are in Account → Preferences whenever you want one.'
+      : previewOnly ? `That one unlocks with your rank, so you've got ${name} for now. Change it any time in Account.`
+      : `${name} it is. Change it any time in Account.`)
+  }
 
   const learnState   = {
     phase: learnPhase,       setPhase: setLearnPhase,
@@ -2009,6 +2035,10 @@ function AppInner() {
     </ErrorBoundary>
     {/* In-app confirm and alert dialogs (lib/dialog.js), instead of the browser's own. */}
     <DialogHost theme={theme} />
+    {showThemeCard && (
+      <ThemeCard palette={palette} onChoose={choosePalette} onClose={closeThemeCard}
+        level={getLevel(profile.xp, rankAccuracy(profile))} staff={!!(profile.is_admin || profile.is_tutor)} />
+    )}
     </>
   )
 }
