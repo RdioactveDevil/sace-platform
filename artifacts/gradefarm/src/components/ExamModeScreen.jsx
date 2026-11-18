@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import { Timer } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 import { buildSubjectExam, countQuestions, formatClock } from '../lib/examEngine'
 import { seenQuestionChecker } from '../lib/engine'
@@ -9,7 +8,6 @@ import ExamSimulator from './ExamSimulator'
 const GOLD = 'var(--t-accent)'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
-const FONT_D = "'Sifonn Pro', sans-serif"
 
 export default function ExamModeScreen({ theme = 'dark', questions = [], struggleMap = {}, setStruggleMap, subject, profile, onExit }) {
   const t = THEMES[theme]
@@ -78,19 +76,15 @@ export default function ExamModeScreen({ theme = 'dark', questions = [], struggl
         {onExit && (
           <button onClick={onExit} style={{ marginBottom: 14, padding: '7px 14px', borderRadius: 9, border: `1px solid ${t.border}`, background: t.bgCard, color: t.textMuted, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>← Back</button>
         )}
-        <div style={{ textAlign: 'center', marginBottom: 30 }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '5px 14px', borderRadius: 999, background: t.accentGlow, border: `1px solid ${t.borderAccent}`, color: 'var(--t-accent)', fontSize: 11, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>
-            <Timer size={13} aria-hidden="true" />
-            Exam Mode
-          </div>
-          <div style={{ fontFamily: FONT_D, fontSize: 28, color: t.text, letterSpacing: 1 }}>{subject?.name || 'Practice'} exam</div>
-          <div style={{ fontSize: 14, color: t.textMuted, marginTop: 8, lineHeight: 1.6, maxWidth: 520, margin: '8px auto 0' }}>
+        <div style={{ marginBottom: 22 }}>
+          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em', color: t.text }}>{subject?.name || 'Practice'} exam</h1>
+          <div style={{ fontSize: 13, color: t.textMuted, marginTop: 2, lineHeight: 1.5 }}>
             A timed paper drawn from across this subject's topics. Flag questions, move freely, and get your marks and solutions only when you submit.
           </div>
         </div>
 
-        <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 18, padding: 22, display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div style={{ fontSize: 11, color: t.textFaint, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+        <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 12, padding: 22, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ fontSize: 14.5, color: t.text, fontWeight: 800 }}>
             {previewCount} questions · {formatClock(preview.sections[0].durationSec)}
           </div>
           {previewCount === 0 ? (
@@ -107,7 +101,7 @@ export default function ExamModeScreen({ theme = 'dark', questions = [], struggl
 
         {subjectAttempts.length > 0 && (
           <div style={{ marginTop: 26, background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 16, padding: '18px 20px' }}>
-            <div style={{ fontSize: 11, color: t.textFaint, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 12 }}>Your recent attempts</div>
+            <div style={{ fontSize: 14.5, color: t.text, fontWeight: 800, marginBottom: 12 }}>Your recent attempts</div>
             {subjectAttempts.map((a) => {
               const title = a.title || a.track_id
               const c = a.percent >= 70 ? t.success : a.percent >= 40 ? GOLD : t.danger

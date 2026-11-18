@@ -3,7 +3,6 @@ import { THEMES } from '../lib/theme'
 import { fetchTutorProfile, saveTutorProfile } from '../lib/db'
 
 const GOLD = 'var(--t-accent)'
-const GOLDL = 'var(--t-accentLight)'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
 const FIELDS = [

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { X, CircleCheck, CircleX, Sparkles, RefreshCw, Clock, Target, TriangleAlert, TrendingUp, ListChecks } from 'lucide-react'
+import { X, CircleCheck, CircleX, FileText, PenLine, RefreshCw, Clock, Target, TriangleAlert, TrendingUp, ListChecks } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 import { ASSIGNMENT_DIFFICULTIES } from '../lib/engine'
 import { fetchAssignmentReport, generateAssignmentReportSummary } from '../lib/db'
@@ -7,7 +7,6 @@ import MathText from './MathText'
 
 const GOLD = 'var(--t-accent)'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
-const FONT_D = "'Sifonn Pro', sans-serif"
 
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '—')
 const fmtSecs = (ms) => {
@@ -135,7 +134,7 @@ export default function AssignmentReport({ assignmentId, theme = 'dark', onClose
         {/* AI write-up */}
         <div style={{ ...card, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <div style={{ ...label, display: 'flex', alignItems: 'center', gap: 6, color: t.goldText, flex: 1 }}><Sparkles size={13} aria-hidden="true" />Tutor report</div>
+            <div style={{ ...label, display: 'flex', alignItems: 'center', gap: 6, color: t.goldText, flex: 1 }}><FileText size={13} aria-hidden="true" />Tutor report</div>
             {summary && (
               <button type="button" style={quietBtn} disabled={writing} onClick={() => writeSummary(true)}>
                 <RefreshCw size={13} aria-hidden="true" />{writing ? 'Rewriting…' : 'Rewrite'}
@@ -157,7 +156,7 @@ export default function AssignmentReport({ assignmentId, theme = 'dark', onClose
               <div style={{ fontSize: 13, color: t.textMuted, flex: '1 1 240px' }}>Get a write-up of how they went: strengths, what went wrong and why, what could have been better, and what to cover next.</div>
               <button type="button" onClick={() => writeSummary(false)} disabled={writing}
                 style={{ ...quietBtn, height: 36, border: 'none', background: 'var(--t-accent)', color: 'var(--t-onAccent)' }}>
-                <Sparkles size={14} aria-hidden="true" />{writing ? 'Writing…' : 'Write report'}
+                <PenLine size={14} aria-hidden="true" />{writing ? 'Writing…' : 'Write report'}
               </button>
             </div>
           )}
@@ -262,7 +261,7 @@ export default function AssignmentReport({ assignmentId, theme = 'dark', onClose
         style={{ width: '100%', maxWidth: 860, background: t.bg, border: `1px solid ${t.borderMid}`, borderRadius: 12, boxShadow: t.shadowModal, padding: '18px 20px 22px' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 16 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontFamily: FONT_D, fontSize: 20, letterSpacing: '0.03em', color: t.text }}>{report ? `${report.student.name}` : 'Assignment report'}</div>
+            <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em', color: t.text }}>{report ? `${report.student.name}` : 'Assignment report'}</div>
             {a && <div style={{ fontSize: 12.5, color: t.textMuted, marginTop: 3 }}>{a.type} · {a.subject}{a.topics?.length ? ` · ${a.topics.join(', ')}` : ''}</div>}
           </div>
           <button type="button" onClick={onClose} aria-label="Close report" style={{ width: 34, height: 34, borderRadius: 9, border: `1px solid ${t.borderMid}`, background: 'transparent', color: t.textMuted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>

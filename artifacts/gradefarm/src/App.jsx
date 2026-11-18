@@ -100,7 +100,6 @@ function prefetchStudyScreens() {
 }
 
 const GOLD   = 'var(--t-accent)'
-const GOLDL  = 'var(--t-accentLight)'
 const FONT_D = "'Sifonn Pro', sans-serif"
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
@@ -555,9 +554,9 @@ function LockedSubjectScreen({ subject, reason = 'locked', onChangeSubject, them
       <p style={{ fontSize: 14, color: t.textMuted, maxWidth: 380, lineHeight: 1.6, margin: 0 }}>
         {exam
           ? reason === 'test'
-            ? <>Printable practice exams aren't part of the free subject. Subscribe to <strong style={{ color: t.text }}>{formatSubjectLabel(subject)}</strong> to make them — you can cancel any time.</>
-            : <>Full practice exams aren't part of the free subject. Subscribe to <strong style={{ color: t.text }}>{formatSubjectLabel(subject)}</strong> to sit them — you can cancel any time.</>
-          : <>You don't have access to <strong style={{ color: t.text }}>{formatSubjectLabel(subject)}</strong> yet. Try it as your free subject or subscribe — you can cancel any time.</>}
+            ? <>Printable practice exams aren't part of the free subject. Subscribe to <strong style={{ color: t.text }}>{formatSubjectLabel(subject)}</strong> to make them. You can cancel any time.</>
+            : <>Full practice exams aren't part of the free subject. Subscribe to <strong style={{ color: t.text }}>{formatSubjectLabel(subject)}</strong> to sit them. You can cancel any time.</>
+          : <>You don't have access to <strong style={{ color: t.text }}>{formatSubjectLabel(subject)}</strong> yet. Try it as your free subject or subscribe. You can cancel any time.</>}
       </p>
       <button onClick={onUpgrade || (() => navigate('/get-access', { state: { subject } }))} style={{ padding: '12px 24px', borderRadius: 12, border: 'none', background: GOLD, color: 'var(--t-onAccent)', fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
         {onUpgrade ? 'Unlock it →' : 'See plans →'}
@@ -821,7 +820,7 @@ function AppShell({ children, profile, subject, onChangeSubject, onSwitchSubject
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <button onClick={onToggleTheme} title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 15, display: 'flex', alignItems: 'center', color: GOLD }}>{theme === 'dark' ? <Moon size={17} aria-hidden="true" /> : <Sun size={17} aria-hidden="true" />}</button>
-              <div style={{ width: 30, height: 30, borderRadius: '50%', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: 'var(--t-onAccent)' }}>
+              <div style={{ width: 30, height: 30, borderRadius: '50%', background: GOLD, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: 'var(--t-onAccent)' }}>
                 {profile.display_name[0].toUpperCase()}
               </div>
             </div>
@@ -1148,7 +1147,7 @@ function AppInner() {
     const sessionId = params.get('session_id')
     navigate(location.pathname, { replace: true })
     if (checkout === 'cancelled') {
-      notify.info("Checkout cancelled — you haven't been charged.")
+      notify.info("Checkout cancelled. You haven't been charged.")
       return
     }
     if (checkout === 'success' && sessionId) {

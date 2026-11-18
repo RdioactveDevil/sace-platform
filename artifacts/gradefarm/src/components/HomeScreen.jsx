@@ -15,7 +15,6 @@ import { filterByFormat, questionFormat, isAiMarked } from '../lib/questionTypes
 import SegmentedToggle from './SegmentedToggle'
 
 const GOLD   = 'var(--t-accent)'
-const GOLDL  = 'var(--t-accentLight)'
 const NAVY_FILL = 'var(--t-onAccent)'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const FORMAT_KEY = 'gf-question-format'
@@ -417,7 +416,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
         )}
         {practise.length > 0 && (
           <button onClick={() => onStartSession({ mode: 'new', subtopics: practise, expandTopics: true })}
-            style={{ padding: '8px 14px', borderRadius: 9, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: 'var(--t-onAccent)', fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
+            style={{ padding: '8px 14px', borderRadius: 9, border: 'none', background: GOLD, color: 'var(--t-onAccent)', fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
             Practise these →
           </button>
         )}
@@ -427,7 +426,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
 
   const TutorInvitesCard = () => {
     if (invites.length === 0) return null
-    const btn = (primary) => ({ padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B, border: primary ? 'none' : `1px solid ${t.border}`, background: primary ? `linear-gradient(135deg,${GOLD},${GOLDL})` : 'transparent', color: primary ? 'var(--t-onAccent)' : t.textMuted })
+    const btn = (primary) => ({ padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B, border: primary ? 'none' : `1px solid ${t.border}`, background: primary ? GOLD : 'transparent', color: primary ? 'var(--t-onAccent)' : t.textMuted })
     return (
       <div style={{ ...card, padding: '16px 18px', border: `1px solid color-mix(in srgb, var(--t-accent) 35%, transparent)`, background: theme === 'dark' ? 'color-mix(in srgb, var(--t-accent) 6%, transparent)' : t.bgCard }}>
         <div style={{ fontSize: 15, fontWeight: 700, color: GOLD, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6 }}><GraduationCap size={16} aria-hidden="true" />Tutor invite{invites.length > 1 ? 's' : ''}</div>
@@ -508,11 +507,11 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     const daysLeft = Math.max(0, Math.ceil((new Date(next.date) - today) / 86400000))
     const isExam   = next.type === 'Exam'
     const color    = daysLeft > 60 ? 'var(--t-success)' : daysLeft > 21 ? GOLD : 'var(--t-danger)'
-    const message  = daysLeft > 60 ? 'You have time — build strong habits now.'
-      : daysLeft > 21 ? 'Crunch mode. Focus on weak topics first.'
-      : daysLeft > 7  ? 'Final stretch — revise, revise, revise.'
-      : daysLeft > 0  ? 'This week! Review key formulas and past patterns.'
-      : 'Today! Best of luck!'
+    const message  = daysLeft > 60 ? 'Plenty of time. A little practice most days adds up.'
+      : daysLeft > 21 ? 'Start with your weakest topics.'
+      : daysLeft > 7  ? 'Mix in full past-paper questions now.'
+      : daysLeft > 0  ? 'This week. Go over key formulas and questions you missed.'
+      : 'Today. Good luck.'
 
     return (
       <div style={{ ...card, padding: '16px 18px', border: `1px solid color-mix(in srgb, ${color} 19%, transparent)`, background: `color-mix(in srgb, ${color} 3%, transparent)` }}>

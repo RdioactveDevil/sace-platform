@@ -29,7 +29,7 @@ const PRACTICE_BY_CRITERION = {
   'Complication / tension': 'Brainstorm 5 complications for a simple scenario; pick one and write a paragraph that raises the stakes.',
   'Character / voice': 'Write a short monologue in first person that shows attitude without stating it directly.',
   'Control of language (grammar, spelling, punctuation)': 'Proofread a paragraph backwards sentence-by-sentence; fix one tense agreement issue and two punctuation choices.',
-  'Structure / cohesion (paragraphing, flow)': 'Take a messy draft and add topic sentences only—then rewrite one weak paragraph with clear links to the next.',
+  'Structure / cohesion (paragraphing, flow)': 'Take a messy draft and add topic sentences only, then rewrite one weak paragraph with clear links to the next.',
   'Position / thesis clarity': 'Write three one-sentence thesis lines for the same prompt; pick the clearest and build one body paragraph.',
   'Argument & supporting evidence': 'For your next practice, include one statistic, one example, and one explanation of why they matter.',
   'Use of persuasive devices / reasoning': 'Annotate a news opinion piece: highlight 3 persuasive moves, then mimic one in your own paragraph.',
@@ -740,7 +740,7 @@ export default function WritingScreen({ subject, profile, theme = 'dark' }) {
 
           {promptError && (
             <div style={{ ...s.notice(t.danger, t.dangerBg), marginBottom: 0 }}>
-              {promptError} — try again.
+              {String(promptError).replace(/\.$/, '')}. Try again.
             </div>
           )}
 
@@ -773,7 +773,7 @@ export default function WritingScreen({ subject, profile, theme = 'dark' }) {
             : (plannerTimed ? <><Timer size={14} aria-hidden="true" />{plannerMinutes} min planning</> : 'Untimed')}
         </span>
       </div>
-      {promptError && <div style={{ ...s.notice(t.danger, t.dangerBg), marginTop: 16 }}>{promptError} — try again.</div>}
+      {promptError && <div style={{ ...s.notice(t.danger, t.dangerBg), marginTop: 16 }}>{String(promptError).replace(/\.$/, '')}. Try again.</div>}
     </div>
   ))
 
@@ -801,7 +801,7 @@ export default function WritingScreen({ subject, profile, theme = 'dark' }) {
 
         {submitBlocked && (
           <div style={s.notice(warn, warnBg)}>
-            Add your writing before submitting — the text area or planner fields are empty.
+            Add your writing before you submit. The text box or planner fields are empty.
           </div>
         )}
 

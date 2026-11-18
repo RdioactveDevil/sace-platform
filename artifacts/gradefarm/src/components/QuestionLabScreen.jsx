@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { FlaskConical, Lightbulb } from 'lucide-react'
+import { Lightbulb } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 import { getQuestionType, describeCorrectAnswer } from '../lib/questionTypes'
 import MathText from './MathText'
@@ -10,10 +10,8 @@ import QuestionRenderer from './questions/QuestionRenderer'
 import QuizToolsDock from './QuizToolsDock'
 
 const GOLD = 'var(--t-accent)'
-const GOLDL = 'var(--t-accentLight)'
 const NAVY = 'var(--t-onAccent)'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
-const FONT_D = "'Sifonn Pro', sans-serif"
 
 const svgUri = (svg) => `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`
 
@@ -194,14 +192,9 @@ export default function QuestionLabScreen({ theme = 'dark', onExit }) {
           <button onClick={onExit} style={{ marginBottom: 14, padding: '7px 14px', borderRadius: 9, border: `1px solid ${t.border}`, background: t.bgCard, color: t.textMuted, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>← Back</button>
         )}
         {/* Header */}
-        <div style={{ textAlign: 'center', marginBottom: 24 }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '5px 14px', borderRadius: 999, background: t.accentGlow, border: `1px solid ${t.borderAccent}`, color: GOLD, fontSize: 11, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>
-            <FlaskConical size={13} aria-hidden="true" /> Question Lab
-          </div>
-          <div style={{ fontFamily: FONT_D, fontSize: 26, color: t.text, letterSpacing: 1 }}>Multi-format question engine</div>
-          <div style={{ fontSize: 13, color: t.textMuted, marginTop: 6, lineHeight: 1.6 }}>
-            Live preview of every question type the platform now supports. Try answering each one.
-          </div>
+        <div style={{ marginBottom: 22 }}>
+          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em', color: t.text }}>Question Lab</h1>
+          <p style={{ margin: '2px 0 0', fontSize: 13, color: t.textMuted, lineHeight: 1.5 }}>A preview of every question type. Try answering each one.</p>
         </div>
 
         {/* Type switcher */}
@@ -266,7 +259,7 @@ export default function QuestionLabScreen({ theme = 'dark', onExit }) {
               </div>
             )}
             <button onClick={() => pick((idx + 1) % SAMPLES.length)}
-              style={{ marginTop: 16, width: '100%', padding: '13px', borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${GOLD},${GOLDL})`, color: NAVY, fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
+              style={{ marginTop: 16, width: '100%', padding: '13px', borderRadius: 12, border: 'none', background: GOLD, color: NAVY, fontSize: 14, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
               Next format →
             </button>
           </div>

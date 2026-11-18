@@ -56,9 +56,7 @@ import { WEEKDAYS, defaultDueDays, describeDue, describeRepeat, localYmd } from 
 import SegmentedToggle from './SegmentedToggle'
 
 const GOLD   = 'var(--t-accent)'
-const GOLDL  = 'var(--t-accentLight)'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
-const FONT_D = "'Sifonn Pro', sans-serif"
 
 const ASSIGNMENT_TYPES = ['Quiz', 'Test', 'Worksheet', 'Homework']
 const QUESTION_COUNT_PRESETS = [5, 10, 15, 20, 30]
@@ -706,7 +704,7 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
       {schedules.length > 0 && (
         <div style={card}>
           <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--t-border)', display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-            <div style={{ fontSize: 13, fontWeight: 400, fontFamily: "'Sifonn Pro', sans-serif", color: t.text }}>Recurring</div>
+            <div style={{ fontSize: 14.5, fontWeight: 800, color: t.text }}>Recurring</div>
             <div style={{ fontSize: 12, color: t.textMuted }}>{schedules.length} active or paused</div>
           </div>
           {schedules.map(sch => {
@@ -756,7 +754,7 @@ function AssignmentsTab({ profile, theme, subject, allTutors = false, onOpenRepo
       <div style={card}>
         <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--t-border)' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-            <div style={{ fontSize: 13, fontWeight: 400, fontFamily: "'Sifonn Pro', sans-serif", color: t.text }}>All assignments</div>
+            <div style={{ fontSize: 14.5, fontWeight: 800, color: t.text }}>All assignments</div>
             <div style={{ fontSize: 12, color: t.textMuted }}>
               {filteredAssignments.length !== assignments.length
                 ? `${filteredAssignments.length} of ${assignments.length} shown`
@@ -950,7 +948,7 @@ function ProgressTab({ profile, theme, allTutors = false, onOpenReport, initialS
   const card = { background: 'var(--t-bgCard)', border: '1px solid var(--t-border)', borderRadius: 12 }
   const divider = 'var(--t-border)'
   const cardSecHdr = { padding: '14px 20px', borderBottom: `1px solid ${divider}` }
-  const secTitle = { fontSize: 13, fontWeight: 400, fontFamily: "'Sifonn Pro', sans-serif", color: t.text }
+  const secTitle = { fontSize: 14.5, fontWeight: 800, color: t.text }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -983,7 +981,7 @@ function ProgressTab({ profile, theme, allTutors = false, onOpenReport, initialS
               { label: 'Questions done', val: progress.totalAttempts ?? 0, color: t.text },
             ].map((s, i) => (
               <div key={s.label} className={`td-fadein td-fadein-${i + 1}`} style={{ ...card, padding: '16px 18px', textAlign: 'center' }}>
-                <div style={{ fontSize: 26, fontFamily: "'Sifonn Pro', sans-serif", letterSpacing: '-0.5px', lineHeight: 1, color: s.color, marginBottom: 8 }}>{s.val}</div>
+                <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums', lineHeight: 1, color: s.color, marginBottom: 8 }}>{s.val}</div>
                 <div style={{ fontSize: 11.5, color: t.textMuted, fontWeight: 700 }}>{s.label}</div>
               </div>
             ))}
@@ -1347,7 +1345,7 @@ function ClassesTab({ profile, theme, allTutors = false }) {
 
       <div style={card}>
         <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--t-border)' }}>
-          <div style={{ fontSize: 13, fontWeight: 400, fontFamily: "'Sifonn Pro', sans-serif", color: t.text }}>Your classes</div>
+          <div style={{ fontSize: 14.5, fontWeight: 800, color: t.text }}>Your classes</div>
           <div style={{ fontSize: 12, color: t.textMuted, marginTop: 2 }}>{classes.length} class{classes.length !== 1 ? 'es' : ''}</div>
         </div>
         {loading ? (
@@ -1840,7 +1838,7 @@ function DiagnosticTab({ profile, theme }) {
           <div style={card}>
             <div style={sectionHdr}>
               <div>
-                <div style={{ fontSize: 13, fontWeight: 400, fontFamily: "'Sifonn Pro', sans-serif", color: t.text }}>New diagnostic test</div>
+                <div style={{ fontSize: 14.5, fontWeight: 800, color: t.text }}>New diagnostic test</div>
                 <div style={{ fontSize: 12, color: t.textMuted, marginTop: 3 }}>AI creates a 30-mark test tailored to your student's level and topics</div>
               </div>
             </div>
