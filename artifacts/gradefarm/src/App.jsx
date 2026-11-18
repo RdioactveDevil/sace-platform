@@ -9,7 +9,7 @@ import { clearPendingInvite, pendingInvite } from './lib/pendingInvite'
 import { takePendingCheckout, startCheckout, rememberCheckoutRetry, checkoutRetry } from './lib/pendingCheckout'
 import ErrorBoundary from './components/ErrorBoundary'
 import { lazyWithReload, reloadForNewVersion } from './lib/chunkReload'
-import { getProfile, getStruggleMap, signOut, getQuestionsForSubjectTile, getSubscriptions, updateProfile, hasTutoringAccess, fetchTutoringSessions, fetchUnreadMessageCount, syncCheckout, getFreeQuestionUsage, countFreeQuestion, respondToInvite, fetchMyDiagnostics, prepareDiagnostic } from './lib/db'
+import { getProfile, getStruggleMap, signOut, getQuestionsForSubjectTile, getSubscriptions, chooseFreeSubject, updateProfile, hasTutoringAccess, fetchTutoringSessions, fetchUnreadMessageCount, syncCheckout, getFreeQuestionUsage, countFreeQuestion, respondToInvite, fetchMyDiagnostics, prepareDiagnostic } from './lib/db'
 import { refreshManagedTopicsCache } from './lib/adminTopics'
 import { loadManagedCurriculaTopics, fetchLiveCurricula } from './lib/curriculaDb'
 import { THEMES } from './lib/theme'
@@ -1779,6 +1779,13 @@ function AppInner() {
           : !profile.onboarding_completed
             ? <Navigate to={onboardingDest} replace />
           : <SubjectPicker {...commonProps} profile={profile} subscriptions={subscriptions} fullAccess={hasFullAccess} onSelect={handleSelectSubject} onGetAccess={subj => navigate('/get-access', { state: { subject: subj } })}
+            onStartFree={async (subj) => {
+              // Their first subject: free straight away, then into it.
+              await chooseFreeSubject(String(subj.id).replace(/^curriculum_/, ''))
+              await refreshSubscriptions()
+              const { questionCount, ...tile } = subj // eslint-disable-line no-unused-vars
+              await handleSelectSubject(tile)
+            }}
             onProfileUpdated={updates => setProfile(prev => (prev ? { ...prev, ...updates } : prev))} />
       } />
 
