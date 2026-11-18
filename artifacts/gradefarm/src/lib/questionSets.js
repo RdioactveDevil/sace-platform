@@ -9,7 +9,7 @@
 // questions_student gives every member the set's shared fields; admin screens
 // fill them from the first question (fillShared).
 
-const LEAD = /^[^\n]*?\binformation\b[^\n]*?\banswer\s+questions?\s+(\d+(?:\s*(?:,|and|&|to|-|–|—)\s*\d+)+)\s*\.?/im
+const LEAD = /^[^\n]*?\binformation\b[^\n]*?\b(?:answers?|for)\s+questions?\s+(\d+(?:\s*(?:,|and|&|to|-|–|—)\s*\d+)+)\s*\.?/im
 
 /** The question numbers a lead question shares its information with, and its lead sentence; null if it isn't a lead. */
 export function parseSetLead(text) {
@@ -96,10 +96,14 @@ const num = (q) => Number(String(q.source_question || '').replace(/\D+/g, ''))
  * carried the sentence keeps only its own question. Returns the updates and
  * the sets that couldn't be linked.
  */
+// The paper a question came from: its load (ep_<load>_A3), so two loads of a
+// paper with the same label are never mixed; else its label.
+const paperOf = (r) => `${r.curriculum_id}|${/^ep_[0-9a-f]+_/.exec(r.id || '')?.[0] || r.source}|${r.exam_section}`
+
 export function planSetLinks(rows) {
   const byPaper = new Map()
   for (const r of rows || []) {
-    const k = `${r.curriculum_id}|${r.source}|${r.exam_section}`
+    const k = paperOf(r)
     if (!byPaper.has(k)) byPaper.set(k, new Map())
     byPaper.get(k).set(num(r), r)
   }
@@ -108,7 +112,7 @@ export function planSetLinks(rows) {
   for (const r of rows || []) {
     const lead = parseSetLead(r.question)
     if (!lead) continue
-    const pk = `${r.curriculum_id}|${r.source}|${r.exam_section}`
+    const pk = paperOf(r)
     const key = `${pk}|${lead.numbers.join(',')}`
     if (!sets.has(key)) sets.set(key, { pk, numbers: lead.numbers, holders: [] })
     sets.get(key).holders.push(r)
@@ -152,4 +156,111 @@ export function planSetLinks(rows) {
     })
   }
   return { updates, problems }
+}
+
+// Whether text points at a figure ("shown below", "the graph above").
+const FIGURE_REF = /\b(below|above|shown|diagram|graph|spectrum|figure|flow ?chart)\b/i
+const MIN_SHARED = 40
+
+// The whole lines two texts start with, leaving each at least one line of its own.
+function sharedLines(a, b) {
+  const x = String(a || '').split('\n')
+  const y = String(b || '').split('\n')
+  let k = 0
+  while (k < x.length - 1 && k < y.length - 1 && x[k] === y[k]) k++
+  // Don't end on a blank line.
+  while (k > 0 && !x[k - 1].trim()) k--
+  return k
+}
+const firstLines = (text, k) => String(text || '').split('\n').slice(0, k).join('\n').trim()
+const afterLines = (text, k) => String(text || '').split('\n').slice(k).join('\n').trim()
+
+/**
+ * Sets that older loads saved with no lead sentence, each question carrying a
+ * copy of the shared information: neighbouring questions of the same load
+ * and section that start with the same lines (40 characters or more). The
+ * shared lines are kept once, on the first question; each keeps the rest.
+ * Figures: one figure on every question becomes the shared figure; when the
+ * shared lines point at a figure ("shown below") or a follow-on carries a
+ * copy of the first question's figure (the same image, or one
+ * opts.sameFigure(urlA, urlB) says matches), the first question's figure is
+ * shared and the copies go; a different figure stays with its question. Every set is flagged for
+ * review, and `report` says what was decided and what is unsure.
+ */
+export function planCopiedSets(rows, opts = {}) {
+  const papers = new Map()
+  for (const r of rows || []) {
+    const k = paperOf(r)
+    if (!papers.has(k)) papers.set(k, [])
+    papers.get(k).push(r)
+  }
+  const updates = []
+  const report = []
+  for (const list of papers.values()) {
+    list.sort((a, b) => num(a) - num(b))
+    for (let i = 0; i + 1 < list.length; i++) {
+      if (num(list[i + 1]) !== num(list[i]) + 1) continue
+      let k = sharedLines(list[i].question, list[i + 1].question)
+      if (firstLines(list[i].question, k).length < MIN_SHARED) continue
+      let j = i + 2
+      while (j < list.length && num(list[j]) === num(list[j - 1]) + 1) {
+        const kj = Math.min(k, sharedLines(list[i].question, list[j].question))
+        if (firstLines(list[i].question, kj).length < MIN_SHARED) break
+        k = kj
+        j++
+      }
+      const members = list.slice(i, j)
+      i = j - 1
+      if (members.some(m => m.set_key)) continue
+      let shared = firstLines(members[0].question, k)
+      // A lead sentence the first pass couldn't read ("…to be used for Questions 9 and 10") goes, as there.
+      const lead = parseSetLead(shared)
+      if (lead) shared = shared.replace(lead.sentence, '').replace(/^\s*\n/, '').trim()
+      const owns = members.map(m => afterLines(m.question, k))
+      const unsure = []
+      if (/\bthis question\b/i.test(shared)) unsure.push('the shared lines say "this question"')
+      if (members.some(m => m.exam_section !== 'A')) unsure.push('written-answer questions')
+      if (owns.some(o => !o)) { unsure.push('a question has no text of its own'); }
+
+      // Figures. A follow-on's figure that is the first one's (the same image,
+      // or one opts.sameFigure says matches) is a copy.
+      const imgs = members.map(m => m.image_url || null)
+      const same = (a, b) => !!a && !!b && (a === b || !!opts.sameFigure?.(a, b))
+      const copies = imgs.map((u, n) => n > 0 && same(imgs[0], u))
+      let sharedFig = null
+      const keep = imgs.slice()
+      const notes = []
+      const byWording = FIGURE_REF.test(shared) && !FIGURE_REF.test(owns[0])
+      if (imgs[0] && (copies.some(Boolean) || byWording)) {
+        sharedFig = imgs[0]
+        keep[0] = null
+        notes.push(`Question ${num(members[0])}'s figure becomes the shared figure${copies.some(Boolean) ? '' : ' (from the wording)'}`)
+        for (let n = 1; n < members.length; n++) {
+          if (!imgs[n]) continue
+          if (copies[n]) { keep[n] = null; notes.push(`Question ${num(members[n])}'s copy of it is removed`) } else notes.push(`Question ${num(members[n])} keeps its own, different figure`)
+        }
+      } else if (imgs[0] && FIGURE_REF.test(shared)) {
+        unsure.push(`Question ${num(members[0])}'s figure could be shared or its own; left on the question`)
+      } else if (imgs.some(Boolean)) {
+        notes.push('figures stay on their questions')
+        if (FIGURE_REF.test(shared)) unsure.push('the shared lines point at a figure, but the first question has none')
+      }
+
+      const numbers = members.map(num)
+      members.forEach((m, n) => {
+        const u = { id: m.id, set_key: members[0].id, set_position: n + 1, question: owns[n] }
+        if (keep[n] !== imgs[n]) u.image_url = keep[n]
+        if (n === 0) {
+          u.shared_info = shared
+          u.shared_image_url = sharedFig
+        }
+        u.flag = n === 0
+          ? { code: 'set_linked', where: '', message: `Linked automatically with Question${numbers.length > 2 ? 's' : ''} ${numbers.slice(1).join(', ')} as a set, because they started with the same text: check they really share it, and check the figures.` }
+          : { code: 'set_copy_removed', where: '', message: `This question started with the same text as Question ${numbers[0]}, which is now kept once with Question ${numbers[0]} as the set's shared information: check its own text.` }
+        updates.push(u)
+      })
+      report.push({ label: `${members[0].source} ${members[0].exam_section}${numbers.join('–')}`, ids: members.map(m => m.id), live: members.filter(m => m.review_status === 'approved').length, shared, owns, notes, unsure })
+    }
+  }
+  return { updates, report }
 }

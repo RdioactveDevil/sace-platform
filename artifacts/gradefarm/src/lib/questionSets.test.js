@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseSetLead, splitLead, setSentence, fillShared, setUnits, planSetLinks } from './questionSets.js'
+import { parseSetLead, splitLead, setSentence, fillShared, setUnits, planSetLinks, planCopiedSets } from './questionSets.js'
 
 // Lead questions as they are stored in the bank.
 const STAV = 'Use the following information to answer Questions 19 and 20.\nThe overall redox reaction in a particular alkaline battery when discharging is\n$$\\ce{Zn(s) + 2MnO2(s) + H2O(l) -> Zn(OH)2(s) + Mn2O3(s)}$$\nThe half-equation of the reaction occurring at the positive electrode is'
@@ -104,4 +104,57 @@ test('a copy of the shared information in a follow-on question is removed, and t
   const p2 = planSetLinks(rows2)
   const by2 = Object.fromEntries(p2.updates.map(u => [u.id, u]))
   assert.deepEqual([by2.B2.set_position, by2.B2.shared_info, by2.B2.question, by2.B3.set_position, by2.B3.question], [1, 'A compound was analysed.', undefined, 2, 'What is its mass?'])
+})
+
+test('two loads of a paper with the same label are never linked together', () => {
+  const row = (id, num, question) => ({ id, source: 'Access 2024 Trial Exam', exam_section: 'A', curriculum_id: 'c', source_question: String(num), question, image_url: null, set_key: null })
+  const rows = [
+    row('ep_aaa_A3', 3, 'The following information is to be used to answer questions 3 & 4\n\nThe IUPAC name of the compound is:'),
+    row('ep_bbb_A3', 3, 'The IUPAC name of the compound is:'), row('ep_bbb_A4', 4, 'This molecule is an example of'),
+    row('ep_aaa_A4', 4, 'This molecule is an example of'),
+  ]
+  const { updates } = planSetLinks(rows)
+  assert.deepEqual(updates.map(u => [u.id, u.set_key]), [['ep_aaa_A3', 'ep_aaa_A3'], ['ep_aaa_A4', 'ep_aaa_A3']])
+})
+
+test('neighbours starting with the same lines become a set; the lines are kept once', () => {
+  const row = (n, question, extra = {}) => ({ id: `ep_abc_A${n}`, source: 'NEAP 2024 Trial Exam', exam_section: 'A', curriculum_id: 'c', source_question: String(n), question, image_url: null, set_key: null, ...extra })
+  const info = 'An experiment was conducted using gases A, B and C in a sealed container.\nThe results are below.'
+  const rows = [
+    row(18, 'Unrelated question?'),
+    row(19, `${info}\nWhat is K?`, { image_url: 'https://x/a.png' }),
+    row(20, `${info}\nWhat happens when heated?`, { image_url: 'https://x/b.png' }),
+    row(21, `${info}\nThe diagram below shows the new mixture. Which is right?`, { image_url: 'https://x/c.png' }),
+    row(22, 'Another question?'),
+  ]
+  // b.png is a copy of a.png (same pixels); c.png is a different figure.
+  const sameFigure = (x, y) => [x, y].sort().join() === 'https://x/a.png,https://x/b.png'
+  const { updates, report } = planCopiedSets(rows, { sameFigure })
+  const by = Object.fromEntries(updates.map(u => [u.id, u]))
+  assert.deepEqual(updates.map(u => [u.id.slice(-3), u.set_position]), [['A19', 1], ['A20', 2], ['A21', 3]])
+  assert.equal(by.ep_abc_A19.shared_info, info)
+  assert.deepEqual([by.ep_abc_A19.question, by.ep_abc_A20.question], ['What is K?', 'What happens when heated?'])
+  // The first figure is shared; 20's copy goes; 21's different figure stays.
+  assert.deepEqual([by.ep_abc_A19.shared_image_url, by.ep_abc_A19.image_url, by.ep_abc_A20.image_url, 'image_url' in by.ep_abc_A21], ['https://x/a.png', null, null, false])
+  assert.equal(report.length, 1)
+  assert.deepEqual(report[0].unsure, [])
+})
+
+test('short or non-neighbouring repeats, and questions already in a set, are left alone', () => {
+  const row = (n, question, extra = {}) => ({ id: `ep_abc_A${n}`, source: 'P', exam_section: 'A', curriculum_id: 'c', source_question: String(n), question, image_url: null, set_key: null, ...extra })
+  const long = 'A galvanic cell is set up under standard conditions as shown.'
+  assert.equal(planCopiedSets([row(1, 'Consider the following.\nA?'), row(2, 'Consider the following.\nB?')]).updates.length, 0)
+  assert.equal(planCopiedSets([row(1, `${long}\nA?`), row(3, `${long}\nB?`)]).updates.length, 0)
+  assert.equal(planCopiedSets([row(1, `${long}\nA?`, { set_key: 'x' }), row(2, `${long}\nB?`)]).updates.length, 0)
+  const sure = planCopiedSets([row(1, `Consider the energy profile diagram below to answer this question. It is long.\nA?`), row(2, `Consider the energy profile diagram below to answer this question. It is long.\nB?`)])
+  assert.match(sure.report[0].unsure.join(), /this question/)
+})
+
+test('a lead sentence worded "to be used for Questions 9 and 10" is read, and left out of copied shared lines', () => {
+  assert.deepEqual(parseSetLead('The information below is to be used for Questions 9 and 10').numbers, [9, 10])
+  assert.deepEqual(parseSetLead('The following information is to be used to answers questions 27 and 28').numbers, [27, 28])
+  const row = (n, question) => ({ id: `ep_abc_A${n}`, source: 'Access 2023 Trial Exam', exam_section: 'A', curriculum_id: 'c', source_question: String(n), question, image_url: null, set_key: null })
+  const head = 'The information below is to be used for Questions 9 and 10\n\nYear 11 students are preparing for a 3-day hike with a stove.'
+  const { updates } = planCopiedSets([row(9, `${head}\nWhat is the energy?`), row(10, `${head}\nWhich statement is right?`)])
+  assert.equal(updates[0].shared_info, 'Year 11 students are preparing for a 3-day hike with a stove.')
 })
