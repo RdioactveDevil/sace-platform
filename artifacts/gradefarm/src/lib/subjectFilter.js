@@ -58,6 +58,15 @@ export function subjectYear(subj) {
 }
 
 /**
+ * Order for a student's subject lists (picker, switcher): lower school years
+ * first, so a list reads like a school, then by name. Subjects not tied to a
+ * year go last.
+ */
+export function compareSubjects(a, b) {
+  return (subjectYear(a) ?? 99) - (subjectYear(b) ?? 99) || String(a?.name || '').localeCompare(String(b?.name || ''))
+}
+
+/**
  * Whether a subject fits a student, by their state and year level. Anything
  * we can't place (no state, no year, a subject not tied to a year) is shown.
  * Outside Australia, both boards are shown (VCE and SACE are offered abroad).

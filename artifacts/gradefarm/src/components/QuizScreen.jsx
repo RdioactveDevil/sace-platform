@@ -1345,9 +1345,12 @@ export default function QuizScreen({
       checkingRef.current = false
       setChecking(false)
       if (err?.status === 409 && err.body?.code === 'held' && err.body.heldQuestionId && await showHeldQuestion(err.body.heldQuestionId)) return
+      // A reply from the server isn't a connection problem: say what it said.
       setCheckError(err?.status === 409 && err.body?.code === 'mark_first'
         ? 'Mark your answer first.'
-        : "Your answer couldn't be checked just now. Check your connection and try again.")
+        : err?.status
+          ? `Your answer couldn't be checked: ${err.body?.error || `the server replied with error ${err.status}`}. Try again, and report the question if it keeps happening.`
+          : "Your answer couldn't be checked just now. Check your connection and try again.")
       return
     }
     checkingRef.current = false

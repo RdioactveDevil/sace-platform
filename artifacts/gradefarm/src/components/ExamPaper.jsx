@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import MathText from './MathText'
+import { mathScaleOf } from '../lib/mathScale'
 import GraphView from './GraphView'
 import TableView from './TableView'
 import DiagramView from './DiagramView'
@@ -38,7 +39,10 @@ const CSS = `
   .xp-fig { margin: 2.5mm 0; max-width: 120mm; }
   .xp-fig img { max-width: 100%; max-height: 95mm; object-fit: contain; display: block; }
   .xp-fig > div { background: #fff !important; border: none !important; border-radius: 0 !important; margin: 0 !important; }
-  .xp .katex { font-size: 1.04em; }
+  /* Printed maths is a little larger than the text around it: KaTeX's letters
+     are small for their size, and superscripts, limits and fractions in a line
+     shrink further. --xp-math is a question's own size (lib/mathScale.js). */
+  .xp .katex { font-size: calc(1.1em * var(--xp-math, 1)); }
   /* On paper nothing scrolls: a scroll box would print its scrollbar and cut off what doesn't fit. */
   .xp .mt-display, .xp .mt-table, .xp-fig div, .xp .katex-display { overflow: visible !important; }
   .xp .katex-display { max-width: none !important; }
@@ -232,6 +236,9 @@ function PartText({ text, src, onLoad }) {
   )
 }
 
+/** A block's own style: the maths size of the question it belongs to, when that isn't the normal size. */
+const blkStyle = (b) => (b.math && b.math !== 1 ? { '--xp-math': b.math } : undefined)
+
 /** Where `node` sits on its page, in the page's own layout pixels (the preview's zoom doesn't matter). */
 function pageOffset(node, page) {
   let left = 0, top = 0
@@ -322,7 +329,7 @@ function useHeights(lists, className, widthMm) {
   const portal = createPortal(
     <div className={`xp ${className}`} aria-hidden="true">
       <div className="xp-measure" ref={ref} style={{ width: `${widthMm}mm` }}>
-        {lists.flat().map(b => <div key={b.key} data-key={b.key} className="xp-blk">{b.el}</div>)}
+        {lists.flat().map(b => <div key={b.key} data-key={b.key} className="xp-blk" style={blkStyle(b)}>{b.el}</div>)}
       </div>
     </div>,
     document.body,
@@ -346,7 +353,7 @@ function solutionBlocks(exam, numberOf) {
       ),
     })
     exam.A.forEach((q, i) => out.push({
-      key: `sol-A-${q.id}`, el: (
+      key: `sol-A-${q.id}`, math: mathScaleOf(q), el: (
         <div className="xp-sol" style={{ paddingBottom: '4mm' }}>
           <h4>Question {numberOf('A', i)}: {letter(q.answer_index)} <span className="src">{sourceLabel(q)}</span></h4>
           {q.solution ? <MathText text={q.solution} /> : !Number.isInteger(q.answer_index) && <p>{NOT_YET}</p>}
@@ -355,7 +362,7 @@ function solutionBlocks(exam, numberOf) {
     }))
   }
   exam.B.forEach((q, i) => {
-    out.push({ key: `sol-B-${q.id}`, keepWithNext: true, el: <div className="xp-sol" style={{ paddingBottom: '1.5mm' }}><h4>Question {numberOf('B', i)} ({marksOf(q)} marks) <span className="src">{sourceLabel(q)}</span></h4></div> })
+    out.push({ key: `sol-B-${q.id}`, math: mathScaleOf(q), keepWithNext: true, el: <div className="xp-sol" style={{ paddingBottom: '1.5mm' }}><h4>Question {numberOf('B', i)} ({marksOf(q)} marks) <span className="src">{sourceLabel(q)}</span></h4></div> })
     const parts = partsOf(q)
     if (!parts.some(p => p.solution)) {
       out.push({ key: `sol-B-${q.id}-none`, el: <div className="xp-sol-part"><b /><div>{NOT_YET}</div><span /></div> })
@@ -369,7 +376,7 @@ function solutionBlocks(exam, numberOf) {
       path[p.level - 1] = p.label ? `(${p.label})` : ''
       if (!p.solution && !p.marks) return
       out.push({
-        key: `sol-B-${q.id}-${k}`, el: (
+        key: `sol-B-${q.id}-${k}`, math: mathScaleOf(q), el: (
           <div className="xp-sol-part">
             <b>{path.join('')}</b>
             <div><MathText text={p.solution || '—'} /></div>
@@ -389,7 +396,7 @@ function SolutionPages({ pages, blocks, title, widthMm, top, body }) {
         <span>{title} – Solutions</span><span>{i + 1}</span>
       </div>
       <div className={body} style={{ position: 'absolute', top: `${top}mm`, left: `${(210 - widthMm) / 2}mm`, width: `${widthMm}mm` }}>
-        {page.map(bi => <div key={blocks[bi].key} className="xp-blk">{blocks[bi].el}</div>)}
+        {page.map(bi => <div key={blocks[bi].key} className="xp-blk" style={blkStyle(blocks[bi])}>{blocks[bi].el}</div>)}
       </div>
     </div>
   ))
@@ -465,9 +472,9 @@ function vceBlocks(exam, meta, onLoad) {
     exam.A.forEach((q, i) => {
       // A set's shared information goes before its first question, with that question.
       const set = sets.get(q.id)
-      if (set) blocks.push({ key: `A-set-${q.set_key}`, section: 'A', keepWithNext: true, el: <div style={{ paddingBottom: '2.5mm' }}><SharedInfo set={set} serif onLoad={onLoad} /></div> })
+      if (set) blocks.push({ key: `A-set-${q.set_key}`, math: mathScaleOf(q), section: 'A', keepWithNext: true, el: <div style={{ paddingBottom: '2.5mm' }}><SharedInfo set={set} serif onLoad={onLoad} /></div> })
       blocks.push({
-      key: `A-${q.id}`, section: 'A', tailMm: 7, el: (
+      key: `A-${q.id}`, math: mathScaleOf(q), section: 'A', tailMm: 7, el: (
         <div className="xv-q">
           <div className="xv-qh"><b>Question {num(q, 'A', i)}</b>{src(q)}</div>
           <div className="xv-serif"><MathText text={q.question} /></div>
@@ -497,7 +504,7 @@ function vceBlocks(exam, meta, onLoad) {
       const parts = partsOf(q)
       const single = parts.length === 1 && !parts[0].label
       blocks.push({
-        key: `B-${q.id}`, section, keepWithNext: true, el: (
+        key: `B-${q.id}`, math: mathScaleOf(q), section, keepWithNext: true, el: (
           <div style={{ paddingBottom: '2.5mm' }}>
             <div className="xv-qh"><b>Question {num(q, 'B', i)}</b> ({marksOf(q)} mark{marksOf(q) === 1 ? '' : 's'}){src(q)}</div>
             {q.question && <div className="xv-serif"><MathText text={q.question} /></div>}
@@ -508,7 +515,7 @@ function vceBlocks(exam, meta, onLoad) {
       parts.forEach((p, k) => {
         const intro = !p.marks
         blocks.push({
-          key: `B-${q.id}-${k}`, section, keepWithNext: intro, tailMm: 6, el: (
+          key: `B-${q.id}-${k}`, math: mathScaleOf(q), section, keepWithNext: intro, tailMm: 6, el: (
             <div className={`xv-part${p.level > 1 ? ` l${p.level}` : ''}`} style={single ? { gridTemplateColumns: '0 minmax(0, 1fr) 22mm' } : undefined}>
               <span className="lbl">{p.label ? `${p.label}.` : ''}</span>
               <div className="xv-serif"><PartText text={p.text} src={p.image_url} onLoad={onLoad} /></div>
@@ -575,7 +582,7 @@ function VceExam({ exam, meta }) {
         <div className="xp-print" ref={fitRef}>
           {pages.map((p, i) => (
             <VcePage key={`p${i}`} n={i + 1} total={pages.length} title={meta.headerTitle} section={blocks[p[0]].section === 'end' ? '' : blocks[p[0]].section}>
-              <div className="xv-box xv-body">{p.map(bi => <div key={blocks[bi].key} className="xp-blk">{blocks[bi].el}</div>)}</div>
+              <div className="xv-box xv-body">{p.map(bi => <div key={blocks[bi].key} className="xp-blk" style={blkStyle(blocks[bi])}>{blocks[bi].el}</div>)}</div>
             </VcePage>
           ))}
         </div>
@@ -659,7 +666,7 @@ function VceExam({ exam, meta }) {
             </VcePage>
           ) : (
             <VcePage key={`p${i}`} n={n} total={total} title={meta.headerTitle} section={s.section}>
-              <div className="xv-box xv-body">{s.blocks.map(bi => <div key={blocks[bi].key} className="xp-blk">{blocks[bi].el}</div>)}</div>
+              <div className="xv-box xv-body">{s.blocks.map(bi => <div key={blocks[bi].key} className="xp-blk" style={blkStyle(blocks[bi])}>{blocks[bi].el}</div>)}</div>
             </VcePage>
           )
         })}
@@ -700,9 +707,9 @@ function saceBlocks(questions, startNumber, meta, onLoad) {
     const qid = q.id
     if (q._section === 'A') {
       const set = sets.get(q.id)
-      if (set) blocks.push({ key: `S-set-${q.set_key}`, qid, num, keepWithNext: true, el: <div style={{ paddingBottom: '3mm' }}><SharedInfo set={set} onLoad={onLoad} /></div> })
+      if (set) blocks.push({ key: `S-set-${q.set_key}`, math: mathScaleOf(q), qid, num, keepWithNext: true, el: <div style={{ paddingBottom: '3mm' }}><SharedInfo set={set} onLoad={onLoad} /></div> })
       blocks.push({
-        key: `S-${qid}`, qid, num, el: (
+        key: `S-${qid}`, math: mathScaleOf(q), qid, num, el: (
           <div className="xs-q">
             <div className="xs-stem"><span>{num}.</span><div><MathText text={q.question} />{src(q)}<Figure q={q} src={q.image_url} onLoad={onLoad} /></div></div>
             <div className="xs-opts">{(q.options || []).map((o, j) => <div key={j} className="xs-opt"><span>({letter(j)})</span><span><MathText text={o} /></span></div>)}</div>
@@ -716,7 +723,7 @@ function saceBlocks(questions, startNumber, meta, onLoad) {
     const single = parts.length === 1 && !parts[0].label
     // Question heading: maths "Question 1 (8 marks)", other subjects "1." before the stem.
     blocks.push({
-      key: `S-${qid}`, qid, num, keepWithNext: true, el: meta.isMaths ? (
+      key: `S-${qid}`, math: mathScaleOf(q), qid, num, keepWithNext: true, el: meta.isMaths ? (
         <div>
           <div className="xs-qh"><b>Question {num}</b>({marksOf(q)} mark{marksOf(q) === 1 ? '' : 's'}){src(q)}</div>
           {q.question && <div style={{ paddingBottom: '4mm' }}><MathText text={q.question} /><Figure q={q} src={q.image_url} onLoad={onLoad} /></div>}
@@ -757,7 +764,7 @@ function saceBlocks(questions, startNumber, meta, onLoad) {
         }
       }
       blocks.push({
-        key: `S-${qid}-${k}`, qid, num, keepWithNext: intro, tailMm: intro ? 3 : 7, el: (
+        key: `S-${qid}-${k}`, math: mathScaleOf(q), qid, num, keepWithNext: intro, tailMm: intro ? 3 : 7, el: (
           <div>
             {(p.text || p.label || p.image_url) && (
               <div className="xs-part" style={{ '--lc': lc, '--tc': tc }}>
@@ -836,7 +843,7 @@ function SaceExam({ exam, meta }) {
             const cont = next && lastBlk && next.qid === lastBlk.qid ? `Question ${lastBlk.num} continues on page ${i + 2}.` : null
             return (
               <SacePage key={i} n={i + 1} total={pages.length} cont={cont}>
-                <div className="xs-box xs-body">{page.map(bi => <div key={blocks[bi].key} className="xp-blk">{blocks[bi].el}</div>)}</div>
+                <div className="xs-box xs-body">{page.map(bi => <div key={blocks[bi].key} className="xp-blk" style={blkStyle(blocks[bi])}>{blocks[bi].el}</div>)}</div>
               </SacePage>
             )
           })}
@@ -927,7 +934,7 @@ function SaceExam({ exam, meta }) {
                 const cont = next && lastBlk && next.qid === lastBlk.qid ? `Question ${lastBlk.num} continues on page ${n + 1}.` : null
                 return (
                   <SacePage key={i} n={n} total={total} cont={cont}>
-                    <div className="xs-box xs-body">{page.map(bi => <div key={blocks[bi].key} className="xp-blk">{blocks[bi].el}</div>)}</div>
+                    <div className="xs-box xs-body">{page.map(bi => <div key={blocks[bi].key} className="xp-blk" style={blkStyle(blocks[bi])}>{blocks[bi].el}</div>)}</div>
                   </SacePage>
                 )
               })}

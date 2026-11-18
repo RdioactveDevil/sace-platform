@@ -168,16 +168,13 @@ export function stripLevelFromTitle(title, levelLabel) {
 }
 
 /**
- * Display label for a subject tile — avoids repeating the stage when it is
- * already embedded in the curriculum name (e.g. "Chemistry Stage 2" + stage
- * "Stage 2" should render as just "Chemistry Stage 2", not "Chemistry Stage 2
- * Stage 2").
+ * A subject's label: its name exactly as written in Admin. Every name carries
+ * its own course level ("SACE Chemistry Stage 2", "VCE Mathematical Methods
+ * Units 1 and 2", "Year 6 English"), so the year level is never appended; lists
+ * show it as a second line instead (Admin, the subject picker, the switcher).
  */
-export function formatSubjectLabel({ name, stage } = {}) {
-  if (!name) return ''
-  const trimmedStage = (stage || '').trim()
-  if (!trimmedStage || name.includes(trimmedStage)) return name
-  return `${name} ${trimmedStage}`
+export function formatSubjectLabel({ name } = {}) {
+  return String(name || '').trim()
 }
 
 /** Trim stray punctuation some legacy rows use on `questions.subject`. */
