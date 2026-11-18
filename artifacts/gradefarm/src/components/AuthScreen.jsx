@@ -20,9 +20,9 @@ const FLOATERS = [
 
 // What GradeFarm does for a student, beside the form (wide screens; below it on a phone).
 const HELPS = [
-  { Icon: Search, title: 'Find your weak spots before your test does', body: 'Every answer shows which parts of your course need more work.' },
-  { Icon: Check, title: 'See where every mark goes', body: 'Written answers are marked line by line, like an exam, so you know what to fix.' },
-  { Icon: RotateCcw, title: 'Turn a wrong answer into a right one', body: 'Get one wrong and a few like it come straight away, until it clicks.' },
+  { Icon: Search, title: 'Find your weak spots before your test does' },
+  { Icon: Check, title: 'See where every mark goes' },
+  { Icon: RotateCcw, title: 'Turn a wrong answer into a right one' },
 ]
 
 function GoogleMark() {
@@ -131,7 +131,8 @@ export default function AuthScreen({ onAuth, onBack, theme = 'dark', onToggleThe
     ? `${mode === 'signin' ? 'Sign in' : 'Create an account'} to accept ${invite.invitedBy}'s invite.`
     : mode === 'reset' ? "We'll email you a link to choose a new one."
     : mode === 'signup' && asParent ? "You sign in with your email, and we send you their progress each week. Their first subject is free."
-    : null
+    : mode === 'signup' ? 'Your first subject is free.'
+    : 'Sign in to pick up where you left off.'
   const emailLabel = mode === 'signup' && asParent ? 'Your email' : 'Email'
   const submitLabel = loading
     ? (mode === 'signin' ? 'Signing in…' : mode === 'reset' ? 'Sending…' : 'Creating your account…')
@@ -168,16 +169,13 @@ export default function AuthScreen({ onAuth, onBack, theme = 'dark', onToggleThe
           <h2 style={{ margin: 0, fontSize: 'clamp(30px, 3.6vw, 44px)', fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.1, color: t.text, textWrap: 'balance' }}>
             Study like you&rsquo;ve already seen the exam<span style={{ color: t.goldText }}>.</span>
           </h2>
-          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 20 }}>
-            {HELPS.map(({ Icon, title: head, body }) => (
-              <li key={head} style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {HELPS.map(({ Icon, title: head }) => (
+              <li key={head} style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
                 <span aria-hidden="true" style={{ width: 40, height: 40, borderRadius: 12, background: t.bgCard, border: `1px solid ${dark ? t.border : '#efe4c6'}`, display: 'grid', placeItems: 'center', flexShrink: 0, color: t.goldText }}>
                   <Icon size={19} strokeWidth={2.2} />
                 </span>
-                <div>
-                  <b style={{ fontSize: 15.5, color: t.text }}>{head}</b>
-                  <p style={{ margin: '4px 0 0', fontSize: 14, color: t.textMuted, lineHeight: 1.55 }}>{body}</p>
-                </div>
+                <b style={{ fontSize: 16, color: t.text }}>{head}</b>
               </li>
             ))}
           </ul>
