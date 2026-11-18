@@ -1,6 +1,8 @@
 import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { THEMES } from '../lib/theme'
+import TitanLimitNote from './TitanLimitNote'
+import { lastTitanQuestion } from '../lib/freeLimit'
 import { supabase } from '../lib/supabase'
 import { useCurriculumTopicConfig } from '../lib/useCurriculumTopicConfig'
 import MathText from './MathText'
@@ -1255,6 +1257,11 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
             <h1 className="ls-ask-head" style={{ margin: 0, maxWidth: 720, fontSize: 'clamp(24px, 4vw, 30px)', fontWeight: 700, letterSpacing: '-0.01em', textAlign: 'center', textWrap: 'balance' }}>{greeting.ask}</h1>
 
             <div className="ls-ask-dock">
+            {outOfAi && !waitingOnParent ? (
+              <div style={{ width: '100%' }}>
+                <TitanLimitNote t={t} onCarryOn={() => navigate('/get-access', { state: { subject } })} onDone={onBack} />
+              </div>
+            ) : (<>
             <div className="ls-ask-box" data-tutorial-target="learn-composer"
               style={{ width: '100%', boxSizing: 'border-box', background: t.bgCard, border: `1px solid ${t.borderMid}`, borderRadius: 28, padding: '16px 12px 10px 20px', display: 'flex', flexDirection: 'column', gap: 10, boxShadow: theme === 'dark' ? 'none' : t.shadowCard }}>
               {attachments}
@@ -1305,6 +1312,7 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
               </div>
             </div>
             <div className="ls-quota-dock">{quotaLine}</div>
+            </>)}
             </div>
 
             {askIdeas.length > 0 && (
@@ -1748,6 +1756,12 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
       {/* Quick replies and the reply row */}
       <div className="ls-chat-bottom" style={{ flexShrink: 0, padding: '6px 24px 18px' }}>
         <div style={{ maxWidth: 760, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {outOfAi && !waitingOnParent ? (
+            <TitanLimitNote t={t} question={lastTitanQuestion(messages)}
+              practiseLabel={consolidateTarget && onConsolidate ? consolidateTarget.label : ''}
+              onPractise={consolidateTarget && onConsolidate ? () => onConsolidate(consolidateTarget) : null}
+              onCarryOn={() => navigate('/get-access', { state: { subject } })} onDone={onBack} />
+          ) : (<>
           {/* Titan's suggested replies on the left, "Practise <topic>" on the right. */}
           {(showChips || showPractise) && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1814,6 +1828,7 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
             </div>
           </div>
           {quotaLine}
+          </>)}
         </div>
       </div>
 

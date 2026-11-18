@@ -79,4 +79,5 @@ test("where a Titan chat paused: its last question", () => {
   assert.equal(lastTitanQuestion([{ role: 'assistant', content: [{ type: 'text', text: 'Nice. Or shall we try another?' }] }]), 'Shall we try another?')
   assert.equal(lastTitanQuestion([{ role: 'assistant', content: 'Good work.' }]), '')
   assert.equal(lastTitanQuestion([]), '')
+  assert.equal(lastTitanQuestion([{ role: 'assistant', content: 'Yes, 4800. Next time: how long until there are 10 000? See you then.' }]), 'How long until there are 10 000?')
 })

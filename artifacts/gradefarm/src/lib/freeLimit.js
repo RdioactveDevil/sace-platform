@@ -76,7 +76,8 @@ export function lastTitanQuestion(messages) {
     : Array.isArray(last.content) ? last.content.filter(b => b && b.type === 'text').map(b => b.text).join(' ') : ''
   const plain = text.replace(/\$\$?([^$]*)\$\$?/g, '$1').replace(/[*_`#>]/g, '').replace(/\s+/g, ' ').trim()
   const questions = plain.split(/(?<=[.?!])\s+/).filter(s => s.endsWith('?'))
-  let q = (questions[questions.length - 1] || '').replace(/^(or|and|so|now)\s+/i, '')
+  // Drop a lead-in ("Or …", "Next time: …"); the slip already says it's where the chat paused.
+  let q = (questions[questions.length - 1] || '').replace(/^(or|and|so|now)\s+/i, '').replace(/^(next time|next up|next)\s*:\s*/i, '')
   q = q.charAt(0).toUpperCase() + q.slice(1)
   return q.length > 160 ? `${q.slice(0, 157).trimEnd()}…` : q
 }
