@@ -369,7 +369,7 @@ export default function AdminPaperPage({ curriculum, label, onBack }) {
                 <button key={x.id} type="button" role="option" aria-selected={x.id === q?.id} aria-current={x.id === q?.id} className="pp-row" onClick={() => select(x.id)}>
                   <b style={{ fontSize: 12.5, minWidth: 30 }}>{name(x)}</b>
                   <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
-                    <span style={{ fontSize: 12, color: 'var(--t-textSub)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{String(x.question || '').replace(/\$|\\ce\{|\}/g, '').slice(0, 70)}</span>
+                    <span style={{ fontSize: 12, color: 'var(--t-textSub)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{String(x.question || x.parts?.find(p => p?.text)?.text || '').replace(/\$|\\ce\{|\}/g, '').slice(0, 70)}</span>
                     <span style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
                       <StateChip q={x} />
                       {x.set_key && <Chip>Set {setName(x)}</Chip>}

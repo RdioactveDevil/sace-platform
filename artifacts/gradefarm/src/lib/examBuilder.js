@@ -101,7 +101,9 @@ export function sourceLabel(q) {
  * and not waiting for (or failed) an admin's review (lib/questionChecks.js).
  */
 export function isExamReady(q) {
-  return !!q?.question && !q.passage_id && !!sectionOf(q) && q.review_status !== 'pending' && q.review_status !== 'rejected'
+  // A multi-part question may have no stem of its own (it starts with part (a)).
+  const hasText = !!q?.question || (q?.question_type === 'extended' && partsOf(q).some(p => p.text))
+  return hasText && !q.passage_id && !!sectionOf(q) && q.review_status !== 'pending' && q.review_status !== 'rejected'
 }
 
 /**
@@ -148,7 +150,7 @@ export function examPool(questions, { paper = '', sources = [], topics = [] } = 
     if (paper && q.source_paper && q.source_paper !== paper) continue
     if (sources.length && !sources.includes(sourceKey(q))) continue
     if (topics.length && !topics.includes(q.topic)) continue
-    const key = `${(q.question || '').trim().toLowerCase()}|${JSON.stringify(q.options || '')}`
+    const key = `${(q.question || '').trim().toLowerCase()}|${JSON.stringify(q.options || '')}|${(q.parts || []).map(p => p?.text || '').join('|').toLowerCase()}`
     if (seen.has(key)) continue
     seen.add(key)
     out[sectionOf(q)].push(q)

@@ -33,3 +33,9 @@ test("a question without lettered parts keeps its text in the stem and an empty 
   assert.equal(r.update.question, "Explain the viscosities.");
   assert.deepEqual((r.update.parts as { text: string; marks: number }[]).map((p) => [p.text, p.marks]), [["", 5]]);
 });
+
+test("an empty stem stays empty: part (a)'s text isn't copied into it", () => {
+  const r = buildExtendedUpdate({ question: "", parts: [{ label: "a", text: "For the functions below, determine dy/dx.", marks: 0 }, { label: "i", level: 2, text: "y = 3cos(2+7x)", marks: 2 }] });
+  assert.ok("update" in r);
+  assert.equal(r.update.question, "");
+});

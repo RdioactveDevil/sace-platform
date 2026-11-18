@@ -37,7 +37,8 @@ export function buildExtendedUpdate(body: unknown): { update: Record<string, unk
   if (!total) return { error: "The parts need at least one mark between them." };
   return {
     update: {
-      question: question || parts[0].text,
+      // The stem may be empty (a question that starts with part (a)); part (a)'s text isn't copied into it.
+      question,
       parts,
       total_marks: total,
       solution: parts.map((p) => (p.label ? `${p.label}. ${p.solution}` : p.solution)).join("\n"),

@@ -684,7 +684,8 @@ async function ingestOne(admin: any, client: Anthropic, args: Args): Promise<Out
         if (sameWords(stem, parts[0].text) || stem.replace(/\s+/g, " ").includes(parts[0].text.replace(/\s+/g, " ").trim())) parts[0].text = "";
       }
       rows.push({
-        ...base, question_type: "extended", question: stem || parts[0]?.text || "", parts, total_marks: total,
+        // No stem: the question starts with part (a); its text isn't copied into the stem (it would print twice).
+        ...base, question_type: "extended", question: stem, parts, total_marks: total,
         solution: parts.map((p) => (p.label ? `${p.label}. ${p.solution}` : p.solution)).join("\n"),
       });
     }

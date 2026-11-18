@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {
   sectionOf, partsOf, marksOf, sourceLabel, bankSummary, examPool, pickExam, swapCandidate,
   examTotals, writingMinutes, formatMinutes, subjectCode, paginate, linesForMarks, BANK_SOURCE,
-  splitAtFigure, wantsDrawing, figureSizeMm, keepSetsTogether, moveUnit, removeUnit, addWithSet, swapSet,
+  splitAtFigure, wantsDrawing, figureSizeMm, isExamReady, keepSetsTogether, moveUnit, removeUnit, addWithSet, swapSet,
 } from './examBuilder.js'
 
 const mc = (id, extra = {}) => ({ id, question: `MC ${id}`, options: ['a', 'b', 'c', 'd'], answer_index: 0, question_type: 'mcq', topic: 'T1', ...extra })
@@ -204,4 +204,11 @@ test('swapping a set\'s question swaps the whole set: for a set the same size, e
   const singles = swapSet(pool, unit, ['a1', 'a2', 'b1', 'b2'], 1)
   assert.equal(singles.length, 2)
   assert.ok(singles.every(q => !q.set_key))
+})
+
+test('a multi-part question with no stem is still usable, and not mistaken for another one', () => {
+  const noStem = (id, text) => ext(id, [{ label: 'a', text, marks: 2 }], { question: '', exam_section: 'B' })
+  assert.equal(isExamReady(noStem('n1', 'Determine dy/dx.')), true)
+  assert.equal(isExamReady(ext('n0', [{ label: 'a', text: '', marks: 2 }], { question: '' })), false)
+  assert.deepEqual(examPool([noStem('n1', 'Determine dy/dx.'), noStem('n2', 'Evaluate the integral.')]).B.map(q => q.id), ['n1', 'n2'])
 })
