@@ -23,7 +23,10 @@ export function buildExtendedUpdate(body: unknown): { update: Record<string, unk
     const img = typeof p.image_url === "string" && /^https:\/\//i.test(p.image_url.trim()) ? p.image_url.trim() : null;
     // A question without lettered parts: the stem is its text, its one unlabelled part only the answer space.
     const answerSpaceOnly = b.parts.length === 1 && !str(p.label, 12).trim() && !!question;
-    if (!text && !img && !answerSpaceOnly) return { error: `Part ${i + 1} needs its question.` };
+    // A label printed on its own to introduce its sub-parts, like (c) before (i) and (ii): no text, no marks.
+    const next = (b.parts[i + 1] ?? null) as Record<string, unknown> | null;
+    const introducesSubParts = !!str(p.label, 12).trim() && marks === 0 && !!next && Number(next.level) > (level === 2 || level === 3 ? level : 1);
+    if (!text && !img && !answerSpaceOnly && !introducesSubParts) return { error: `Part ${i + 1} needs its question.` };
     parts.push({
       label: str(p.label, 12).trim().replace(/^\(|\)?\.?$/g, ""),
       level: level === 2 || level === 3 ? level : 1,
