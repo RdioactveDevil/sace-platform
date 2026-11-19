@@ -136,7 +136,7 @@ const EXTRA_CSS = `
 .gfx .il.marks div { display: flex; flex-direction: column; gap: 3px; font-size: 11px; font-weight: 700; }
 .gfx .il.marks .y { color: var(--ok); } .gfx .il.marks .n { color: var(--bad); }
 .gfx .il.paper .pp { width: 108px; height: 72px; background: #fff; border: 1px solid var(--line2); border-radius: 4px; padding: 6px 7px; display: flex; flex-direction: column; gap: 2px; box-shadow: 4px 4px 0 var(--line); }
-.gfx .il.paper .pp .wm { font-size: 9px; } .gfx .il.paper .pp b { font-size: 9.5px; color: #0c1037; line-height: 1.2; } .gfx .il.paper .pp small { font-size: 8.5px; color: #64748b; }
+.gfx .il.paper .pp .wm { font-size: 9px; color: #0c1037; } .gfx .il.paper .pp b { font-size: 9.5px; color: #0c1037; line-height: 1.2; } .gfx .il.paper .pp small { font-size: 8.5px; color: #64748b; }
 .gfx .il.paper .pp i { height: 3px; background: #e3e6f0; border-radius: 2px; } .gfx .il.paper .pp i.s { width: 60%; }
 .gfx .il.time .tl { display: flex; align-items: center; width: 100%; }
 .gfx .il.time .tl span { flex: 1; text-align: center; font-size: 10.5px; font-weight: 800; color: var(--ink); position: relative; padding-top: 20px; }

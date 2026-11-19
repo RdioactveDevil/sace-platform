@@ -70,8 +70,13 @@ export const SITE_CSS = `
 .lp-card { background: var(--lp-card); border: 1px solid var(--lp-line); border-radius: 14px; }
 .lp-muted { color: var(--lp-muted); }
 /* nav */
-.lp-nav { position: sticky; top: 0; z-index: 50; background: var(--lp-win); border-bottom: 1px solid transparent; transition: border-color 0.15s; }
-.lp-nav[data-scrolled="true"] { border-bottom-color: var(--lp-line); }
+/* Semi-translucent: the page shows through, blurred, as it scrolls under the bar. */
+.lp-nav { position: sticky; top: 0; z-index: 50; background: var(--lp-win); border-bottom: 1px solid transparent; transition: border-color 0.15s, background 0.15s; }
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .lp-nav { background: color-mix(in srgb, var(--lp-win) 72%, transparent); -webkit-backdrop-filter: saturate(180%) blur(16px); backdrop-filter: saturate(180%) blur(16px); }
+  .lp-nav[data-open="true"] { background: color-mix(in srgb, var(--lp-win) 94%, transparent); }
+}
+.lp-nav[data-scrolled="true"] { border-bottom-color: color-mix(in srgb, var(--lp-line) 70%, transparent); }
 .lp-nav .lp-in { display: flex; align-items: center; gap: 24px; height: 62px; }
 .lp-nav-links { display: flex; gap: 22px; }
 .lp-nav-links button { border: none; background: none; padding: 4px 0; font-size: 15.5px; font-weight: 600; color: var(--lp-muted); cursor: pointer; }
@@ -154,7 +159,7 @@ export function SiteNav({ theme, onToggleTheme, onSignIn, onStart, onLogo, links
   }, [menuOpen])
   const pick = (fn) => () => { setMenuOpen(false); fn() }
   return (
-    <nav className="lp-nav" data-scrolled={scrolled || menuOpen} aria-label="Main">
+    <nav className="lp-nav" data-scrolled={scrolled || menuOpen} data-open={menuOpen} aria-label="Main">
       <div className="lp-in">
         <Wordmark onClick={onLogo} />
         <div className="lp-nav-links">
