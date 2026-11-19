@@ -41,6 +41,10 @@ const EXTRA_CSS = `
 .gfx.dark .sw button[aria-pressed="true"] { color: var(--onfg); }
 .gfx.dark .sw.on button[aria-pressed="true"] { color: #0c1037; }
 .gfx.dark .tile:not(.on *) { background: #232328; border-color: #3a3a42; }
+/* The gradefarm column (comparison) and the Paid column (pricing): solid in dark mode, the card colour with a
+   little gold (as light mode's cream). The 5%-white highlight was see-through, so on phones, where the
+   gradefarm column stays put while the table scrolls sideways, the other columns' text showed through it. */
+.gfx.dark .cmp .gf, .gfx.dark .ptab .pd { background: #363128; color: #f4f1ea; }
 /* One continuous page: the background (CalmBackground, fixed) shows through every section, which are split
    by thin lines that stop at the content's width. The footer stays solid. */
 .gfx main { position: relative; z-index: 1; }
