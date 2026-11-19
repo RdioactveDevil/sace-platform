@@ -24,6 +24,10 @@ const LOOP = 'M4 12a8 8 0 0 1 13.7-5.7L20 8.5M20 4v4.5h-4.5M20 12a8 8 0 0 1-13.7
 const CLOCK = <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></svg>
 const STAR = 'M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z'
 
+/** Roughly how many characters an option shows (maths without its markup). Short ones sit two to a row on phones. */
+const shownLength = (o) => o.replace(/\\frac\{([^}]*)\}\{([^}]*)\}/g, '$1/$2').replace(/[$\\{}^\s]/g, '').length
+const isShort = (o) => shownLength(o) <= 10
+
 /** The right answer inside a sentence: maths as it is, words in quotes, no doubled full stop. */
 function Answer({ text }) {
   const maths = text.includes('$')
@@ -103,7 +107,7 @@ export default function TryItBox({ onStart, onNext }) {
               <div key={s.key} className={s.key % 2 ? 'qa' : 'qb'}>
                 <p className="stem"><MathText text={q.stem} /></p>
                 {s.phase === 'ask' && (
-                  <div className="opts">
+                  <div className={`opts${q.options.every(isShort) ? ' short' : ''}`}>
                     {q.options.map((o, i) => (
                       <button key={i} type="button" disabled={flash !== null} onClick={() => pick(i)}
                         className={`opt${flash === null ? '' : i === q.answer ? ' r' : i === flash ? ' w' : ' d'}`}>

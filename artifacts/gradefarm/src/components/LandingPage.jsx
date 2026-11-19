@@ -244,6 +244,38 @@ const EXTRA_CSS = `
   .gfx .lad .s { min-width: 70px; font-size: 12px; letter-spacing: .04em; }
   /* The comparison only shows two columns at a time, so say it scrolls. */
   .gfx .cmp-hint { display: block; margin: 18px 0 -28px; text-align: right; font-size: 13px; font-weight: 700; color: var(--muted); }
+  /* ── Try it now ── */
+  .gfx .tqrow { margin-top: 24px; }
+  .gfx .pick { gap: 12px; padding: 4px 0 0; }
+  .gfx .pk-h { font-size: 19px; }
+  .gfx .pk-opts { gap: 8px; }
+  .gfx .pk { min-height: 0; padding: 12px 14px; flex-direction: row; justify-content: space-between; gap: 10px; text-align: left; }
+  .gfx .pk b { font-size: 16px; }
+  .gfx .pk span { font-size: 12.5px; text-align: right; }
+  .gfx .top { padding-bottom: 12px; row-gap: 8px; }
+  .gfx .prog { flex-wrap: wrap; gap: 6px 8px; font-size: 12.5px; }
+  .gfx .prog .subj-tag { padding: 2px 9px; font-size: 12px; }
+  .gfx .cbp { white-space: nowrap; font-size: 12px; padding: 3px 9px; }
+  .gfx .diff { font-size: 12px; } .gfx .diff .star { font-size: 16px; } .gfx .diff b { font-size: 12.5px; }
+  .gfx .stem { margin-top: 14px; font-size: 18px; }
+  .gfx .opts { gap: 8px; margin-top: 14px; }
+  .gfx .opts.short { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .gfx .opt { min-height: 50px; gap: 10px; padding: 8px 12px; font-size: 18px; }
+  .gfx .opt .k { width: 24px; height: 24px; border-radius: 6px; font-size: 11.5px; }
+  .gfx .res { margin-top: 14px; }
+  .gfx .rh { gap: 8px; }
+  .gfx .ic { width: 44px; height: 44px; } .gfx .ic svg { width: 22px; height: 22px; }
+  .gfx .rt b { font-size: 20px; } .gfx .rt > span { font-size: 15px; }
+  .gfx .nx { margin-top: 12px; padding: 10px 12px; } .gfx .nx b { font-size: 15px; } .gfx .nx .nm { font-size: 12.5px; }
+  .gfx .ra { margin-top: 14px; gap: 10px; }
+  .gfx .lgi b { font-size: 14px; } .gfx .lgi span { font-size: 12.5px; }
+  .gfx .skip { margin-top: 14px; }
+  .gfx .tonext { margin-top: 24px; }
+  .gfx .fin h3 { font-size: 23px; } .gfx .fin > p { font-size: 14.5px; } .gfx .fin > p .wm { font-size: 14.5px; }
+  .gfx .frows { gap: 8px; margin-top: 16px; }
+  .gfx .frow { padding: 10px 12px; } .gfx .frow span { font-size: 12.5px; } .gfx .frow b { font-size: 14px; }
+  .gfx .fbtn { flex-direction: column; gap: 10px; margin-top: 18px; }
+  .gfx .fbtn .lp-btn, .gfx .fbtn .btn { width: 100%; justify-content: center; }
   /* Pricing buttons side by side, filling the row. */
   .gfx .pcta { flex-wrap: nowrap; }
   .gfx .pcta .btn { flex: 1; justify-content: center; }
