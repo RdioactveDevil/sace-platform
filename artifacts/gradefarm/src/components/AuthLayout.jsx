@@ -31,8 +31,13 @@ export function Logo({ onClick, theme = 'dark' }) {
  */
 export function AuthLayout({ theme = 'dark', onToggleTheme, onLogoClick, right, center, align = 'center', backdrop, children }) {
   const t = THEMES[theme]
+  // The page's own theme as the --t-* colour variables (as App sets them on the document), so pieces that
+  // read them (the logo, SegmentedToggle) match this page even when it follows the device's light / dark
+  // setting rather than the signed-in student's choice.
+  const vars = { '--ink-rgb': theme === 'dark' ? '255,255,255' : '12,16,55' }
+  for (const [key, value] of Object.entries(t)) if (typeof value === 'string') vars[`--t-${key}`] = value
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: t.bg, color: t.text, fontFamily: FONT_B, colorScheme: theme === 'dark' ? 'dark' : 'light', position: 'relative', isolation: 'isolate' }}>
+    <div style={{ ...vars, minHeight: '100vh', display: 'flex', flexDirection: 'column', background: t.bg, color: t.text, fontFamily: FONT_B, colorScheme: theme === 'dark' ? 'dark' : 'light', position: 'relative', isolation: 'isolate' }}>
       {backdrop}
       <style>{`
         @font-face { font-family: 'Sifonn Pro'; src: url('/SIFONN_PRO.otf') format('opentype'); font-display: swap; }
