@@ -592,7 +592,9 @@ export default function LearnScreen({
       if (!el || el.offsetParent === null) return // not on screen (another page is showing)
       if (docked || window.innerWidth > 640) { setStartMinH(null); return }
       const top = el.getBoundingClientRect().top + window.scrollY
-      setStartMinH(Math.max(320, Math.floor(window.innerHeight - top)))
+      // The phone tab bar (App.jsx MobileTabBar) takes the bottom edge.
+      const tabBar = document.querySelector('.gf-tabbar')?.offsetHeight || 0
+      setStartMinH(Math.max(320, Math.floor(window.innerHeight - top - tabBar)))
     }
     measure()
     window.addEventListener('resize', measure)
@@ -1204,13 +1206,13 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
           .ls-start { padding: 14px 14px 0; }
           .ls-start-main { justify-content: flex-start; gap: 18px; padding: 22px 0 0; }
           /* Balanced: the heading in the middle of the free space, the suggestions just above the box. */
-          .ls-start-main.ls-ask-mode { padding-bottom: calc(140px + env(safe-area-inset-bottom)); gap: 0; }
+          .ls-start-main.ls-ask-mode { padding-bottom: calc(140px + max(env(safe-area-inset-bottom), var(--gf-tabbar-h, 0px))); gap: 0; }
           .ls-ask-mode .ls-ask-head { margin: auto 0 !important; }
           .ls-ask-mode .ls-ask-ideas { margin-top: 12px; }
           .ls-ask-ideas { order: 2; }
           /* The box sits on the bottom edge of the screen, like a messaging app. */
-          .ls-ask-dock { order: 3; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; max-width: none; box-sizing: border-box;
-            padding: 16px 12px calc(10px + env(safe-area-inset-bottom)); background: linear-gradient(to bottom, transparent, ${t.bg} 18px); }
+          .ls-ask-dock { order: 3; position: fixed; left: 0; right: 0; bottom: var(--gf-tabbar-h, 0px); z-index: 40; max-width: none; box-sizing: border-box;
+            padding: 16px 12px calc(10px + max(0px, env(safe-area-inset-bottom) - var(--gf-tabbar-h, 0px))); background: linear-gradient(to bottom, transparent, ${t.bg} 18px); }
           .ls-ask-box { border-radius: 24px !important; padding: 12px 10px 8px 16px !important; }
           .ls-quota-dock { display: block; }
           .ls-ask-input { min-height: 24px; }
@@ -1683,7 +1685,7 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
         @media (max-width: 640px) {
           .ls-chat-top { padding: 10px 12px !important; }
           .ls-chat-msgs { padding: 8px 14px 12px !important; }
-          .ls-chat-bottom { padding: 6px 12px calc(10px + env(safe-area-inset-bottom)) !important; }
+          .ls-chat-bottom { padding: 6px 12px calc(10px + max(0px, env(safe-area-inset-bottom) - var(--gf-tabbar-h, 0px))) !important; }
           .ls-new-word { display: none; }
           .ls-chat .ls-hist { display: block; }
           .ls-chat-row .ls-explain-word { display: none; }
