@@ -208,6 +208,50 @@ const EXTRA_CSS = `
 .gfx .hv.covers .cv.vce { right: auto; left: calc(50% + 6px); top: 30px; }
 .gfx .tonext { display: flex; justify-content: center; margin: 36px 0 0; }
 .gfx .tonext .try { min-height: 56px; padding: 0 24px; font-size: 16.5px; border-radius: 14px; gap: 8px; }
+.gfx .cmp-hint { display: none; }
+
+/* ── Phones ── */
+@media (max-width: 760px) {
+  .gfx .hero { padding: 36px 0 52px; }
+  .gfx.solo .hg { gap: 30px; }
+  /* Hero cards: two narrow columns instead of one full-width stack, so all six fit in about a screen. */
+  .gfx .stage { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: stretch; }
+  .gfx .stage .tile, .gfx .on .stage .tile { min-height: 0; border-radius: 12px; }
+  .gfx .stage .cap, .gfx .on .stage .mob-adapt { grid-column: 1 / -1; }
+  .gfx .stage .cap { margin: 6px 0 0; font-size: 14px; }
+  .gfx .on .stage .mob-adapt { margin: 4px 0 0; padding: 12px 14px; font-size: 14px; }
+  /* Without: the name and line on top, the scribble underneath so it never sits on the text. */
+  .gfx .tile .a { padding: 12px 12px 38px; }
+  .gfx .tile .a b { font-size: 13.5px; line-height: 1.25; }
+  .gfx .tile .a span { margin-top: 4px; font-size: 12px; line-height: 1.4; }
+  .gfx .tile .a .n0, .gfx .tile .a .n1, .gfx .tile .a .n5 { right: 10px; bottom: 9px; font-size: 19px; }
+  .gfx .tile .x-mark { right: 8px; bottom: 6px; width: 30px; height: 30px; }
+  .gfx .tile .strike { left: 10px; top: 36px; width: 82%; height: 12px; }
+  /* With: a smaller drawing, then the name and line. */
+  .gfx .tile .b { padding: 8px 8px 12px; gap: 2px; }
+  .gfx .tile .b strong { font-size: 13.5px; line-height: 1.25; margin: 6px 4px 0; }
+  .gfx .tile .b em { font-size: 12px; line-height: 1.4; margin: 0 4px; }
+  .gfx .il { height: 96px; zoom: .74; border-radius: 12px; }
+  .gfx .il.stack .q1 { width: 84%; } .gfx .il.stack .q2 { width: 78%; } .gfx .il.stack .q3 { width: 72%; }
+  .gfx .il.stack .q1 i { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .gfx .il.stack .plus { top: 3px; right: 4px; z-index: 1; }
+  .gfx .il.chat p { max-width: 100%; }
+  .gfx .il.bars div { grid-template-columns: 86px 1fr 30px; }
+  .gfx .ctas2 { margin-top: 22px; gap: 10px; }
+  .gfx .ctas2 .try { min-height: 54px; }
+  /* The ladder's middle words stay on one line. */
+  .gfx .lad div { gap: 10px; padding: 9px 12px; font-size: 13px; }
+  .gfx .lad .s { min-width: 70px; font-size: 12px; letter-spacing: .04em; }
+  /* The comparison only shows two columns at a time, so say it scrolls. */
+  .gfx .cmp-hint { display: block; margin: 18px 0 -28px; text-align: right; font-size: 13px; font-weight: 700; color: var(--muted); }
+  /* Pricing buttons side by side, filling the row. */
+  .gfx .pcta { flex-wrap: nowrap; }
+  .gfx .pcta .btn { flex: 1; justify-content: center; }
+}
+@media (max-width: 360px) {
+  .gfx .stage { gap: 8px; }
+  .gfx .il { zoom: .68; }
+}
 `
 
 /** The four parts of gradefarm. in the hero: what they replace, and the real screen. */
@@ -474,6 +518,7 @@ function Compare() {
     <section className="sec" id="compare" aria-labelledby="gfx-cmp-h">
       <div className="in">
         <h2 className="h2" id="gfx-cmp-h">Your textbook has the questions. Your tutor has an hour a week. <span className="wm cmpwm">grade<span>farm</span></span> is the rest.</h2>
+        <p className="cmp-hint" aria-hidden="true">Swipe to compare →</p>
         <div className="card cmp">
           <table>
             <thead><tr><th><span className="lp-sr">What</span></th><th>Textbook</th><th>Past papers</th><th>ChatGPT</th><th>Tutor</th><th className="gf"><Wordmark size={15} /></th></tr></thead>
