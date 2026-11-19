@@ -89,7 +89,7 @@ export const SITE_CSS = `
 .lp-nav-links button { border: none; background: none; padding: 8px 0; font-size: 15.5px; font-weight: 600; line-height: 1; color: var(--lp-muted); cursor: pointer; }
 .lp-nav-links button:hover, .lp-nav-links button[aria-current="page"] { color: var(--lp-ink); }
 .lp-nav-right { margin-left: auto; display: flex; align-items: center; gap: 18px; }
-.lp-nav-login { border: none; background: none; padding: 10px 2px; font-size: 15px; font-weight: 700; line-height: 1; color: var(--lp-ink); cursor: pointer; white-space: nowrap; }
+.lp-nav-login { position: relative; top: -1px; border: none; background: none; padding: 10px 2px; font-size: 15px; font-weight: 700; line-height: 1; color: var(--lp-ink); cursor: pointer; white-space: nowrap; }
 .lp-nav-login:hover { text-decoration: underline; text-decoration-color: var(--lp-gold); text-decoration-thickness: 2px; text-underline-offset: 5px; }
 /* Start: a gold pill, in capitals. */
 .lp-nav-start { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 46px; padding: 0 22px 0 24px; border: none; border-radius: 999px; background: var(--lp-gold); color: ${NAVY}; font-size: 13.5px; font-weight: 800; line-height: 1; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; cursor: pointer; box-shadow: 0 6px 16px -8px rgba(224, 169, 31, 0.9); transition: transform 0.15s, box-shadow 0.15s, filter 0.15s; }
@@ -100,6 +100,8 @@ export const SITE_CSS = `
 .lp-menu-btn { display: none; align-items: center; gap: 10px; height: 42px; padding: 0 4px 0 10px; margin-right: -4px; border: none; background: none; color: var(--lp-ink); font-size: 15px; font-weight: 700; line-height: 1; cursor: pointer; border-radius: 999px; }
 .lp-menu-btn:hover { background: color-mix(in srgb, var(--lp-ink) 6%, transparent); }
 /* Two lines that cross into an X while the menu is open. */
+/* Plus Jakarta Sans sits its letters a little below the middle of their box; lift the word so it lines up with the two lines. */
+.lp-menu-word { position: relative; top: -1px; }
 .lp-menu-lines { position: relative; width: 22px; height: 10px; flex-shrink: 0; }
 .lp-menu-lines::before, .lp-menu-lines::after { content: ""; position: absolute; left: 0; right: 0; height: 2px; border-radius: 2px; background: currentColor; transition: transform 0.2s, top 0.2s; }
 .lp-menu-lines::before { top: 0; } .lp-menu-lines::after { top: 8px; }
@@ -194,7 +196,7 @@ export function SiteNav({ onSignIn, onStart, onLogo, links, overlay = false }) {
           <button type="button" className="lp-nav-login" onClick={onSignIn}>Log in</button>
           <button type="button" className="lp-nav-start" onClick={onStart}>Start GradeFarming<ArrowRight size={16} strokeWidth={2.75} aria-hidden="true" /></button>
           <button type="button" className="lp-menu-btn" onClick={() => setMenuOpen(o => !o)} aria-expanded={menuOpen} aria-controls="lp-menu">
-            <span className="lp-menu-lines" aria-hidden="true" />{menuOpen ? 'Close' : 'Menu'}
+            <span className="lp-menu-lines" aria-hidden="true" /><span className="lp-menu-word">{menuOpen ? 'Close' : 'Menu'}</span>
           </button>
         </div>
       </div>
