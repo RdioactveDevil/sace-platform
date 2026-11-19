@@ -73,22 +73,33 @@ export const SITE_CSS = `
 .lp-card { background: var(--lp-card); border: 1px solid var(--lp-line); border-radius: 14px; }
 .lp-muted { color: var(--lp-muted); }
 /* nav */
-/* Clear at the top of the page; once scrolled, semi-translucent with the page blurred behind it. */
+/* A tall bar (like eMedici's) with everything centred in it. Clear at the top of the page;
+   once scrolled, semi-translucent with the page blurred behind it. It never changes height. */
 .lp-nav { position: sticky; top: 0; z-index: 50; background: transparent; transition: background 0.2s, box-shadow 0.2s; }
-.lp-nav[data-scrolled="true"] { background: var(--lp-win); box-shadow: 0 1px 0 var(--lp-line), 0 2px 10px rgba(7, 8, 18, 0.08); }
+/* Over a page's hero (overlay), the bar takes no space of its own, so the hero runs up behind it. */
+.lp-nav.overlay { margin-bottom: calc(-1 * var(--lp-header)); }
+.lp-nav[data-scrolled="true"] { background: var(--lp-win); box-shadow: 0 1px 0 var(--lp-line); }
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .lp-nav[data-scrolled="true"] { background: color-mix(in srgb, var(--lp-win) 60%, transparent); -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px); }
-  .lp-nav[data-open="true"] { background: color-mix(in srgb, var(--lp-win) 94%, transparent); }
+  .lp-nav[data-scrolled="true"] { background: color-mix(in srgb, var(--lp-win) 72%, transparent); -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px); box-shadow: 0 1px 0 color-mix(in srgb, var(--lp-line) 85%, transparent); }
+  .lp-nav[data-open="true"] { background: color-mix(in srgb, var(--lp-win) 95%, transparent); }
 }
-.lp-nav .lp-in { display: flex; align-items: center; gap: 24px; height: var(--lp-header); }
-.lp-nav-links { display: flex; gap: 22px; }
-.lp-nav-links button { border: none; background: none; padding: 4px 0; font-size: 15.5px; font-weight: 600; color: var(--lp-muted); cursor: pointer; }
-.lp-nav-links button:hover { color: var(--lp-ink); }
-.lp-nav-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
-.lp-nav-login { border: none; background: none; padding: 8px 6px; font-size: 15px; font-weight: 700; color: var(--lp-ink); cursor: pointer; white-space: nowrap; }
-.lp-nav-login:hover { text-decoration: underline; text-decoration-color: var(--lp-gold); text-decoration-thickness: 2px; text-underline-offset: 4px; }
-.lp-nav .lp-btn.sm { min-height: 38px; padding: 0 15px; font-size: 14.5px; }
-.lp-menu-btn { display: none; }
+.lp-nav .lp-in { position: relative; display: flex; align-items: center; gap: 16px; height: var(--lp-header); }
+.lp-nav .lp-wordmark { display: flex; align-items: center; height: 40px; }
+/* The links sit in the middle of the bar, whatever is either side of them. */
+.lp-nav-links { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; align-items: center; gap: 34px; }
+.lp-nav-links button { border: none; background: none; padding: 8px 0; font-size: 15.5px; font-weight: 600; line-height: 1; color: var(--lp-muted); cursor: pointer; }
+.lp-nav-links button:hover, .lp-nav-links button[aria-current="page"] { color: var(--lp-ink); }
+.lp-nav-right { margin-left: auto; display: flex; align-items: center; gap: 18px; }
+.lp-nav-login { border: none; background: none; padding: 10px 2px; font-size: 15px; font-weight: 700; line-height: 1; color: var(--lp-ink); cursor: pointer; white-space: nowrap; }
+.lp-nav-login:hover { text-decoration: underline; text-decoration-color: var(--lp-gold); text-decoration-thickness: 2px; text-underline-offset: 5px; }
+/* Start: a gold pill, in capitals. */
+.lp-nav-start { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 46px; padding: 0 22px 0 24px; border: none; border-radius: 999px; background: var(--lp-gold); color: ${NAVY}; font-size: 13.5px; font-weight: 800; line-height: 1; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; cursor: pointer; box-shadow: 0 6px 16px -8px rgba(224, 169, 31, 0.9); transition: transform 0.15s, box-shadow 0.15s, filter 0.15s; }
+.lp-nav-start:hover { filter: brightness(1.04); transform: translateY(-1px); box-shadow: 0 10px 20px -8px rgba(224, 169, 31, 0.95); }
+.lp-nav-start:active { transform: none; }
+.lp-nav-start svg { transition: transform 0.15s; }
+.lp-nav-start:hover svg { transform: translateX(2px); }
+.lp-menu-btn { display: none; width: 42px; height: 42px; margin-right: -9px; border: none; background: none; color: var(--lp-ink); place-items: center; cursor: pointer; border-radius: 10px; }
+.lp-menu-btn:hover { background: color-mix(in srgb, var(--lp-ink) 6%, transparent); }
 .lp-nav-start .short { display: none; }
 .lp-menu { border-top: 1px solid var(--lp-line); padding: 6px 0 12px; }
 .lp-menu button { display: block; width: 100%; text-align: left; border: none; background: none; padding: 12px 0; font-size: 15px; font-weight: 700; color: var(--lp-ink); cursor: pointer; border-bottom: 1px solid var(--lp-line); }
@@ -116,13 +127,23 @@ export const SITE_CSS = `
 .lp-foot-links button:hover { color: var(--lp-ink); }
 .lp-copy { margin-left: auto; }
 @media (prefers-reduced-motion: reduce) { .lp-btn.cta, .lp-btn.cta::after, .lp-btn.cta svg { animation: none; transition: none; } }
-@media (max-width: 760px) {
+/* Below a laptop width the centred links move into the menu. */
+@media (max-width: 960px) {
   .lp-nav-links { display: none; }
-  .lp-nav-login { display: none; }
   .lp-menu-btn { display: grid; }
+}
+@media (max-width: 760px) {
+  .lp-nav-right { gap: 6px; }
+  .lp-nav .lp-wordmark { font-size: 24px !important; }
+  .lp-nav-login { padding: 10px 8px; font-size: 14.5px; }
+  .lp-nav-start { height: 40px; padding: 0 16px; font-size: 12.5px; }
+  .lp-nav-start svg { display: none; }
   /* The full "Start GradeFarming" doesn't fit beside the logo on a phone. */
   .lp-nav-start .long { display: none; }
   .lp-nav-start .short { display: inline; }
+}
+@media (max-width: 379px) { .lp-nav-login { display: none; } }
+@media (max-width: 760px) {
   .lp-copy { margin-left: 0; }
 }
 `
@@ -146,7 +167,7 @@ export function Wordmark({ size = 28, onClick, label = 'gradefarm. home' }) {
  * The top nav: wordmark, `links` ([label, onClick, current?]), Log in,
  * Start GradeFarming, and a menu on phones. Light or dark follows the device.
  */
-export function SiteNav({ onSignIn, onStart, onLogo, links }) {
+export function SiteNav({ onSignIn, onStart, onLogo, links, overlay = false }) {
   const [scrolled, setScrolled] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   useEffect(() => {
@@ -163,7 +184,7 @@ export function SiteNav({ onSignIn, onStart, onLogo, links }) {
   }, [menuOpen])
   const pick = (fn) => () => { setMenuOpen(false); fn() }
   return (
-    <nav className="lp-nav" data-scrolled={scrolled || menuOpen} data-open={menuOpen} aria-label="Main">
+    <nav className={`lp-nav${overlay ? ' overlay' : ''}`} data-scrolled={scrolled || menuOpen} data-open={menuOpen} aria-label="Main">
       <div className="lp-in">
         <Wordmark size={26} onClick={onLogo} />
         <div className="lp-nav-links">
@@ -171,10 +192,10 @@ export function SiteNav({ onSignIn, onStart, onLogo, links }) {
         </div>
         <div className="lp-nav-right">
           <button type="button" className="lp-nav-login" onClick={onSignIn}>Log in</button>
-          <button type="button" className="lp-btn sm gold lp-nav-start" onClick={onStart} aria-label="Start GradeFarming"><span className="long">Start GradeFarming</span><span className="short" aria-hidden="true">Start</span></button>
-          <button type="button" className="lp-icon-btn lp-menu-btn" onClick={() => setMenuOpen(o => !o)}
+          <button type="button" className="lp-nav-start" onClick={onStart} aria-label="Start GradeFarming"><span className="long">Start GradeFarming</span><span className="short" aria-hidden="true">Start</span><ArrowRight size={16} strokeWidth={2.75} aria-hidden="true" /></button>
+          <button type="button" className="lp-menu-btn" onClick={() => setMenuOpen(o => !o)}
             aria-expanded={menuOpen} aria-controls="lp-menu" aria-label={menuOpen ? 'Close menu' : 'Open menu'}>
-            {menuOpen ? <X size={16} aria-hidden="true" /> : <Menu size={16} aria-hidden="true" />}
+            {menuOpen ? <X size={22} aria-hidden="true" /> : <Menu size={22} aria-hidden="true" />}
           </button>
         </div>
       </div>

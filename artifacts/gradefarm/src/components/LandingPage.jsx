@@ -28,6 +28,8 @@ import { FEATURE_SLUGS } from './site/features'
 
 const EXTRA_CSS = `
 .gfx .sec { scroll-margin-top: var(--lp-header, 72px); }
+/* The header sits over the hero, so the hero starts below it. */
+.gfx .hero { padding-top: calc(var(--lp-header) + 40px); }
 .gfx .hc { color: inherit; text-decoration: none; }
 .gfx .wq .mt > span { white-space: nowrap !important; }
 /* Hero: six parts and three bits of clutter, messy without gradefarm.; tidy in a 3 x 2 grid with it. */
@@ -210,7 +212,7 @@ const EXTRA_CSS = `
 
 /* ── Phones ── */
 @media (max-width: 760px) {
-  .gfx .hero { padding: 36px 0 52px; }
+  .gfx .hero { padding: calc(var(--lp-header) + 20px) 0 52px; }
   .gfx.solo .hg { gap: 30px; }
   /* Hero cards: two narrow columns instead of one full-width stack, so all six fit in about a screen. */
   .gfx .stage { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: stretch; }
@@ -633,7 +635,7 @@ export default function LandingPage({ theme = 'light', onSignIn }) {
   return (
     <div className={`lp gfx solo${dark ? ' dark' : ''}`} style={{ ...themeVars(theme), colorScheme: dark ? 'dark' : 'light' }}>
       <style>{SITE_FONTS + SITE_CSS + HOME_CSS + EXTRA_CSS}</style>
-      <SiteNav onSignIn={onSignIn} onStart={start}
+      <SiteNav overlay onSignIn={onSignIn} onStart={start}
         onLogo={() => window.scrollTo({ top: 0, behavior: 'smooth' })} links={NAV} />
 
       <main>
