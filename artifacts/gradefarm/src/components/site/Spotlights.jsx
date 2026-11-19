@@ -62,10 +62,31 @@ export const SPOT_CSS = `
 .gfx .spot .in { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 40px; align-items: center; }
 .gfx .spot.flip .copy { order: 2; }
 .gfx .spot .copy { display: flex; flex-direction: column; align-items: flex-start; gap: 18px; max-width: 34em; }
-.gfx .eyebrow { font-size: 12.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--goldt); }
 .gfx .spot h2 { margin: 0; font-size: clamp(32px, 4.2vw, 54px); font-weight: 800; line-height: 1.05; letter-spacing: -.035em; text-wrap: balance; }
 .gfx .spot .lead { margin: 0; font-size: clamp(16.5px, 1.5vw, 19px); color: var(--ink2); line-height: 1.6; }
 .gfx .spot .spot-stage { position: relative; min-height: 520px; display: flex; align-items: center; justify-content: center; }
+/* "Because ten minutes on the bus does count.": a handwritten aside in gold, underlined by hand. */
+.gfx .spot .bus { position: relative; margin: 6px 0 0; font-family: 'Caveat', 'Segoe Print', cursive; font-weight: 700; font-size: clamp(27px, 2.6vw, 34px); line-height: 1.1; color: var(--goldt); transform: rotate(-2deg); transform-origin: left center; }
+.gfx .spot .bus em { font-style: normal; position: relative; }
+.gfx .spot .bus svg { display: block; width: 100%; max-width: 420px; height: 12px; margin-top: 4px; overflow: visible; }
+.gfx .spot .bus path { fill: none; stroke: var(--gold); stroke-width: 3; stroke-linecap: round; }
+/* Chemistry drifting round the phone: small cards with a structure, a ring, an equilibrium and an equation. */
+.gfx .chem-f { position: absolute; z-index: 4; border-radius: 14px; background: var(--card); color: var(--ink); border: 1px solid var(--line); box-shadow: 0 24px 50px -24px rgba(8,10,30,.45); padding: 10px 12px; font-size: 12px; animation: gfx-bob 7s ease-in-out infinite; }
+.gfx .chem-f svg { display: block; }
+.gfx .chem-f small { display: block; margin-top: 4px; font-size: 10.5px; font-weight: 700; color: var(--muted); letter-spacing: .02em; }
+.gfx .chem-f .eq { font-family: 'KaTeX_Main', 'Times New Roman', serif; font-size: 14px; white-space: nowrap; }
+.gfx .chem-f .frac { display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle; margin-left: 4px; }
+.gfx .chem-f .frac span + span { border-top: 1.5px solid currentColor; padding-top: 2px; margin-top: 2px; }
+.gfx .chem-f .dh { color: var(--goldt); font-weight: 700; }
+.gfx .chem-f .bond { fill: none; stroke: var(--ink); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.gfx .chem-f .atom { fill: var(--ink); font-family: 'Plus Jakarta Sans', sans-serif; font-size: 12px; font-weight: 700; }
+.gfx .chem-f .atom.o { fill: var(--bad); }
+.gfx .cf1 { left: 0; top: 4%; animation-delay: -1s; }
+.gfx .cf2 { right: 2%; top: 0; animation-duration: 8s; animation-delay: -3s; }
+.gfx .cf3 { left: 2%; bottom: 6%; animation-duration: 7.5s; animation-delay: -2s; }
+.gfx .cf4 { right: 0; bottom: 2%; animation-duration: 6.5s; animation-delay: -4s; }
+@media (max-width: 1100px) { .gfx .cf4 { display: none; } }
+@media (max-width: 560px) { .gfx .cf3 { display: none; } }
 @media (max-width: 900px) { .gfx .spot .in { grid-template-columns: minmax(0, 1fr); } .gfx .spot.flip .copy { order: 0; } .gfx .spot .spot-stage { min-height: 460px; } }
 @media (max-width: 560px) { .gfx .spot .spot-stage { zoom: .66; min-height: 520px; } }
 
@@ -150,9 +171,9 @@ export function SpotStudy({ onInside }) {
     <section className="sec spot" id="anywhere" aria-labelledby="gfx-spot1-h">
       <div className="in">
         <div className="copy">
-          <span className="eyebrow">Ten minutes on the bus counts</span>
           <h2 id="gfx-spot1-h">Study properly, wherever you are.</h2>
           <p className="lead">Real exam-style questions with graphs, diagrams and full working, built for a phone screen. Pick up where you left off on any device.</p>
+          <p className="bus">Because ten minutes on the bus <em>does</em> count.<svg viewBox="0 0 300 14" preserveAspectRatio="none" aria-hidden="true"><path d="M3 9 C 60 3, 120 12, 180 6 S 260 4, 297 8" /></svg></p>
         </div>
         <div className="spot-stage">
           <div className="tiltwrap"><div className="tilt" ref={tilt}>
@@ -185,6 +206,36 @@ export function SpotStudy({ onInside }) {
   )
 }
 
+/** Chemistry drifting round the phone in the Chemistry section (decoration; the question on the phone carries the content). */
+function ChemFloats() {
+  return (
+    <>
+      <div className="chem-f cf1" aria-hidden="true">
+        <svg width="124" height="66" viewBox="0 0 124 66">
+          <path className="bond" d="M10 52 L34 38 L57 51 M69 51 L90 38 L114 52" />
+          <path className="bond" d="M31 38 V14 M37 38 V14" />
+          <text className="atom o" x="29.5" y="11">O</text><text className="atom o" x="59" y="56">O</text>
+        </svg>
+        <small>ethyl ethanoate</small>
+      </div>
+      <div className="chem-f cf2" aria-hidden="true">
+        <svg width="78" height="78" viewBox="0 0 78 78">
+          <path className="bond" d="M39 6 L68 22.5 L68 55.5 L39 72 L10 55.5 L10 22.5 Z" />
+          <circle cx="39" cy="39" r="17" fill="none" stroke="var(--gold)" strokeWidth="2" />
+        </svg>
+        <small>benzene</small>
+      </div>
+      <div className="chem-f cf3" aria-hidden="true">
+        <span className="eq"><i>K</i><sub>c</sub> =<span className="frac"><span>[CH<sub>3</sub>COOC<sub>2</sub>H<sub>5</sub>][H<sub>2</sub>O]</span><span>[CH<sub>3</sub>COOH][C<sub>2</sub>H<sub>5</sub>OH]</span></span></span>
+      </div>
+      <div className="chem-f cf4" aria-hidden="true">
+        <span className="eq">C<sub>2</sub>H<sub>5</sub>OH(l) + 3O<sub>2</sub>(g) → 2CO<sub>2</sub>(g) + 3H<sub>2</sub>O(l)</span>
+        <small><span className="dh">ΔH = −1367 kJ mol<sup>−1</sup></span></small>
+      </div>
+    </>
+  )
+}
+
 export function SpotChem() {
   const tilt = useTilt()
   return (
@@ -194,7 +245,8 @@ export function SpotChem() {
           <h2 id="gfx-spot2-h">Structures, equations and graphs, not just words.</h2>
           <p className="lead">Organic structures, balanced equations with states, titration curves and data tables, drawn the way they appear in your exam.</p>
         </div>
-        <div className="spot-stage">
+        <div className="spot-stage chem">
+          <ChemFloats />
           <div className="tiltwrap"><div className="tilt r" ref={tilt}>
             <Phone label="A Chemistry question with a structure and an equation, on a phone">
               <div className="app" aria-hidden="true">

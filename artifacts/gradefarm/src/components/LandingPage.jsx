@@ -29,6 +29,8 @@ import { SpotStudy, SpotChem, ResultsFigure, SPOT_CSS } from './site/Spotlights'
 
 const EXTRA_CSS = `
 .gfx .sec { scroll-margin-top: var(--lp-header, 72px); }
+/* "gradefarm is the rest." on its own line, after a gap. */
+.gfx .cmp-rest { display: block; margin-top: .55em; }
 /* Dark mode: the Without / With switch uses the site's inverse colours (a light pill with dark text) for
    Without, and gold for With, so both positions read against the dark pill. The Without cards sit a
    shade lighter than the page so they lift off it. */
@@ -547,7 +549,7 @@ function Compare() {
   return (
     <section className="sec" id="compare" aria-labelledby="gfx-cmp-h">
       <div className="in">
-        <h2 className="h2" id="gfx-cmp-h">Your textbook has the questions. Your tutor has an hour a week. <span className="wm cmpwm">grade<span>farm</span></span> is the rest.</h2>
+        <h2 className="h2" id="gfx-cmp-h">Your textbook has the questions. Your tutor has an hour a week.<span className="cmp-rest"><span className="wm cmpwm">grade<span>farm</span></span> is the rest.</span></h2>
         <p className="cmp-hint" aria-hidden="true">Swipe to compare →</p>
         <div className="card cmp">
           <table>
