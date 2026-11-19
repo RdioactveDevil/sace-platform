@@ -36,7 +36,7 @@ import {
 } from '../lib/db'
 import { THEMES } from '../lib/theme'
 import { getTopicCodeByName, resolveManagedSubjectName } from '../lib/adminTopics'
-import { withTimeout, normalizeVariantRecord, generateRemediationVariantsViaAI, runEnterRemediation, runGenerateRemediationQueue, runLoadNextRemediationQuestion, REMEDIATION_DB_TIMEOUT_MS, selectBankVariants, bankOnlyComeback } from '../lib/remediation'
+import { withTimeout, normalizeVariantRecord, generateRemediationVariantsViaAI, runEnterRemediation, runGenerateRemediationQueue, runLoadNextRemediationQuestion, REMEDIATION_DB_TIMEOUT_MS } from '../lib/remediation'
 import MathText from './MathText'
 import SharedInfoBox from './SharedInfoBox'
 import GraphView from './GraphView'
@@ -1405,10 +1405,7 @@ export default function QuizScreen({
 
     // Reading-passage questions skip remediation: a generated "similar
     // question" would have no passage to answer from.
-    // A missed short answer is practised with short answers from the bank
-    // (generated ones are multiple choice), so it needs one to practise with.
     const remediate = !isCorrect && !q.passage_id && remediationAllowed
-      && (!bankOnlyComeback(q) || selectBankVariants(q, unseenBankQuestions).length > 0)
     if (remediate) enterRemediationStateSync(shown)
 
     setStruggleMap(prev => {
