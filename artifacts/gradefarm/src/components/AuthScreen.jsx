@@ -131,8 +131,8 @@ export default function AuthScreen({ onAuth, onBack, theme = 'dark', onToggleThe
   const subtitle = invite?.invitedBy && mode !== 'reset'
     ? `${mode === 'signin' ? 'Log in' : 'Create an account'} to accept ${invite.invitedBy}'s invite.`
     : mode === 'reset' ? "We'll email you a link to choose a new one."
-    : mode === 'signup' && asParent ? "You sign in with your email, and we send you their progress each week. Their first subject is free."
-    : mode === 'signup' ? 'Your first subject is free.'
+    : mode === 'signup' && asParent ? "You sign in with your email, and we send you their progress each week."
+    : mode === 'signup' ? null
     : 'Log in to pick up where you left off.'
   const emailLabel = mode === 'signup' && asParent ? 'Your email' : 'Email'
   const submitLabel = loading
@@ -226,7 +226,7 @@ export default function AuthScreen({ onAuth, onBack, theme = 'dark', onToggleThe
               <input id="auth-email" className="af-inp" type="email" autoComplete="email" inputMode="email" autoCapitalize="none" spellCheck={false} value={email} onChange={e => setEmail(e.target.value)} />
             </Field>
             {mode !== 'reset' && (
-              <Field id="auth-pass" label="Password" hint={mode === 'signup' ? 'At least 6 characters.' : null} theme={theme}>
+              <Field id="auth-pass" label="Password" theme={theme}>
                 <PasswordInput id="auth-pass" theme={theme} value={pass} onChange={e => setPass(e.target.value)} autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} />
               </Field>
             )}

@@ -1928,7 +1928,7 @@ function AppInner() {
           : !profile.app_tutorial_completed_at && selectedSubject
             ? <Navigate to={'/question-bank'} replace />
           : <Navigate to={profile.is_tutor ? '/tutor' : '/question-bank'} replace />
-          : <AuthScreen {...commonProps} onAuth={(isNewUser) => navigate(isNewUser ? '/onboarding' : '/home', { replace: true })} onBack={() => navigate('/home')} />
+          : <AuthScreen theme={siteTheme} onAuth={(isNewUser) => navigate(isNewUser ? '/onboarding' : '/home', { replace: true })} onBack={() => navigate('/home')} />
       } />
 
       <Route path="/auth/tutor" element={
