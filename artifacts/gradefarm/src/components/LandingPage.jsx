@@ -29,6 +29,16 @@ import { SpotStudy, SpotChem, ResultsFigure, SPOT_CSS } from './site/Spotlights'
 
 const EXTRA_CSS = `
 .gfx .sec { scroll-margin-top: var(--lp-header, 72px); }
+/* Dark mode: the Without / With switch uses the site's inverse colours (a light pill with dark text) for
+   Without, and gold for With, so both positions read against the dark pill. The Without cards sit a
+   shade lighter than the page so they lift off it. */
+.gfx.dark .sw { background: #232328; border-color: #34343c; }
+.gfx.dark .sw .thumb { background: var(--onbg); }
+.gfx.dark .sw.on .thumb { background: var(--gold); }
+.gfx.dark .sw button { color: #c9c9d1; }
+.gfx.dark .sw button[aria-pressed="true"] { color: var(--onfg); }
+.gfx.dark .sw.on button[aria-pressed="true"] { color: #0c1037; }
+.gfx.dark .tile:not(.on *) { background: #232328; border-color: #3a3a42; }
 /* One continuous page: the background (CalmBackground, fixed) shows through every section, which are split
    by thin lines that stop at the content's width. The footer stays solid. */
 .gfx main { position: relative; z-index: 1; }
@@ -624,7 +634,7 @@ export default function LandingPage({ theme = 'light', onSignIn }) {
     <div className={`lp gfx solo${dark ? ' dark' : ''}`} style={{ ...themeVars(theme), colorScheme: dark ? 'dark' : 'light' }}>
       <style>{SITE_FONTS + SITE_CSS + HOME_CSS + SPOT_CSS + EXTRA_CSS}</style>
       {/* One background for the whole page (the hero's: drifting gold glows, slow waves, grain), fixed behind every section. */}
-      <CalmBackground theme={theme} />
+      <CalmBackground theme={theme} glow={dark ? 1.8 : 1} />
       <SiteNav overlay onSignIn={onSignIn} onStart={start}
         onLogo={() => window.scrollTo({ top: 0, behavior: 'smooth' })} links={NAV} />
 

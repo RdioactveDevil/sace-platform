@@ -34,7 +34,7 @@ const WAVES = [[0.72, 34, 0.0042, 0], [0.84, 26, 0.0055, 2.1], [0.58, 22, 0.0035
 // Each wave is three strokes, wide and faint to narrow, so it reads as a soft band.
 const STROKES = [[150, 0.035], [80, 0.04], [26, 0.05]]
 
-export function drawCalm(ctx, w, h, t, { gold, dark, grain, refH }) {
+export function drawCalm(ctx, w, h, t, { gold, dark, grain, refH, glow = 1 }) {
   ctx.clearRect(0, 0, w, h)
   // Glows and waves are placed against refH when given (a contained background
   // keeps its layout when its box grows), else against the canvas height.
@@ -47,7 +47,7 @@ export function drawCalm(ctx, w, h, t, { gold, dark, grain, refH }) {
   ]
   for (const [x, y, r, al] of spots) {
     const gr = ctx.createRadialGradient(x, y, 0, x, y, r)
-    gr.addColorStop(0, rgba(gold, al))
+    gr.addColorStop(0, rgba(gold, Math.min(1, al * glow)))
     gr.addColorStop(1, rgba(gold, 0))
     ctx.fillStyle = gr
     ctx.fillRect(0, 0, w, h)
@@ -57,7 +57,7 @@ export function drawCalm(ctx, w, h, t, { gold, dark, grain, refH }) {
   for (const [yb, amp, f, ph] of WAVES) {
     const y0 = H * yb
     for (const [lw, al] of STROKES) {
-      ctx.strokeStyle = rgba(gold, al * (dark ? 0.8 : 1))
+      ctx.strokeStyle = rgba(gold, Math.min(1, al * (dark ? 0.8 : 1) * glow))
       ctx.lineWidth = lw
       ctx.beginPath()
       for (let x = -40; x <= w + 40; x += 12) {
@@ -76,9 +76,9 @@ export function drawCalm(ctx, w, h, t, { gold, dark, grain, refH }) {
 
 /**
  * `contained`: fill the positioned parent instead of the window (the homepage
- * hero), and only animate while it's on screen.
+ * hero), and only animate while it's on screen. `glow` scales how strong the glows and waves are.
  */
-export default function CalmBackground({ theme = 'dark', contained = false }) {
+export default function CalmBackground({ theme = 'dark', contained = false, glow = 1 }) {
   const ref = useRef(null)
 
   useEffect(() => {
@@ -87,7 +87,7 @@ export default function CalmBackground({ theme = 'dark', contained = false }) {
     const ctx = canvas.getContext('2d')
     if (!ctx) return undefined
     const t = THEMES[theme] || THEMES.dark
-    const opts = { gold: t.accent, dark: theme === 'dark', grain: makeGrain() }
+    const opts = { gold: t.accent, dark: theme === 'dark', grain: makeGrain(), glow }
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)')
     let w = 0, h = 0, raf = 0, last = 0, refW = 0
 
@@ -135,7 +135,7 @@ export default function CalmBackground({ theme = 'dark', contained = false }) {
       document.removeEventListener('visibilitychange', start)
       reduce?.removeEventListener?.('change', start)
     }
-  }, [theme, contained])
+  }, [theme, contained, glow])
 
   return (
     <canvas ref={ref} aria-hidden="true"
