@@ -11,6 +11,9 @@ import SegmentedToggle from './SegmentedToggle'
 // Which of Google and Apple to offer (lib/oauth.js): set once each is switched on in Supabase.
 const PROVIDERS = enabledProviders(import.meta.env?.VITE_OAUTH_PROVIDERS)
 
+// Visually hidden, still read by screen readers.
+const SR_ONLY = { position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap', border: 0 }
+
 // Grades drifting slowly behind the headline: [text, where, size px, tilt deg, seconds, delay s].
 const FLOATERS = [
   ['A+', { top: -78, left: -18 }, 68, -10, 19, 0],
@@ -48,7 +51,10 @@ function AppleMark({ color }) {
 /**
  * Sign in, create an account (as a student or for a child), or reset a
  * password: what GradeFarm does on one side, the form in a card on the other,
- * on the same calm background as onboarding. Google and Apple sit above the
+ * on the same calm background as onboarding. A Log in / Sign up switch sits at
+ * the top of the card. On a phone the logo and the line about the exam take the
+ * top of the screen, with the grades drifting behind, and the card becomes a
+ * sheet that slides up from the bottom. Google and Apple sit above the
  * email form when they're switched on (lib/oauth.js).
  */
 export default function AuthScreen({ onAuth, onBack, theme = 'dark', onToggleTheme }) {
@@ -132,8 +138,7 @@ export default function AuthScreen({ onAuth, onBack, theme = 'dark', onToggleThe
     ? `${mode === 'signin' ? 'Log in' : 'Create an account'} to accept ${invite.invitedBy}'s invite.`
     : mode === 'reset' ? "We'll email you a link to choose a new one."
     : mode === 'signup' && asParent ? "You sign in with your email, and we send you their progress each week."
-    : mode === 'signup' ? null
-    : 'Log in to pick up where you left off.'
+    : null
   const emailLabel = mode === 'signup' && asParent ? 'Your email' : 'Email'
   const submitLabel = loading
     ? (mode === 'signin' ? 'Signing in…' : mode === 'reset' ? 'Sending…' : 'Creating your account…')
@@ -143,7 +148,7 @@ export default function AuthScreen({ onAuth, onBack, theme = 'dark', onToggleThe
   const dark = theme === 'dark'
 
   return (
-    <AuthLayout theme={theme} onToggleTheme={onToggleTheme} onLogoClick={onBack} backdrop={<CalmBackground theme={theme} />}
+    <AuthLayout theme={theme} onToggleTheme={onToggleTheme} onLogoClick={onBack} backdrop={<CalmBackground theme={theme} />} mainClassName="au-main"
       right={onBack && <button type="button" className="af-link" onClick={onBack} style={{ ...linkStyle(t), fontWeight: 600, textDecorationColor: t.border, color: t.textMuted }}>Back to home</button>}>
       <style>{`
         .au-wrap { width: 100%; max-width: 1040px; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: clamp(32px, 6vw, 88px); }
@@ -160,13 +165,40 @@ export default function AuthScreen({ onAuth, onBack, theme = 'dark', onToggleThe
         .au-sso { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px; border-radius: 10px; font-family: ${FONT_B}; font-size: 14px; font-weight: 700; cursor: pointer; }
         .au-sso:disabled { opacity: 0.6; cursor: default; }
         @media (max-width: 860px) { .au-why { order: 2; gap: 18px; } .au-why h2 { font-size: 24px !important; } .au-float { display: none; } }
+        .au-brand, .au-handle { display: none; }
+        .au-brand { font-family: 'Sifonn Pro', ${FONT_B}; font-size: 42px; letter-spacing: 0.08em; line-height: 1; color: ${t.text}; white-space: nowrap; }
+        .au-brand span { color: ${dark ? '#f1be43' : '#e8ac1c'}; }
+        @keyframes auSheet { from { transform: translateY(48px); opacity: 0; } to { transform: none; opacity: 1; } }
+        /* Phones: the logo and the line at the top, the form in a sheet from the bottom. */
+        @media (max-width: 640px) {
+          .af-root .af-logo { display: none !important; }
+          .au-main { padding: 0 !important; align-items: stretch !important; justify-content: stretch !important; }
+          .au-wrap { flex: 1; flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 0; max-width: none; }
+          .au-why { order: 0; flex: 1 0 auto; max-width: none; min-height: 210px; align-items: center; justify-content: center; text-align: center; gap: 12px; padding: 4px 28px 30px; }
+          .au-why h2 { font-size: 22px !important; max-width: 15em; }
+          .au-why ul { display: none !important; }
+          .au-brand { display: block; }
+          .au-float { display: block; }
+          .au-f0 { top: 2% !important; left: 5% !important; bottom: auto !important; right: auto !important; font-size: 58px !important; }
+          .au-f1 { top: 12% !important; right: 6% !important; left: auto !important; bottom: auto !important; font-size: 36px !important; }
+          .au-f2 { bottom: 4% !important; left: 42% !important; top: auto !important; right: auto !important; font-size: 40px !important; }
+          .au-f3 { display: none; }
+          /* Sign up's longer form leaves less room at the top: one small grade, tucked in the corner. */
+          .au-up .au-f1, .au-up .au-f2 { display: none; }
+          .au-up .au-f0 { font-size: 38px !important; top: 0 !important; left: 4% !important; }
+          .au-card { flex: 0 0 auto; max-width: none; border-radius: 28px 28px 0 0 !important; border-left: 0 !important; border-right: 0 !important; border-bottom: 0 !important;
+            padding: 12px 20px max(24px, env(safe-area-inset-bottom, 0px)) !important; box-shadow: 0 -18px 40px -24px rgba(8,10,30,${dark ? 0.7 : 0.35}) !important; animation: auSheet 0.4s cubic-bezier(.2,.8,.2,1) both; }
+          .au-handle { display: block; width: 40px; height: 5px; border-radius: 3px; background: ${t.border}; margin: 0 auto 14px; }
+        }
+        @media (max-width: 640px) and (prefers-reduced-motion: reduce) { .au-card { animation: none; } }
       `}</style>
-      <div className="au-wrap">
+      <div className={`au-wrap${mode === 'signup' ? ' au-up' : ''}`}>
         <section className="au-why af-in" aria-label="What GradeFarm does">
-          {FLOATERS.map(([text, at, size, tilt, secs, delay]) => (
-            <span key={text} className="au-float" aria-hidden="true"
+          {FLOATERS.map(([text, at, size, tilt, secs, delay], i) => (
+            <span key={text} className={`au-float au-f${i}`} aria-hidden="true"
               style={{ ...at, fontSize: size, '--r': `${tilt}deg`, '--d': `${secs}s`, '--delay': `${delay}s` }}>{text}</span>
           ))}
+          <span className="au-brand" aria-hidden="true">grade<span>farm.</span></span>
           <h2 style={{ margin: 0, fontSize: 'clamp(30px, 3.6vw, 44px)', fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.1, color: t.text, textWrap: 'balance' }}>
             Study like you&rsquo;ve already seen the exam<span style={{ color: t.goldText }}>.</span>
           </h2>
@@ -183,8 +215,18 @@ export default function AuthScreen({ onAuth, onBack, theme = 'dark', onToggleThe
         </section>
 
         <div className="au-card af-in" style={{ width: '100%', background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: 18, padding: 'clamp(20px, 5vw, 28px)', boxSizing: 'border-box', boxShadow: dark ? 'none' : '0 20px 50px rgba(12,16,55,0.10)' }}>
-          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em', color: t.text, textAlign: 'center' }}>{title}</h1>
-          {subtitle && <p style={{ margin: '6px 0 0', fontSize: 14, color: t.textMuted, lineHeight: 1.55, textAlign: 'center' }}>{subtitle}</p>}
+          <i className="au-handle" aria-hidden="true" />
+          {/* Log in / Sign up switch; the heading stays for screen readers. A password reset keeps its own heading. */}
+          {mode === 'reset'
+            ? <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em', color: t.text, textAlign: 'center' }}>{title}</h1>
+            : (
+              <>
+                <h1 style={SR_ONLY}>{title}</h1>
+                <SegmentedToggle fill label="Log in or sign up" value={mode} onChange={switchMode}
+                  options={[['signin', 'Log in'], ['signup', 'Sign up']]} />
+              </>
+            )}
+          {subtitle && <p style={{ margin: '10px 0 0', fontSize: 14, color: t.textMuted, lineHeight: 1.55, textAlign: 'center' }}>{subtitle}</p>}
 
           <form onSubmit={submit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 18 }}>
             {mode === 'signup' && !invite && (
@@ -202,7 +244,7 @@ export default function AuthScreen({ onAuth, onBack, theme = 'dark', onToggleThe
                         ? { border: `1px solid ${dark ? '#ffffff' : '#000000'}`, background: dark ? '#ffffff' : '#000000', color: dark ? '#000000' : '#ffffff' }
                         : { border: `1px solid ${dark ? t.border : '#dadce0'}`, background: dark ? t.bgCard : '#ffffff', color: dark ? t.text : '#1f1f1f' }}>
                       {p.id === 'google' ? <GoogleMark /> : <AppleMark color={dark ? '#000000' : '#ffffff'} />}
-                      {leaving === p.id ? 'Opening…' : p.label}
+                      {leaving === p.id ? 'Opening…' : providers.length === 1 ? `Continue with ${p.label}` : p.label}
                     </button>
                   ))}
                 </div>
@@ -243,8 +285,6 @@ export default function AuthScreen({ onAuth, onBack, theme = 'dark', onToggleThe
           </form>
 
           <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center', fontSize: 13.5, color: t.textMuted, textAlign: 'center' }}>
-            {mode === 'signin' && <span>New here? <button type="button" className="af-link" onClick={() => switchMode('signup')} style={linkStyle(t)}>Create an account</button></span>}
-            {mode === 'signup' && <span>Have an account? <button type="button" className="af-link" onClick={() => switchMode('signin')} style={linkStyle(t)}>Log in</button></span>}
             {mode === 'reset' && <button type="button" className="af-link" onClick={() => switchMode('signin')} style={linkStyle(t)}>Back to sign in</button>}
             {mode === 'signup' && !asParent && !invite && (
               <span>Tutoring with us? <button type="button" className="af-link" onClick={() => navigate('/auth/tutor')} style={linkStyle(t)}>Apply as a tutor</button></span>
