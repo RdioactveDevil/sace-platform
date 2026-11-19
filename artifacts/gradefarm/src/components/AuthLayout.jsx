@@ -29,7 +29,7 @@ export function Logo({ onClick, theme = 'dark' }) {
  * switch on the right, then `children` centred (or from the top with
  * `align="top"`). `backdrop` is drawn behind it all (e.g. <CalmBackground />).
  */
-export function AuthLayout({ theme = 'dark', onToggleTheme, onLogoClick, right, center, align = 'center', backdrop, children }) {
+export function AuthLayout({ theme = 'dark', onToggleTheme, onLogoClick, right, center, align = 'center', backdrop, mainClassName, children }) {
   const t = THEMES[theme]
   // The page's own theme as the --t-* colour variables (as App sets them on the document), so pieces that
   // read them (the logo, SegmentedToggle) match this page even when it follows the device's light / dark
@@ -37,11 +37,12 @@ export function AuthLayout({ theme = 'dark', onToggleTheme, onLogoClick, right, 
   const vars = { '--ink-rgb': theme === 'dark' ? '255,255,255' : '12,16,55' }
   for (const [key, value] of Object.entries(t)) if (typeof value === 'string') vars[`--t-${key}`] = value
   return (
-    <div style={{ ...vars, minHeight: '100vh', display: 'flex', flexDirection: 'column', background: t.bg, color: t.text, fontFamily: FONT_B, colorScheme: theme === 'dark' ? 'dark' : 'light', position: 'relative', isolation: 'isolate' }}>
+    <div className="af-root" style={{ ...vars, display: 'flex', flexDirection: 'column', background: t.bg, color: t.text, fontFamily: FONT_B, colorScheme: theme === 'dark' ? 'dark' : 'light', position: 'relative', isolation: 'isolate' }}>
       {backdrop}
       <style>{`
         @font-face { font-family: 'Sifonn Pro'; src: url('/SIFONN_PRO.otf') format('opentype'); font-display: swap; }
         @keyframes afIn { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
+        .af-root { min-height: 100vh; min-height: 100dvh; }
         .af-in { animation: afIn 0.25s ease backwards; }
         @media (prefers-reduced-motion: reduce) { .af-in { animation: none !important; } }
         .af-inp { width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 9px; border: 1px solid ${t.border}; background: ${t.bgCard}; color: ${t.text}; font-family: ${FONT_B}; font-size: 14.5px; outline: none; transition: border-color 0.12s, box-shadow 0.12s; }
@@ -66,7 +67,7 @@ export function AuthLayout({ theme = 'dark', onToggleTheme, onLogoClick, right, 
           )}
         </div>
       </header>
-      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: align === 'top' ? 'flex-start' : 'center', padding: '12px 16px 56px', position: 'relative', zIndex: 1 }}>
+      <main className={mainClassName} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: align === 'top' ? 'flex-start' : 'center', padding: '12px 16px 56px', position: 'relative', zIndex: 1 }}>
         {children}
       </main>
     </div>
