@@ -99,7 +99,7 @@ export const HOME_CSS = `
 .gfx .frame .adapt{text-align:center;font-size:16px;font-weight:700}
 .gfx .frame .adapt .wm{font-size:16px}
 .gfx .ctas2{display:flex;justify-content:center;flex-wrap:wrap;gap:14px;margin-top:30px}
-.gfx .ctas2 .try{min-height:60px;padding:0 26px;font-size:17px;border-radius:14px;gap:8px}
+.gfx .ctas2 .try{min-height:60px;padding:0 26px;font-size:17px;border-radius:999px;gap:8px}
 .gfx .ar{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2.75;stroke-linecap:round;stroke-linejoin:round}
 .gfx .link{border:none;background:none;padding:0;font-size:inherit;font-weight:700;color:var(--ink);text-decoration:underline;text-decoration-color:var(--gold);text-decoration-thickness:2px;text-underline-offset:3px}
 .gfx .lab{font-size:13px;font-weight:700;color:var(--muted)}

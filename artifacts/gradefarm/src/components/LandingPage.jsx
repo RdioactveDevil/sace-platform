@@ -207,7 +207,7 @@ const EXTRA_CSS = `
 .gfx .hv.covers .cv.sace { left: auto; right: calc(50% + 6px); }
 .gfx .hv.covers .cv.vce { right: auto; left: calc(50% + 6px); top: 30px; }
 .gfx .tonext { display: flex; justify-content: center; margin: 36px 0 0; }
-.gfx .tonext .try { min-height: 56px; padding: 0 24px; font-size: 16.5px; border-radius: 14px; gap: 8px; }
+.gfx .tonext .try { min-height: 56px; padding: 0 24px; font-size: 16.5px; border-radius: 999px; gap: 8px; }
 .gfx .cmp-hint { display: none; }
 
 /* ── Phones ── */

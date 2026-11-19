@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Menu, X, ArrowRight } from 'lucide-react'
+import { ArrowRight } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 
 // The public site's shared pieces (homepage, pricing): colours from the app's
@@ -57,11 +57,10 @@ export const SITE_CSS = `
 .lp-btn.lg { min-height: 50px; padding: 0 26px; font-size: 16px; border-radius: 12px; }
 .lp-btn:disabled { opacity: 0.5; cursor: default; }
 /* The main call to action (StartButton): bigger than any other button, with a gold glow and a soft pulse around it. */
-.lp-btn.cta { position: relative; min-height: 60px; padding: 0 28px 0 32px; gap: 10px; font-size: 18px; border-radius: 14px; letter-spacing: -0.01em; box-shadow: 0 10px 28px -8px rgba(224,169,31,0.75), 0 2px 0 rgba(12,16,55,0.12); transition: transform 0.15s, box-shadow 0.15s; }
-.lp-btn.cta:hover { filter: brightness(1.05); transform: translateY(-2px); box-shadow: 0 16px 34px -8px rgba(224,169,31,0.85), 0 2px 0 rgba(12,16,55,0.12); }
-.lp-btn.cta:active { transform: translateY(0); }
-.lp-btn.cta::after { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; animation: lpCtaPulse 2.6s ease-out infinite; }
-@keyframes lpCtaPulse { 0% { box-shadow: 0 0 0 0 rgba(241,190,67,0.55); } 70%, 100% { box-shadow: 0 0 0 14px rgba(241,190,67,0); } }
+/* The main call to action (StartButton): a big gold pill in capitals with a soft gold glow; the arrow nudges right on hover. */
+.lp-btn.cta { position: relative; min-height: 60px; padding: 0 28px 0 32px; gap: 12px; font-size: 15.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; border-radius: 999px; box-shadow: 0 10px 24px -10px rgba(224,169,31,0.9); transition: transform 0.15s, box-shadow 0.15s, filter 0.15s; }
+.lp-btn.cta:hover { filter: brightness(1.04); transform: translateY(-1px); box-shadow: 0 14px 28px -10px rgba(224,169,31,0.95); }
+.lp-btn.cta:active { transform: none; }
 .lp-btn.cta svg { transition: transform 0.15s; }
 .lp-btn.cta:hover svg { transform: translateX(3px); }
 .lp-link { border: none; background: none; padding: 0; font-size: inherit; font-weight: 700; color: var(--lp-ink); cursor: pointer; text-decoration: underline; text-decoration-color: var(--lp-gold); text-decoration-thickness: 2px; text-underline-offset: 3px; }
@@ -83,7 +82,7 @@ export const SITE_CSS = `
   .lp-nav[data-scrolled="true"] { background: color-mix(in srgb, var(--lp-win) 72%, transparent); -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px); box-shadow: 0 1px 0 color-mix(in srgb, var(--lp-line) 85%, transparent); }
   .lp-nav[data-open="true"] { background: color-mix(in srgb, var(--lp-win) 95%, transparent); }
 }
-.lp-nav .lp-in { position: relative; display: flex; align-items: center; gap: 16px; height: var(--lp-header); }
+.lp-nav-row { position: relative; display: flex; align-items: center; gap: 16px; height: var(--lp-header); }
 .lp-nav .lp-wordmark { display: flex; align-items: center; height: 40px; }
 /* The links sit in the middle of the bar, whatever is either side of them. */
 .lp-nav-links { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; align-items: center; gap: 34px; }
@@ -98,12 +97,18 @@ export const SITE_CSS = `
 .lp-nav-start:active { transform: none; }
 .lp-nav-start svg { transition: transform 0.15s; }
 .lp-nav-start:hover svg { transform: translateX(2px); }
-.lp-menu-btn { display: none; width: 42px; height: 42px; margin-right: -9px; border: none; background: none; color: var(--lp-ink); place-items: center; cursor: pointer; border-radius: 10px; }
+.lp-menu-btn { display: none; align-items: center; gap: 10px; height: 42px; padding: 0 4px 0 10px; margin-right: -4px; border: none; background: none; color: var(--lp-ink); font-size: 15px; font-weight: 700; line-height: 1; cursor: pointer; border-radius: 999px; }
 .lp-menu-btn:hover { background: color-mix(in srgb, var(--lp-ink) 6%, transparent); }
-.lp-nav-start .short { display: none; }
-.lp-menu { border-top: 1px solid var(--lp-line); padding: 6px 0 12px; }
-.lp-menu button { display: block; width: 100%; text-align: left; border: none; background: none; padding: 12px 0; font-size: 15px; font-weight: 700; color: var(--lp-ink); cursor: pointer; border-bottom: 1px solid var(--lp-line); }
-.lp-menu button:last-child { border-bottom: none; }
+/* Two lines that cross into an X while the menu is open. */
+.lp-menu-lines { position: relative; width: 22px; height: 10px; flex-shrink: 0; }
+.lp-menu-lines::before, .lp-menu-lines::after { content: ""; position: absolute; left: 0; right: 0; height: 2px; border-radius: 2px; background: currentColor; transition: transform 0.2s, top 0.2s; }
+.lp-menu-lines::before { top: 0; } .lp-menu-lines::after { top: 8px; }
+.lp-menu-btn[aria-expanded="true"] .lp-menu-lines::before { top: 4px; transform: rotate(45deg); }
+.lp-menu-btn[aria-expanded="true"] .lp-menu-lines::after { top: 4px; transform: rotate(-45deg); }
+.lp-menu { border-top: 1px solid var(--lp-line); padding: 6px 0 18px; }
+.lp-menu .lp-menu-start { display: none; width: 100%; margin-top: 14px; height: 52px; font-size: 14.5px; }
+.lp-menu > button:not(.lp-menu-start) { display: block; width: 100%; text-align: left; border: none; background: none; padding: 15px 0; font-size: 17px; font-weight: 700; color: var(--lp-ink); cursor: pointer; border-bottom: 1px solid var(--lp-line); }
+.lp-menu > button:not(.lp-menu-start):nth-last-child(2) { border-bottom: none; }
 .lp-sw { display: inline-flex; border: 1px solid var(--lp-line); border-radius: 8px; overflow: hidden; }
 .lp-sw button, .lp-sw span { border: none; background: transparent; font-size: 12px; font-weight: 700; color: var(--lp-muted); padding: 5px 10px; cursor: pointer; }
 .lp-sw > * + * { border-left: 1px solid var(--lp-line) !important; }
@@ -126,23 +131,18 @@ export const SITE_CSS = `
 .lp-foot-links button { border: none; background: none; padding: 0; font-size: 12.5px; color: var(--lp-muted); cursor: pointer; }
 .lp-foot-links button:hover { color: var(--lp-ink); }
 .lp-copy { margin-left: auto; }
-@media (prefers-reduced-motion: reduce) { .lp-btn.cta, .lp-btn.cta::after, .lp-btn.cta svg { animation: none; transition: none; } }
+@media (prefers-reduced-motion: reduce) { .lp-btn.cta, .lp-btn.cta svg, .lp-nav-start, .lp-nav-start svg { transition: none; } }
 /* Below a laptop width the centred links move into the menu. */
 @media (max-width: 960px) {
   .lp-nav-links { display: none; }
-  .lp-menu-btn { display: grid; }
+  .lp-menu-btn { display: inline-flex; }
 }
+/* Phones: just the logo and Menu. Log in and Start move into the menu. */
 @media (max-width: 760px) {
-  .lp-nav-right { gap: 6px; }
   .lp-nav .lp-wordmark { font-size: 24px !important; }
-  .lp-nav-login { padding: 10px 8px; font-size: 14.5px; }
-  .lp-nav-start { height: 40px; padding: 0 16px; font-size: 12.5px; }
-  .lp-nav-start svg { display: none; }
-  /* The full "Start GradeFarming" doesn't fit beside the logo on a phone. */
-  .lp-nav-start .long { display: none; }
-  .lp-nav-start .short { display: inline; }
+  .lp-nav-login, .lp-nav-start { display: none; }
+  .lp-menu .lp-menu-start { display: inline-flex; }
 }
-@media (max-width: 379px) { .lp-nav-login { display: none; } }
 @media (max-width: 760px) {
   .lp-copy { margin-left: 0; }
 }
@@ -155,7 +155,7 @@ export function Brand() {
 
 /** The main call to action on the public pages: "Start GradeFarming". */
 export function StartButton({ onClick, children = 'Start GradeFarming' }) {
-  return <button type="button" className="lp-btn gold cta" onClick={onClick}>{children}<ArrowRight size={20} strokeWidth={2.75} aria-hidden="true" /></button>
+  return <button type="button" className="lp-btn gold cta" onClick={onClick}>{children}<ArrowRight size={19} strokeWidth={2.75} aria-hidden="true" /></button>
 }
 
 /** The wordmark as a button, at the size given. */
@@ -165,7 +165,7 @@ export function Wordmark({ size = 28, onClick, label = 'gradefarm. home' }) {
 
 /**
  * The top nav: wordmark, `links` ([label, onClick, current?]), Log in,
- * Start GradeFarming, and a menu on phones. Light or dark follows the device.
+ * Start GradeFarming, and Menu below laptop width (on phones it holds Log in and Start too). Light or dark follows the device.
  */
 export function SiteNav({ onSignIn, onStart, onLogo, links, overlay = false }) {
   const [scrolled, setScrolled] = useState(false)
@@ -185,17 +185,16 @@ export function SiteNav({ onSignIn, onStart, onLogo, links, overlay = false }) {
   const pick = (fn) => () => { setMenuOpen(false); fn() }
   return (
     <nav className={`lp-nav${overlay ? ' overlay' : ''}`} data-scrolled={scrolled || menuOpen} data-open={menuOpen} aria-label="Main">
-      <div className="lp-in">
+      <div className="lp-in lp-nav-row">
         <Wordmark size={26} onClick={onLogo} />
         <div className="lp-nav-links">
           {links.map(([label, fn, current]) => <button key={label} type="button" onClick={pick(fn)} aria-current={current ? 'page' : undefined}>{label}</button>)}
         </div>
         <div className="lp-nav-right">
           <button type="button" className="lp-nav-login" onClick={onSignIn}>Log in</button>
-          <button type="button" className="lp-nav-start" onClick={onStart} aria-label="Start GradeFarming"><span className="long">Start GradeFarming</span><span className="short" aria-hidden="true">Start</span><ArrowRight size={16} strokeWidth={2.75} aria-hidden="true" /></button>
-          <button type="button" className="lp-menu-btn" onClick={() => setMenuOpen(o => !o)}
-            aria-expanded={menuOpen} aria-controls="lp-menu" aria-label={menuOpen ? 'Close menu' : 'Open menu'}>
-            {menuOpen ? <X size={22} aria-hidden="true" /> : <Menu size={22} aria-hidden="true" />}
+          <button type="button" className="lp-nav-start" onClick={onStart}>Start GradeFarming<ArrowRight size={16} strokeWidth={2.75} aria-hidden="true" /></button>
+          <button type="button" className="lp-menu-btn" onClick={() => setMenuOpen(o => !o)} aria-expanded={menuOpen} aria-controls="lp-menu">
+            <span className="lp-menu-lines" aria-hidden="true" />{menuOpen ? 'Close' : 'Menu'}
           </button>
         </div>
       </div>
@@ -204,6 +203,7 @@ export function SiteNav({ onSignIn, onStart, onLogo, links, overlay = false }) {
           <div className="lp-menu">
             {links.map(([label, fn]) => <button key={label} type="button" onClick={pick(fn)}>{label}</button>)}
             <button type="button" onClick={pick(onSignIn)}>Log in</button>
+            <button type="button" className="lp-nav-start lp-menu-start" onClick={pick(onStart)}>Start GradeFarming<ArrowRight size={16} strokeWidth={2.75} aria-hidden="true" /></button>
           </div>
         </div>
       )}
