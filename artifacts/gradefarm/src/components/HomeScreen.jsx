@@ -141,8 +141,9 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     })
   }
 
-  // Pass 2: count every question.
+  // Pass 2: every question's topic (the counts follow the chosen format, below).
   const normTopicGroups = {}
+  const topicOfQuestion = new Map()
   questions.forEach(q => {
     let n
     if (isTwoLevel) {
@@ -161,13 +162,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     }
     if (!n) return
     if (!normTopicGroups[n]) normTopicGroups[n] = { total: 0, attempted: 0, correct: 0, wrong: 0 }
-    normTopicGroups[n].total++
-    const s = currentStruggleMap[q.id]
-    if (s && s.attempts > 0) {
-      normTopicGroups[n].attempted++
-      normTopicGroups[n].correct += (s.attempts - s.wrong)
-      normTopicGroups[n].wrong += s.wrong
-    }
+    topicOfQuestion.set(q.id, n)
   })
   const allSubtopics = [...new Set(questions.map(q => q.subtopic).filter(Boolean))]
   const topicsInBankCount = MACRO_GROUPS.reduce((n, m) => n + m.topics.filter(tn => normTopicGroups[tn]).length, 0)
@@ -195,6 +190,20 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
     : questionFormatChoice !== 'mixed' && formatCounts[questionFormatChoice] === 0 ? 'mixed'
       : questionFormatChoice
   const formatQuestions = useMemo(() => filterByFormat(questions, startFormat), [questions, startFormat])
+  // Each topic's count and accuracy in the chosen format (every topic stays
+  // listed): Multiple choice counts those, Short answer those, Mixed the lot.
+  formatQuestions.forEach(q => {
+    const g = normTopicGroups[topicOfQuestion.get(q.id)]
+    if (!g) return
+    g.total++
+    const st = currentStruggleMap[q.id]
+    if (st && st.attempts > 0) {
+      g.attempted++
+      g.correct += (st.attempts - st.wrong)
+      g.wrong += st.wrong
+    }
+  })
+  const bankCountLabel = `${formatQuestions.length} ${startFormat === 'mcq' ? 'multiple-choice ' : startFormat === 'saq' ? 'short-answer ' : ''}question${formatQuestions.length === 1 ? '' : 's'}`
 
   const filteredCounts = getQuestionCounts(formatQuestions, currentStruggleMap, effectiveSubtopics)
   const tickedTopicCount = MACRO_GROUPS.reduce((acc, macro) => acc + macro.topics.filter(tn =>
@@ -755,7 +764,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
             <div>
               <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em', margin: 0, color: t.text }}>Practice</h1>
               <p style={{ fontSize: 13, color: t.textMuted, margin: '2px 0 0' }}>
-                {isTwoLevel ? MACRO_GROUPS.length : topicsInBankCount} topics · {questions.length} questions
+                {isTwoLevel ? MACRO_GROUPS.length : topicsInBankCount} topics · {bankCountLabel}
               </p>
             </div>
             <div style={{ fontSize: 13, color: t.textMuted }}>

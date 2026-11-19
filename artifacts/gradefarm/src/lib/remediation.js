@@ -10,6 +10,15 @@
 
 import { buildRemediationQueue, getQuestionConceptTag } from './engine.js'
 import { parseLatexJson } from './mathMarkup.js'
+import { questionFormat } from './questionTypes.js'
+
+/**
+ * Comeback practice keeps to the format of the question that was missed:
+ * multiple choice for a missed multiple-choice question, short answer for a
+ * missed short answer. Stored and AI-generated variants are always multiple
+ * choice, so a missed short answer is practised from the bank only.
+ */
+export const bankOnlyComeback = (parentQuestion) => questionFormat(parentQuestion) === 'saq'
 
 export const REMEDIATION_DB_TIMEOUT_MS = 5000
 // The server adds an access check and reference exemplars around the Claude call.
@@ -105,6 +114,7 @@ export function selectBankVariants(parentQuestion, allQuestions = [], targetDiff
     if (q.id === parentQuestion.id) return false
     if (q.topic !== parentQuestion.topic) return false
     if (q.subtopic !== parentQuestion.subtopic) return false
+    if (questionFormat(q) !== questionFormat(parentQuestion)) return false
     // Exclude anything already served this remediation (we encode bank ids in
     // the variant_record_id as `bank__<parentId>__<bankId>`).
     if (used.has(q.id) || used.has(`bank__${parentQuestion.id}__${q.id}`)) return false
@@ -288,6 +298,8 @@ export async function runGenerateRemediationQueue(ctx) {
       resolvedSource = 'bank'
       return resolvedQueue
     }
+    // A missed short answer: nothing else to offer in its format.
+    if (bankOnlyComeback(parentQuestion)) return []
 
     // ── TIER 2: previously-generated stored variants (same concept/subtopic). No API.
     if (!skipDbLookup) {
@@ -434,6 +446,12 @@ export async function runEnterRemediation(ctx) {
     if (bankQueue.length) {
       setRemediationQueue?.(bankQueue.slice(0, REMEDIATION_POOL_SIZE))
       setRemediationSource?.('bank')
+      setRemediationStatus?.('activated')
+      return
+    }
+    // A missed short answer: nothing else to offer in its format.
+    if (bankOnlyComeback(parentQuestion)) {
+      setRemediationQueue?.([])
       setRemediationStatus?.('activated')
       return
     }

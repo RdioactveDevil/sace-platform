@@ -18,6 +18,7 @@ import {
   runEnterRemediation,
   runGenerateRemediationQueue,
   runLoadNextRemediationQuestion,
+  bankOnlyComeback,
 } from './remediation.js'
 
 // ─── Test scaffolding ──────────────────────────────────────────────────────
@@ -760,5 +761,53 @@ describe('runLoadNextRemediationQuestion', () => {
     assert.equal(rec.calls.displayQuestion.length, 1)
     assert.equal(rec.calls.source.at(-1), 'prebuilt')
     assert.equal(rec.calls.status.at(-1), 'activated')
+  })
+})
+
+// ─── Comeback practice keeps to the missed question's format ─────────────────
+describe('comeback format', () => {
+  test('a missed multiple-choice question is practised with multiple choice from the bank', () => {
+    const parent = makeParent()
+    const bank = [makeBankQuestion('b_mcq'), makeBankQuestion('b_saq', { question_type: 'numeric', options: null })]
+    assert.deepEqual(selectBankVariants(parent, bank).map(q => q.bank_question_id), ['b_mcq'])
+  })
+
+  test('a missed short answer is practised with short answers from the bank', () => {
+    const parent = makeParent({ question_type: 'short_text', options: null })
+    const bank = [makeBankQuestion('b_mcq'), makeBankQuestion('b_saq', { question_type: 'numeric', options: null })]
+    assert.equal(bankOnlyComeback(parent), true)
+    assert.deepEqual(selectBankVariants(parent, bank).map(q => q.bank_question_id), ['b_saq'])
+  })
+
+  test('a missed short answer with none in the bank never falls back to stored or AI multiple choice', async () => {
+    const parent = makeParent({ question_type: 'short_text', options: null })
+    const rec = makeStateRecorder()
+    let storedAsked = false
+    let aiAsked = false
+    const deps = {
+      ...baseDeps(),
+      getRemediationVariants: async () => { storedAsked = true; return { directVariants: [makeStoredVariant('v1')], conceptVariants: [] } },
+      generateAIVariants: async () => { aiAsked = true; return { variants: [makeStoredVariant('ai1')] } },
+    }
+    const ctx = {
+      parentQuestion: parent,
+      prefetched: new Map(),
+      questions: [makeBankQuestion('b_mcq')],
+      deps,
+      generateRemediationQueue: async (...args) =>
+        runGenerateRemediationQueue({ parentQuestion: args[0], existingUsedIds: args[1], difficultyTarget: args[2], options: args[3], questions: [], deps, ...rec }),
+      ...rec,
+    }
+    await runEnterRemediation(ctx)
+    assert.equal(storedAsked, false)
+    assert.equal(aiAsked, false)
+    assert.deepEqual(rec.calls.queue.at(-1), [])
+    assert.equal(rec.calls.status.at(-1), 'activated')
+
+    const rec2 = makeStateRecorder()
+    const queue = await runGenerateRemediationQueue({ parentQuestion: parent, questions: [makeBankQuestion('b_mcq')], deps, ...rec2 })
+    assert.deepEqual(queue, [])
+    assert.equal(aiAsked, false)
+    assert.equal(rec2.calls.status.at(-1), 'activated')
   })
 })
