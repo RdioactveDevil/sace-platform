@@ -11,6 +11,7 @@ import CalmBackground from './CalmBackground'
 import TryItBox from './site/TryItBox'
 import { HOME_CSS } from './site/homeCss'
 import { FEATURE_SLUGS } from './site/features'
+import { SpotStudy, SpotChem, ResultsFigure, SPOT_CSS } from './site/Spotlights'
 
 // The public homepage (/home), as approved on the design canvas:
 //
@@ -28,6 +29,18 @@ import { FEATURE_SLUGS } from './site/features'
 
 const EXTRA_CSS = `
 .gfx .sec { scroll-margin-top: var(--lp-header, 72px); }
+/* One continuous page: the background (CalmBackground, fixed) shows through every section, which are split
+   by thin lines that stop at the content's width. The footer stays solid. */
+.gfx main { position: relative; z-index: 1; }
+.gfx .sec.pg { background: transparent; }
+.gfx .sec, .gfx .end { border-top: 0; }
+.gfx .sec::before, .gfx .end::before { content: ""; position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: min(calc(var(--lp-max) - 2 * var(--lp-gutter)), calc(100% - 2 * var(--lp-gutter))); height: 1px; background: var(--line); }
+.gfx .lp-foot { position: relative; z-index: 1; background: var(--win); }
+/* The closing call to action: words on the left, the results figure on the right. */
+.gfx .end .in.end-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 40px; align-items: center; text-align: left; }
+.gfx .end-copy { display: flex; flex-direction: column; align-items: flex-start; gap: 18px; }
+.gfx .end-copy .lead { margin: 0; font-size: clamp(16.5px, 1.5vw, 19px); color: var(--ink2); }
+@media (max-width: 900px) { .gfx .end .in.end-grid { grid-template-columns: minmax(0, 1fr); text-align: center; } .gfx .end-copy { align-items: center; } }
 /* The header sits over the hero, so the hero starts below it. */
 .gfx .hero { padding-top: calc(var(--lp-header) + 40px); }
 .gfx .hc { color: inherit; text-decoration: none; }
@@ -423,8 +436,6 @@ function Hero({ theme, onStart, onTry }) {
   const [on, setOn] = useState(false)
   return (
     <header className="hero">
-      {/* Drifting gold glows and waves, the same calm background as sign-in. */}
-      <CalmBackground theme={theme} contained />
       <div className="in hg">
         <div>
           <h1 className="h1"><span className="s">The <ScrambleWord /> learning system for Australian students.</span></h1>
@@ -634,14 +645,18 @@ export default function LandingPage({ theme = 'light', onSignIn }) {
 
   return (
     <div className={`lp gfx solo${dark ? ' dark' : ''}`} style={{ ...themeVars(theme), colorScheme: dark ? 'dark' : 'light' }}>
-      <style>{SITE_FONTS + SITE_CSS + HOME_CSS + EXTRA_CSS}</style>
+      <style>{SITE_FONTS + SITE_CSS + HOME_CSS + SPOT_CSS + EXTRA_CSS}</style>
+      {/* One background for the whole page (the hero's: drifting gold glows, slow waves, grain), fixed behind every section. */}
+      <CalmBackground theme={theme} />
       <SiteNav overlay onSignIn={onSignIn} onStart={start}
         onLogo={() => window.scrollTo({ top: 0, behavior: 'smooth' })} links={NAV} />
 
       <main>
         <Hero theme={theme} onStart={start} onTry={(e) => { e.preventDefault(); go('try') }} />
         <TryItBox onStart={start} onNext={(e) => { e.preventDefault(); go('inside') }} />
+        <SpotStudy />
         <Inside open={openFeatures} />
+        <SpotChem />
         <Compare />
         <Subjects onPick={start} />
 
@@ -682,10 +697,13 @@ export default function LandingPage({ theme = 'light', onSignIn }) {
         </section>
 
         <section className="end" aria-labelledby="gfx-end-h">
-          <div className="calm" aria-hidden="true"><span className="glow a" /><span className="glow b" /></div>
-          <div className="in">
-            <h2 id="gfx-end-h">Start with one subject, free.</h2>
-            <StartButton onClick={start} />
+          <div className="in end-grid">
+            <div className="end-copy">
+              <h2 id="gfx-end-h">Start with one subject, free.</h2>
+              <p className="lead">Add more subjects whenever you're ready.</p>
+              <StartButton onClick={start} />
+            </div>
+            <ResultsFigure />
           </div>
           <CitySkyline state="SA" className="city" />
         </section>
