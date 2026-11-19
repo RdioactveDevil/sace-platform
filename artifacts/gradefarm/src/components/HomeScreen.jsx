@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect } from 'react'
 import YearPlanCard from './YearPlanCard'
 import HomeEngagement from './HomeEngagement'
 import { useNavigate } from 'react-router-dom'
-import { ClipboardList, GraduationCap, Target, Calendar } from 'lucide-react'
+import { ClipboardList, GraduationCap, Target, Calendar, SlidersHorizontal, X } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 import { getQuestionCounts } from '../lib/engine'
 import { priorityTopics } from '../lib/priorityTopics'
@@ -46,6 +46,14 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
   const [examMode, setExamMode] = useState(false)
   const [examCount, setExamCount] = useState(10)
   const [examMinutes, setExamMinutes] = useState(15)
+  // Phones: format and exam mode live in a panel from the bottom edge.
+  const [optionsOpen, setOptionsOpen] = useState(false)
+  useEffect(() => {
+    if (!optionsOpen) return undefined
+    const onKey = (e) => { if (e.key === 'Escape') setOptionsOpen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [optionsOpen])
   const [customMinutes, setCustomMinutes] = useState('45')
   const [assessments, setAssessments] = useState([])
   const [assignments, setAssignments] = useState([])
@@ -265,6 +273,87 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
   const segOnFg = t.bgCard
   const fieldLabel = { display: 'block', fontSize: 12, fontWeight: 600, color: t.textMuted, marginBottom: 6 }
 
+  const topicsLabel = tickedTopicCount === 0 || isAllTopicsSelected ? 'All topics' : `${tickedTopicCount} topic${tickedTopicCount !== 1 ? 's' : ''}`
+  const formatLabel = { mcq: 'Multiple choice', saq: 'Short answer', mixed: 'Mixed format' }[startFormat]
+  const startLabel = examOn ? 'Start exam' : 'Start practice'
+
+  // The builder's parts: on wide screens all in the card on the right; on a
+  // phone the question choice in a card, the rest in the options panel and
+  // Start pinned above the tab bar.
+  const questionsField = (size, target = true) => (
+    <div data-tutorial-target={target ? 'practice-session' : undefined}>
+      <span style={fieldLabel}>Questions</span>
+      <SegmentedToggle kind="radio" size={size} fill label="Questions" value={startMode} onChange={setSessionMode} options={[
+        { value: 'new', label: 'New' },
+        { value: 'wrong', label: `Got wrong · ${filteredCounts.wrong}`, disabled: filteredCounts.wrong === 0 },
+        { value: 'all', label: 'Mixed' },
+      ]} />
+    </div>
+  )
+  const formatField = (size) => bankHasBothFormats && (
+    <div data-tutorial-target="practice-format">
+      <span style={fieldLabel}>Format</span>
+      {size === 'md' ? (
+        // A phone is too narrow for three long labels side by side.
+        <div role="radiogroup" aria-label="Format" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {[['mcq', 'Multiple choice', formatCounts.mcq === 0], ['saq', 'Short answer', formatCounts.saq === 0], ['mixed', 'Mixed', false]].map(([v, l, off]) => {
+            const on = startFormat === v
+            return (
+              <button key={v} type="button" role="radio" aria-checked={on} disabled={off} onClick={() => chooseFormat(v)}
+                style={{ display: 'flex', alignItems: 'center', gap: 12, minHeight: 48, padding: '0 14px', borderRadius: 12, textAlign: 'left', fontFamily: FONT_B, fontSize: 15, fontWeight: on ? 800 : 600,
+                  border: `1px solid ${on ? t.text : t.border}`, boxShadow: on ? `0 0 0 1px ${t.text}` : 'none', background: t.bgCard, color: off ? t.textFaint : t.text, cursor: off ? 'not-allowed' : 'pointer', opacity: off ? 0.6 : 1 }}>
+                <span aria-hidden="true" style={{ width: 18, height: 18, borderRadius: '50%', border: `2px solid ${on ? t.text : t.borderStrong}`, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                  {on && <span style={{ width: 8, height: 8, borderRadius: '50%', background: t.text }} />}
+                </span>
+                {l}{off && <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 600 }}>None in these topics</span>}
+              </button>
+            )
+          })}
+        </div>
+      ) : segment([
+        { value: 'mcq', label: 'Multiple choice', disabled: formatCounts.mcq === 0 },
+        { value: 'saq', label: 'Short answer', disabled: formatCounts.saq === 0 },
+        { value: 'mixed', label: 'Mixed' },
+      ], startFormat, chooseFormat, 'Format')}
+    </div>
+  )
+  const examField = (size) => examAvailable && (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: size === 'md' ? 14 : 12, borderRadius: 12, background: t.bgSubtle, border: `1px solid ${t.border}` }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <span>
+          <span id={`exam-mode-label-${size}`} style={{ display: 'block', fontSize: size === 'md' ? 15 : 13, fontWeight: 800, color: t.text }}>Exam mode</span>
+          {size === 'md' && <span style={{ display: 'block', fontSize: 12.5, color: t.textMuted, marginTop: 2 }}>Timed, with answers at the end</span>}
+        </span>
+        <button type="button" role="switch" aria-checked={examMode} aria-labelledby={`exam-mode-label-${size}`} onClick={() => setExamMode(v => !v)}
+          style={{ width: size === 'md' ? 50 : 36, height: size === 'md' ? 30 : 20, borderRadius: 999, border: 'none', padding: 0, position: 'relative', cursor: 'pointer', background: examMode ? segOnBg : t.border, flexShrink: 0, transition: 'background 0.2s' }}>
+          <span style={{ position: 'absolute', top: 3, left: examMode ? (size === 'md' ? 23 : 19) : 3, width: size === 'md' ? 24 : 14, height: size === 'md' ? 24 : 14, borderRadius: '50%', background: t.bgCard, transition: 'left 0.2s' }} />
+        </button>
+      </div>
+      {examMode && (
+        <>
+          <div>
+            <span style={fieldLabel}>How many</span>
+            <SegmentedToggle kind="radio" size={size} fill label="How many questions" value={examCount} onChange={setExamCount}
+              options={[5, 10, 20, 30, 40].map(n => ({ value: n, label: String(n) }))} />
+          </div>
+          <div>
+            <span style={fieldLabel}>Time limit</span>
+            <SegmentedToggle kind="radio" size={size} fill label="Time limit" value={examMinutes} onChange={setExamMinutes}
+              options={[...[10, 15, 20, 30].map(m => ({ value: m, label: `${m}m` })), { value: 'custom', label: 'Custom' }]} />
+            {examMinutes === 'custom' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+                <input id={`exam-custom-minutes-${size}`} type="number" min={1} max={180} inputMode="numeric" value={customMinutes}
+                  onChange={e => setCustomMinutes(e.target.value)} aria-label="Time limit in minutes"
+                  style={{ width: 90, padding: '9px 10px', borderRadius: 8, border: `1px solid ${t.border}`, background: t.bgCard, color: t.text, fontFamily: FONT_B, fontSize: 16 }} />
+                <span style={{ fontSize: 13, color: t.textMuted }}>minutes</span>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  )
+
   const renderBuilder = () => (
     <div style={{ ...card, padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div>
@@ -273,69 +362,60 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
           {tickedTopicCount === 0 || isAllTopicsSelected ? 'All topics' : `${tickedTopicCount} topic${tickedTopicCount !== 1 ? 's' : ''} ticked`}
         </div>
       </div>
-
-      <div data-tutorial-target="practice-session">
-        <span style={fieldLabel}>Questions</span>
-        {segment([
-          { value: 'new', label: 'New' },
-          { value: 'wrong', label: `Got wrong · ${filteredCounts.wrong}`, disabled: filteredCounts.wrong === 0 },
-          { value: 'all', label: 'Mixed' },
-        ], startMode, setSessionMode, 'Questions')}
-      </div>
-
-      {bankHasBothFormats && (
-        <div data-tutorial-target="practice-format">
-          <span style={fieldLabel}>Format</span>
-          {segment([
-            { value: 'mcq', label: 'Multiple choice', disabled: formatCounts.mcq === 0 },
-            { value: 'saq', label: 'Short answer', disabled: formatCounts.saq === 0 },
-            { value: 'mixed', label: 'Mixed' },
-          ], startFormat, chooseFormat, 'Format')}
-        </div>
-      )}
-
-      {examAvailable && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 12, borderRadius: 10, background: t.bgSubtle, border: `1px solid ${t.border}` }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-            <span id="exam-mode-label" style={{ fontSize: 13, fontWeight: 700, color: t.text }}>Exam mode</span>
-            <button type="button" role="switch" aria-checked={examMode} aria-labelledby="exam-mode-label" onClick={() => setExamMode(v => !v)}
-              style={{ width: 36, height: 20, borderRadius: 999, border: 'none', padding: 0, position: 'relative', cursor: 'pointer', background: examMode ? segOnBg : t.border, flexShrink: 0 }}>
-              <span style={{ position: 'absolute', top: 3, left: examMode ? 19 : 3, width: 14, height: 14, borderRadius: '50%', background: t.bgCard, transition: 'left 0.15s' }} />
-            </button>
-          </div>
-          {examMode && (
-            <>
-              <div>
-                <span style={fieldLabel}>How many</span>
-                {segment([5, 10, 20, 30, 40].map(n => ({ value: n, label: String(n) })), examCount, setExamCount, 'How many questions')}
-              </div>
-              <div>
-                <span style={fieldLabel}>Time limit</span>
-                {segment([
-                  ...[10, 15, 20, 30].map(m => ({ value: m, label: `${m}m` })),
-                  { value: 'custom', label: 'Custom' },
-                ], examMinutes, setExamMinutes, 'Time limit')}
-                {examMinutes === 'custom' && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
-                    <input id="exam-custom-minutes" type="number" min={1} max={180} inputMode="numeric" value={customMinutes}
-                      onChange={e => setCustomMinutes(e.target.value)} aria-label="Time limit in minutes"
-                      style={{ width: 80, padding: '7px 10px', borderRadius: 8, border: `1px solid ${t.border}`, background: t.bgCard, color: t.text, fontFamily: FONT_B, fontSize: 13 }} />
-                    <span style={{ fontSize: 12, color: t.textMuted }}>minutes</span>
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-        </div>
-      )}
-
+      {questionsField('sm')}
+      {formatField('sm')}
+      {examField('sm')}
       <button type="button" data-tutorial-target="practice-start" onClick={startSession} disabled={!canStart}
         style={{
           width: '100%', padding: '13px', borderRadius: 10, border: 'none', fontFamily: FONT_B, fontSize: 14, fontWeight: 800,
           background: canStart ? t.accent : t.bgHover, color: canStart ? NAVY_FILL : t.textFaint, cursor: canStart ? 'pointer' : 'not-allowed',
         }}>
-        {examOn ? 'Start exam' : 'Start practice'}
+        {startLabel}
       </button>
+    </div>
+  )
+
+  // Phones: the session in a compact card; Options opens the rest.
+  const optionsSummary = [bankHasBothFormats ? formatLabel : null, examAvailable ? (examOn ? `Exam · ${examCount} questions${examTimerValid ? ` · ${examTimerMinutes} min` : ''}` : null) : null].filter(Boolean).join(' · ')
+  const renderMobileSession = () => (
+    <div style={{ ...card, padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 16, fontWeight: 800, color: t.text }}>Your session</div>
+          <div style={{ fontSize: 13, color: t.textMuted, marginTop: 2, lineHeight: 1.4 }}>{[topicsLabel, optionsSummary].filter(Boolean).join(' · ')}</div>
+        </div>
+        {(bankHasBothFormats || examAvailable) && (
+          <button type="button" onClick={() => setOptionsOpen(true)} aria-haspopup="dialog"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 38, padding: '0 14px', borderRadius: 999, border: `1px solid ${t.border}`, background: t.bgCard, color: t.text, fontFamily: FONT_B, fontSize: 13.5, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>
+            <SlidersHorizontal size={15} aria-hidden="true" />Options
+          </button>
+        )}
+      </div>
+      {questionsField('md')}
+    </div>
+  )
+
+  const renderOptionsSheet = () => optionsOpen && (
+    <div className="hs-sheet-wrap" role="dialog" aria-modal="true" aria-labelledby="hs-sheet-title">
+      <div className="hs-sheet-back" onClick={() => setOptionsOpen(false)} />
+      <div className="hs-sheet" style={{ background: t.bgCard, color: t.text }}>
+        <div aria-hidden="true" style={{ width: 40, height: 4, borderRadius: 4, background: t.border, margin: '0 auto 12px' }} />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
+          <h2 id="hs-sheet-title" style={{ margin: 0, fontSize: 18, fontWeight: 800, letterSpacing: '-0.01em' }}>Session options</h2>
+          <button type="button" onClick={() => setOptionsOpen(false)} aria-label="Close"
+            style={{ width: 38, height: 38, borderRadius: 999, border: 'none', background: t.bgSubtle, color: t.textMuted, display: 'grid', placeItems: 'center', cursor: 'pointer' }}>
+            <X size={18} aria-hidden="true" />
+          </button>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          {formatField('md')}
+          {examField('md')}
+        </div>
+        <button type="button" onClick={() => setOptionsOpen(false)}
+          style={{ width: '100%', height: 50, marginTop: 20, borderRadius: 12, border: 'none', background: t.text, color: t.bg, fontFamily: FONT_B, fontSize: 15, fontWeight: 800, cursor: 'pointer' }}>
+          Done
+        </button>
+      </div>
     </div>
   )
 
@@ -615,6 +695,13 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
         .hs-main  { flex: 1; min-width: 0; padding: 28px 0 32px 32px; box-sizing: border-box; }
         .hs-right { width: 360px; flex-shrink: 0; padding: 28px 32px 32px 0; display: flex; flex-direction: column; gap: 16px; position: sticky; top: 0; box-sizing: border-box; }
         .hs-mobile-cards { display: none; flex-direction: column; gap: 14px; }
+        .hs-startbar { display: none; }
+        .hs-sheet-wrap { position: fixed; inset: 0; z-index: 1200; display: flex; align-items: flex-end; }
+        .hs-sheet-back { position: absolute; inset: 0; background: rgba(0,0,0,0.45); animation: hs-fade 0.2s ease; }
+        .hs-sheet { position: relative; width: 100%; max-height: 88dvh; overflow-y: auto; box-sizing: border-box; border-radius: 20px 20px 0 0; padding: 10px 18px calc(18px + env(safe-area-inset-bottom)); animation: hs-up 0.28s cubic-bezier(.3,.7,.2,1); font-family: inherit; }
+        @keyframes hs-fade { from { opacity: 0 } to { opacity: 1 } }
+        @keyframes hs-up { from { transform: translateY(100%) } to { transform: none } }
+        @media (prefers-reduced-motion: reduce) { .hs-sheet, .hs-sheet-back { animation: none; } }
         .hs-row { display: flex; align-items: center; gap: 10px; width: 100%; border: none; background: transparent; font-family: inherit; text-align: left; cursor: pointer; }
         .hs-row:focus-visible { outline: 2px solid ${GOLD}; outline-offset: -2px; }
         .hs-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -627,6 +714,11 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
           .hs-right { display: none !important; }
           .hs-mobile-cards { display: flex; }
           .hs-name { white-space: normal; }
+          /* Start, pinned above the tab bar; the page leaves room for it. */
+          .hs-main { padding-bottom: 92px !important; }
+          .hs-startbar { display: block; position: fixed; left: 0; right: 0; bottom: var(--gf-tabbar-h, 0px); z-index: 50; padding: 18px 14px calc(10px + max(0px, env(safe-area-inset-bottom) - var(--gf-tabbar-h, 0px)));
+            background: linear-gradient(to bottom, transparent, ${t.bg} 18px); pointer-events: none; }
+          .hs-startbar button { pointer-events: auto; }
         }
       `}</style>
 
@@ -671,7 +763,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
           <HomeEngagement theme={theme} profile={profile} subject={subject} questions={questions} onProfileUpdated={onProfileUpdated} />
 
           <div className="hs-mobile-cards" style={{ marginBottom: 14 }}>
-            {renderBuilder()}
+            {renderMobileSession()}
           </div>
 
           <div style={{ ...card, padding: '6px 0', marginBottom: 14 }}>
@@ -745,6 +837,17 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
           <WeakestTopicsCard />
         </div>
       </div>
+
+      {/* Phones: Start along the bottom, in reach of a thumb and in view while topics are ticked. */}
+      <div className="hs-startbar">
+        <button type="button" data-tutorial-target="practice-start" onClick={startSession} disabled={!canStart}
+          style={{ width: '100%', height: 52, borderRadius: 14, border: 'none', fontFamily: FONT_B, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            background: canStart ? t.accent : t.bgHover, color: canStart ? NAVY_FILL : t.textFaint, cursor: canStart ? 'pointer' : 'not-allowed', boxShadow: canStart ? '0 6px 18px color-mix(in srgb, var(--t-accent) 30%, transparent)' : 'none' }}>
+          <span style={{ fontSize: 15.5, fontWeight: 800 }}>{startLabel}</span>
+          <span style={{ fontSize: 13, fontWeight: 600, opacity: 0.75 }}>· {topicsLabel}</span>
+        </button>
+      </div>
+      {renderOptionsSheet()}
     </div>
   )
 }
