@@ -4,7 +4,7 @@ import { THEMES } from '../lib/theme'
 import { currentStreak, freezesNeeded } from '../lib/streak'
 import {
   answersToday, dailyGoal, DAILY_GOAL_OPTIONS, daysUntil, gradeAbove, MAX_FREEZES,
-  predictGrade, PREDICT_MIN_ANSWERS, streakWeek,
+  predictGrade, streakWeek,
 } from '../lib/engagement'
 import { fetchRecentAnswers, setDailyGoal } from '../lib/db'
 
@@ -62,10 +62,9 @@ export default function HomeEngagement({ theme = 'dark', profile, subject, quest
     }
   }
 
-  const segment = { flex: '1 1 200px', minWidth: 0, display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px' }
+  const segment = { flex: '1 1 200px', minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, padding: '12px 16px' }
   const divider = { borderLeft: `1px solid ${t.border}` }
   const sub = { fontSize: 12.5, color: t.textMuted, lineHeight: 1.45 }
-  const linkBtn = { border: 'none', background: 'none', padding: 0, fontFamily: FONT_B, fontSize: 12.5, color: t.textMuted, cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 2 }
   const dot = (state) => ({
     width: 10, height: 10, borderRadius: 999, boxSizing: 'border-box',
     ...(state === 'done' ? { background: t.accent }
@@ -87,7 +86,6 @@ export default function HomeEngagement({ theme = 'dark', profile, subject, quest
           <circle cx="22" cy="22" r="17" fill="none" stroke={t.success} strokeWidth="6" strokeLinecap="round" strokeDasharray={`${frac * 106.8} 106.8`} transform="rotate(-90 22 22)" />
         </svg>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-          <span style={{ fontSize: 14, fontWeight: 800, color: today >= goal ? t.success : t.text }}>{Math.min(today, 999)} of {goal} today</span>
           {editingGoal ? (
             <label style={{ ...sub, display: 'flex', alignItems: 'center', gap: 6 }}>
               Daily goal
@@ -98,11 +96,11 @@ export default function HomeEngagement({ theme = 'dark', profile, subject, quest
               </select>
             </label>
           ) : (
-            <span style={sub}>
-              {today >= goal ? 'Ring closed for today' : `${goal - today} more to close the ring`}
-              {' · '}
-              <button type="button" onClick={() => setEditingGoal(true)} style={linkBtn} aria-label={`Change daily goal (now ${goal} a day)`}>Change</button>
-            </span>
+            // Tapping the count changes the daily goal.
+            <button type="button" onClick={() => setEditingGoal(true)} title="Change your daily goal" aria-label={`${Math.min(today, 999)} of ${goal} today. Change daily goal`}
+              style={{ border: 'none', background: 'none', padding: 0, fontFamily: FONT_B, fontSize: 14, fontWeight: 800, color: today >= goal ? t.success : t.text, cursor: 'pointer', textAlign: 'left' }}>
+              {Math.min(today, 999)} of {goal} today
+            </button>
           )}
           {goalError && <span role="alert" style={{ fontSize: 12, color: t.danger }}>{goalError}</span>}
         </div>
@@ -125,19 +123,16 @@ export default function HomeEngagement({ theme = 'dark', profile, subject, quest
         <div style={{ ...segment, ...divider }}>
           <span style={{ fontSize: 26, fontWeight: 800, lineHeight: 1, flexShrink: 0 }}>{daysToExam}</span>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-            <span style={{ fontSize: 14, fontWeight: 800 }}>{daysToExam === 0 ? 'Exam today. Good luck!' : `day${daysToExam === 1 ? '' : 's'} to the exam`}</span>
-            <span style={sub} title="A rough estimate from your recent answers in this subject, not an official SACE grade.">
-              {prediction === undefined
-                ? 'Working out your predicted grade…'
-                : prediction.result
-                  ? <>
-                      Predicted{' '}
-                      {prediction.result.previous && prediction.result.previous !== prediction.result.grade && <>{prediction.result.previous} → </>}
-                      <strong style={{ color: prediction.result.previous && gradeAbove(prediction.result.grade, prediction.result.previous) ? t.success : t.text }}>{prediction.result.grade}</strong>
-                      {prediction.result.weakest && <> · weakest: {prediction.result.weakest.topic}</>}
-                    </>
-                  : `Answer ${Math.max(1, PREDICT_MIN_ANSWERS - prediction.count)} more for a predicted grade`}
-            </span>
+            <span style={{ fontSize: 14, fontWeight: 800 }}>{daysToExam === 0 ? 'Exam today. Good luck!' : `day${daysToExam === 1 ? '' : 's'} until your exam`}</span>
+            {/* The predicted grade, once there are enough answers to give one. */}
+            {prediction?.result && (
+              <span style={sub} title="A rough estimate from your recent answers in this subject, not an official SACE grade.">
+                Predicted{' '}
+                {prediction.result.previous && prediction.result.previous !== prediction.result.grade && <>{prediction.result.previous} → </>}
+                <strong style={{ color: prediction.result.previous && gradeAbove(prediction.result.grade, prediction.result.previous) ? t.success : t.text }}>{prediction.result.grade}</strong>
+                {prediction.result.weakest && <> · weakest: {prediction.result.weakest.topic}</>}
+              </span>
+            )}
           </div>
         </div>
       )}

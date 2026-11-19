@@ -10,6 +10,20 @@
 
 import { buildRemediationQueue, getQuestionConceptTag } from './engine.js'
 import { parseLatexJson } from './mathMarkup.js'
+import { questionFormat } from './questionTypes.js'
+
+/**
+ * The format of the next comeback question, given how many it has served.
+ * A missed multiple-choice question gets multiple choice only. A missed short
+ * answer gets both, a third of them short answer: MCQ, SAQ, MCQ, MCQ, SAQ, ...
+ * Short answers come from the bank (stored and AI-generated variants are
+ * always multiple choice), so a short-answer turn with none left takes a
+ * multiple-choice question instead.
+ */
+export function comebackFormat(parentQuestion, served = 0) {
+  if (questionFormat(parentQuestion) !== 'saq') return 'mcq'
+  return served % 3 === 1 ? 'saq' : 'mcq'
+}
 
 export const REMEDIATION_DB_TIMEOUT_MS = 5000
 // The server adds an access check and reference exemplars around the Claude call.
@@ -95,7 +109,7 @@ export function normalizeVariantRecord(parentQuestion, variant, index = 0) {
  * Returns [] when the bank has no same-topic+subtopic match → caller escalates
  * to stored variants, then AI generation.
  */
-export function selectBankVariants(parentQuestion, allQuestions = [], targetDifficulty = null, excludeIds = []) {
+export function selectBankVariants(parentQuestion, allQuestions = [], targetDifficulty = null, excludeIds = [], format = 'mcq') {
   if (!parentQuestion) return []
   const target = targetDifficulty ?? (parentQuestion.difficulty ?? 3)
   const used = new Set(excludeIds || [])
@@ -105,6 +119,8 @@ export function selectBankVariants(parentQuestion, allQuestions = [], targetDiff
     if (q.id === parentQuestion.id) return false
     if (q.topic !== parentQuestion.topic) return false
     if (q.subtopic !== parentQuestion.subtopic) return false
+    // One format ('mcq' or 'saq'), or null for either.
+    if (format && questionFormat(q) !== format) return false
     // Exclude anything already served this remediation (we encode bank ids in
     // the variant_record_id as `bank__<parentId>__<bankId>`).
     if (used.has(q.id) || used.has(`bank__${parentQuestion.id}__${q.id}`)) return false
@@ -263,7 +279,8 @@ export async function runGenerateRemediationQueue(ctx) {
     pendingBankIds,           // Map | undefined
     onBankQuestionsAdded,
   } = ctx
-  const { skipDbLookup = false } = options
+  // format: 'mcq' (the default) or 'saq'. Only the bank has short answers.
+  const { skipDbLookup = false, format = 'mcq' } = options
   const conceptTag = parentQuestion?.concept_tag || getQuestionConceptTag(parentQuestion)
   // Anchor on the original question's difficulty (same level first); selectBankVariants
   // prefers that, then one level lower (e.g. "3, then 2").
@@ -281,13 +298,14 @@ export async function runGenerateRemediationQueue(ctx) {
 
   try {
     // ── TIER 1: question bank — same topic + subtopic, matching difficulty. No API.
-    const bankQueue = selectBankVariants(parentQuestion, questions, diffTarget, allExcludeIds)
+    const bankQueue = selectBankVariants(parentQuestion, questions, diffTarget, allExcludeIds, format)
     if (bankQueue.length) {
       console.info(`[gradefarm] bank has ${bankQueue.length} same-subtopic question(s) — no API call needed`)
       resolvedQueue = bankQueue.slice(0, REMEDIATION_POOL_SIZE)
       resolvedSource = 'bank'
       return resolvedQueue
     }
+    if (format === 'saq') return []
 
     // ── TIER 2: previously-generated stored variants (same concept/subtopic). No API.
     if (!skipDbLookup) {
@@ -428,11 +446,18 @@ export async function runEnterRemediation(ctx) {
   setRemediationOriginalQ?.(parentQuestion)
   setRemediationUsedIds?.([])
 
+  // A missed short answer mixes in short answers from the bank (comebackFormat);
+  // the multiple-choice questions come from the tiers below as usual.
+  const bankSaq = questionFormat(parentQuestion) === 'saq'
+    ? selectBankVariants(parentQuestion, questions, diffTarget, [], 'saq').slice(0, 4)
+    : []
+  const withSaq = (queue) => [...queue, ...bankSaq]
+
   try {
     // ── TIER 1: question bank — same topic + subtopic, matching difficulty. Instant, no API.
-    const bankQueue = selectBankVariants(parentQuestion, questions, diffTarget, [])
+    const bankQueue = selectBankVariants(parentQuestion, questions, diffTarget, [], 'mcq')
     if (bankQueue.length) {
-      setRemediationQueue?.(bankQueue.slice(0, REMEDIATION_POOL_SIZE))
+      setRemediationQueue?.(withSaq(bankQueue.slice(0, REMEDIATION_POOL_SIZE)))
       setRemediationSource?.('bank')
       setRemediationStatus?.('activated')
       return
@@ -460,9 +485,10 @@ export async function runEnterRemediation(ctx) {
     if (!queue.length) {
       // ── TIER 3: nothing stored — AI generation + persist to bank.
       // skipDbLookup avoids paying the Supabase timeout twice.
-      await generateRemediationQueue(parentQuestion, [], diffTarget, { skipDbLookup: true })
+      const generated = await generateRemediationQueue(parentQuestion, [], diffTarget, { skipDbLookup: true, format: 'mcq' })
+      if (bankSaq.length) setRemediationQueue?.(withSaq(Array.isArray(generated) ? generated : []))
     } else {
-      setRemediationQueue?.(queue)
+      setRemediationQueue?.(withSaq(queue))
       setRemediationSource?.('prebuilt')
       setRemediationStatus?.('activated')
     }
@@ -493,54 +519,61 @@ export async function runLoadNextRemediationQuestion(ctx) {
   } = ctx
 
   let queue = remediationQueue || []
+  // The format this question should be (comebackFormat); a top-up when the
+  // queue has none of it.
+  const want = remediationOriginalQ ? comebackFormat(remediationOriginalQ, remediationUsedIds.length) : null
+  const fits = (q) => !want || questionFormat(q) === want
 
-  // ── TIER 1: refill from the bank first (same topic + subtopic, excluding
-  // questions already served this remediation). Catches questions newly added
-  // to the in-memory bank by a prior AI generation. No API call.
-  if (!queue.length && remediationOriginalQ) {
-    const bankQueue = selectBankVariants(
+  if (remediationOriginalQ && !queue.some(fits)) {
+    let extra = []
+    let source = 'bank'
+    // ── TIER 1: the bank (same topic + subtopic, not served this remediation).
+    // Catches questions newly added to the in-memory bank by a prior AI
+    // generation. No API call.
+    extra = selectBankVariants(
       remediationOriginalQ,
       questions,
       remediationDifficultyTarget ?? (remediationOriginalQ.difficulty ?? 3),
       remediationUsedIds,
+      want,
     ).slice(0, REMEDIATION_POOL_SIZE)
-    if (bankQueue.length) {
-      queue = bankQueue
-      setRemediationQueue?.(bankQueue)
-      setRemediationSource?.('bank')
-      setRemediationStatus?.('activated')
-    }
-  }
 
-  // ── TIER 2: stored variants.
-  if (!queue.length && remediationOriginalQ) {
-    const conceptTag = remediationOriginalQ.concept_tag || getQuestionConceptTag(remediationOriginalQ)
-    const { directVariants, conceptVariants } = await fetchRemediationVariantsSafe(
-      deps.getRemediationVariants,
-      remediationOriginalQ.id, conceptTag, remediationUsedIds, 'loadNextRemediationQuestion',
-      deps.dbTimeoutMs,
-    )
-    const dbQueue = buildRemediationQueue({
-      directVariants: (directVariants || []).map((v, i) => normalizeVariantRecord(remediationOriginalQ, v, i)),
-      conceptVariants: (conceptVariants || []).map((v, i) => normalizeVariantRecord(remediationOriginalQ, v, i)),
-      excludeIds: remediationUsedIds,
-      limit: 5,
-    }).map(v => ({ ...v, is_variant: true, source: v.source || 'prebuilt' }))
-
-    if (dbQueue.length) {
-      queue = dbQueue
-      setRemediationQueue?.(dbQueue)
-      setRemediationSource?.('prebuilt')
-      setRemediationStatus?.('activated')
-    }
-
-    if (!queue.length) {
-      queue = await generateRemediationQueue(
-        remediationOriginalQ,
-        remediationUsedIds,
-        remediationDifficultyTarget,
-        { skipDbLookup: true },
+    // Short answers only come from the bank; multiple choice also from:
+    if (!extra.length && want === 'mcq') {
+      // ── TIER 2: stored variants.
+      const conceptTag = remediationOriginalQ.concept_tag || getQuestionConceptTag(remediationOriginalQ)
+      const { directVariants, conceptVariants } = await fetchRemediationVariantsSafe(
+        deps.getRemediationVariants,
+        remediationOriginalQ.id, conceptTag, remediationUsedIds, 'loadNextRemediationQuestion',
+        deps.dbTimeoutMs,
       )
+      extra = buildRemediationQueue({
+        directVariants: (directVariants || []).map((v, i) => normalizeVariantRecord(remediationOriginalQ, v, i)),
+        conceptVariants: (conceptVariants || []).map((v, i) => normalizeVariantRecord(remediationOriginalQ, v, i)),
+        excludeIds: remediationUsedIds,
+        limit: 5,
+      }).map(v => ({ ...v, is_variant: true, source: v.source || 'prebuilt' }))
+      source = 'prebuilt'
+
+      // ── TIER 3: AI generation.
+      if (!extra.length) {
+        const generated = await generateRemediationQueue(
+          remediationOriginalQ,
+          remediationUsedIds,
+          remediationDifficultyTarget,
+          { skipDbLookup: true, format: 'mcq' },
+        )
+        extra = Array.isArray(generated) ? generated : []
+        source = 'generated'
+      }
+    }
+
+    if (extra.length) {
+      const have = new Set(queue.map(q => q.variant_record_id || q.id))
+      queue = [...queue, ...extra.filter(q => !have.has(q.variant_record_id || q.id))]
+      setRemediationQueue?.(queue)
+      setRemediationSource?.(source)
+      setRemediationStatus?.('activated')
     }
   }
 
@@ -562,9 +595,12 @@ export async function runLoadNextRemediationQuestion(ctx) {
     // "Reduce by 1, then ramp back": pick the pool question at the difficulty
     // appropriate to the current mastery streak (eased early, original level for
     // the final mastery question) rather than always taking the head.
+    // Among the questions in the format this turn wants (any, if none left).
     const anchor = remediationOriginalQ?.difficulty ?? remediationDifficultyTarget ?? 3
     const wantDiff = remediationQuestionDifficulty(anchor, remediationStreak, remediationTarget)
-    pickIdx = pickClosestDifficulty(queue, wantDiff)
+    const fitting = queue.map((q, i) => i).filter(i => fits(queue[i]))
+    const pool = fitting.length ? fitting : queue.map((q, i) => i)
+    pickIdx = pool[pickClosestDifficulty(pool.map(i => queue[i]), wantDiff)]
   }
 
   const nextVariant = queue[pickIdx]

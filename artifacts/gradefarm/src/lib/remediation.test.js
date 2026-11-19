@@ -18,6 +18,7 @@ import {
   runEnterRemediation,
   runGenerateRemediationQueue,
   runLoadNextRemediationQuestion,
+  comebackFormat,
 } from './remediation.js'
 
 // ─── Test scaffolding ──────────────────────────────────────────────────────
@@ -760,5 +761,64 @@ describe('runLoadNextRemediationQuestion', () => {
     assert.equal(rec.calls.displayQuestion.length, 1)
     assert.equal(rec.calls.source.at(-1), 'prebuilt')
     assert.equal(rec.calls.status.at(-1), 'activated')
+  })
+})
+
+// ─── Comeback practice and the missed question's format ──────────────────────
+describe('comeback format', () => {
+  const saqParent = () => makeParent({ question_type: 'short_text', options: null })
+  const mcqBank = (id, o = {}) => makeBankQuestion(id, o)
+  const saqBank = (id, o = {}) => makeBankQuestion(id, { question_type: 'numeric', options: null, ...o })
+  const deps = (extra = {}) => ({ ...baseDeps(), ...extra })
+
+  test('a missed multiple-choice question gets multiple choice only', () => {
+    assert.deepEqual([0, 1, 2, 3, 4].map(n => comebackFormat(makeParent(), n)), ['mcq', 'mcq', 'mcq', 'mcq', 'mcq'])
+    assert.deepEqual(selectBankVariants(makeParent(), [mcqBank('b1'), saqBank('b2')]).map(q => q.bank_question_id), ['b1'])
+  })
+
+  test('a missed short answer goes MCQ, SAQ, MCQ, MCQ, SAQ, ...', () => {
+    assert.deepEqual([0, 1, 2, 3, 4, 5, 6, 7].map(n => comebackFormat(saqParent(), n)),
+      ['mcq', 'saq', 'mcq', 'mcq', 'saq', 'mcq', 'mcq', 'saq'])
+  })
+
+  test('entering for a missed short answer pools multiple choice and bank short answers', async () => {
+    const rec = makeStateRecorder()
+    const ctx = { parentQuestion: saqParent(), prefetched: new Map(), questions: [mcqBank('m1'), mcqBank('m2'), saqBank('s1')], deps: deps(), generateRemediationQueue: async () => [], ...rec }
+    await runEnterRemediation(ctx)
+    const pool = rec.calls.queue.at(-1).map(q => q.bank_question_id).sort()
+    assert.deepEqual(pool, ['m1', 'm2', 's1'])
+    assert.equal(rec.calls.status.at(-1), 'activated')
+  })
+
+  test('with no multiple choice in the bank, generated ones are pooled with the bank short answers', async () => {
+    const rec = makeStateRecorder()
+    let asked = null
+    const ctx = {
+      parentQuestion: saqParent(), prefetched: new Map(), questions: [saqBank('s1')], deps: deps(),
+      generateRemediationQueue: async (parent, used, diff, options) => { asked = options; return [makeStoredVariant('ai1')] },
+      ...rec,
+    }
+    await runEnterRemediation(ctx)
+    assert.equal(asked.format, 'mcq')
+    assert.deepEqual(rec.calls.queue.at(-1).map(q => q.variant_record_id || q.id), ['ai1', 'bank__q_parent_1__s1'])
+  })
+
+  test('each turn takes the format it wants, and multiple choice when no short answer is left', async () => {
+    const parent = saqParent()
+    const pool = [...selectBankVariants(parent, [mcqBank('m1'), mcqBank('m2'), mcqBank('m3'), mcqBank('m4')], 3, [], 'mcq'), ...selectBankVariants(parent, [saqBank('s1')], 3, [], 'saq')]
+    let queue = pool
+    let used = []
+    const served = []
+    for (let turn = 0; turn < 5; turn++) {
+      let shown = null
+      await runLoadNextRemediationQuestion({
+        remediationQueue: queue, remediationOriginalQ: parent, remediationUsedIds: used, questions: [], deps: deps(),
+        setRemediationQueue: q => { queue = q }, setRemediationUsedIds: f => { used = f(used) }, setDisplayQuestion: q => { shown = q },
+        setRemediationSource: () => {}, setRemediationStatus: () => {}, generateRemediationQueue: async () => [],
+      })
+      served.push(shown.bank_question_id[0])
+    }
+    // MCQ, SAQ, MCQ, MCQ, then a short-answer turn with none left takes multiple choice.
+    assert.deepEqual(served, ['m', 's', 'm', 'm', 'm'])
   })
 })
