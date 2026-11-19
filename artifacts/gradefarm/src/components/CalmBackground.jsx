@@ -32,6 +32,11 @@ function makeGrain() {
 // [height as a share of the page, amplitude in px, wave frequency, phase]
 const WAVES = [[0.72, 34, 0.0042, 0], [0.84, 26, 0.0055, 2.1], [0.58, 22, 0.0035, 4.2]]
 // Each wave is three strokes, wide and faint to narrow, so it reads as a soft band.
+// With matchLight, dark mode keeps the light mode's glows but draws the waves at WAVE_DARK of their
+// strength. The same gold band shifts a dark page's lightness about three times as much as a light
+// page's (L* 13.9 against 4.3), so at 0.35 the waves are as blended in, and as calm to watch, as in
+// light mode (L* about 4.2). Speed is the same in both.
+const WAVE_DARK = 0.35
 const STROKES = [[150, 0.035], [80, 0.04], [26, 0.05]]
 
 export function drawCalm(ctx, w, h, t, { gold, dark, grain, refH, matchLight = false }) {
@@ -59,7 +64,7 @@ export function drawCalm(ctx, w, h, t, { gold, dark, grain, refH, matchLight = f
   for (const [yb, amp, f, ph] of WAVES) {
     const y0 = H * yb
     for (const [lw, al] of STROKES) {
-      ctx.strokeStyle = rgba(gold, al * (faint ? 0.8 : 1))
+      ctx.strokeStyle = rgba(gold, al * (faint ? 0.8 : dark ? WAVE_DARK : 1))
       ctx.lineWidth = lw
       ctx.beginPath()
       for (let x = -40; x <= w + 40; x += 12) {
