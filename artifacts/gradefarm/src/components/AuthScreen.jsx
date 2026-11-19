@@ -129,15 +129,15 @@ export default function AuthScreen({ onAuth, onBack, theme = 'dark', onToggleThe
 
   const title = mode === 'signin' ? 'Welcome back' : mode === 'reset' ? 'Reset your password' : asParent ? "Set up your child's account" : 'Create your account'
   const subtitle = invite?.invitedBy && mode !== 'reset'
-    ? `${mode === 'signin' ? 'Sign in' : 'Create an account'} to accept ${invite.invitedBy}'s invite.`
+    ? `${mode === 'signin' ? 'Log in' : 'Create an account'} to accept ${invite.invitedBy}'s invite.`
     : mode === 'reset' ? "We'll email you a link to choose a new one."
     : mode === 'signup' && asParent ? "You sign in with your email, and we send you their progress each week. Their first subject is free."
     : mode === 'signup' ? 'Your first subject is free.'
-    : 'Sign in to pick up where you left off.'
+    : 'Log in to pick up where you left off.'
   const emailLabel = mode === 'signup' && asParent ? 'Your email' : 'Email'
   const submitLabel = loading
     ? (mode === 'signin' ? 'Signing in…' : mode === 'reset' ? 'Sending…' : 'Creating your account…')
-    : (mode === 'signin' ? 'Sign in' : mode === 'reset' ? 'Send reset link' : 'Create account')
+    : (mode === 'signin' ? 'Log in' : mode === 'reset' ? 'Send reset link' : 'Create account')
   // Google and Apple: not for a password reset, nor an invite (which must land on the invited email).
   const providers = mode !== 'reset' && !invite ? PROVIDERS : []
   const dark = theme === 'dark'
@@ -197,7 +197,7 @@ export default function AuthScreen({ onAuth, onBack, theme = 'dark', onToggleThe
                 <div style={{ display: 'grid', gridTemplateColumns: `repeat(${providers.length}, minmax(0, 1fr))`, gap: 10 }}>
                   {providers.map(p => (
                     <button key={p.id} type="button" className="af-btn au-sso" onClick={() => withProvider(p)} disabled={!!leaving}
-                      aria-label={`${mode === 'signup' ? 'Sign up' : 'Sign in'} with ${p.label}`}
+                      aria-label={`${mode === 'signup' ? 'Sign up' : 'Log in'} with ${p.label}`}
                       style={p.id === 'apple'
                         ? { border: `1px solid ${dark ? '#ffffff' : '#000000'}`, background: dark ? '#ffffff' : '#000000', color: dark ? '#000000' : '#ffffff' }
                         : { border: `1px solid ${dark ? t.border : '#dadce0'}`, background: dark ? t.bgCard : '#ffffff', color: dark ? t.text : '#1f1f1f' }}>
@@ -244,7 +244,7 @@ export default function AuthScreen({ onAuth, onBack, theme = 'dark', onToggleThe
 
           <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center', fontSize: 13.5, color: t.textMuted, textAlign: 'center' }}>
             {mode === 'signin' && <span>New here? <button type="button" className="af-link" onClick={() => switchMode('signup')} style={linkStyle(t)}>Create an account</button></span>}
-            {mode === 'signup' && <span>Have an account? <button type="button" className="af-link" onClick={() => switchMode('signin')} style={linkStyle(t)}>Sign in</button></span>}
+            {mode === 'signup' && <span>Have an account? <button type="button" className="af-link" onClick={() => switchMode('signin')} style={linkStyle(t)}>Log in</button></span>}
             {mode === 'reset' && <button type="button" className="af-link" onClick={() => switchMode('signin')} style={linkStyle(t)}>Back to sign in</button>}
             {mode === 'signup' && !asParent && !invite && (
               <span>Tutoring with us? <button type="button" className="af-link" onClick={() => navigate('/auth/tutor')} style={linkStyle(t)}>Apply as a tutor</button></span>

@@ -125,7 +125,7 @@ const CSS = `${SITE_CSS}${PLAN_CSS}
 /** The limit as tutor plans word it: 999 or more (or none) reads as every one. */
 const limitText = (n, one, many, all) => (typeof n === 'number' && n > 0 && n < 999 ? `${n} ${n === 1 ? one : many}` : all)
 
-export default function PricingPage({ theme = 'light', onToggleTheme, onSignIn, signedIn = false, profileState = null }) {
+export default function PricingPage({ theme = 'light', onSignIn, signedIn = false, profileState = null }) {
   const navigate = useNavigate()
   const [pricing, setPricing] = useState(DEFAULT_PRICING)
   const [billing, setBilling] = useState(null) // signed in: /api/billing/config
@@ -230,7 +230,7 @@ export default function PricingPage({ theme = 'light', onToggleTheme, onSignIn, 
       }
     } catch (e) {
       if (e.code === 'user_already_exists') {
-        setDetailsError(<>That email already has an account. <button type="button" className="lp-link" onClick={() => navigate('/auth', { state: { email } })}>Sign in</button> to carry on with this plan.</>)
+        setDetailsError(<>That email already has an account. <button type="button" className="lp-link" onClick={() => navigate('/auth', { state: { email } })}>Log in</button> to carry on with this plan.</>)
       } else {
         takePendingCheckout() // nothing was made, so forget it
         setDetailsError(e.message || "We couldn't set that up. Please try again.")
@@ -281,7 +281,7 @@ export default function PricingPage({ theme = 'light', onToggleTheme, onSignIn, 
       // The city skyline sits behind the page's content (z-index -1 inside this stacking context).
       isolation: 'isolate', '--pp-city-o': theme === 'dark' ? 0.06 : 0.07 }}>
       <style>{SITE_FONTS + CSS}</style>
-      <SiteNav theme={theme} onToggleTheme={onToggleTheme} onSignIn={onSignIn || (() => navigate('/auth'))} onStart={signUp}
+      <SiteNav onSignIn={onSignIn || (() => navigate('/auth'))} onStart={signUp}
         onLogo={() => navigate('/home')} links={NAV} />
 
       {!askState && <CitySkyline key={studyState} state={studyState} className="pp-city" />}

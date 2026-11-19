@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Sun, Moon, Menu, X, ArrowRight } from 'lucide-react'
+import { Menu, X, ArrowRight } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 
 // The public site's shared pieces (homepage, pricing): colours from the app's
@@ -85,6 +85,8 @@ export const SITE_CSS = `
 .lp-nav-links button { border: none; background: none; padding: 4px 0; font-size: 15.5px; font-weight: 600; color: var(--lp-muted); cursor: pointer; }
 .lp-nav-links button:hover { color: var(--lp-ink); }
 .lp-nav-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.lp-nav-login { border: none; background: none; padding: 8px 6px; font-size: 15px; font-weight: 700; color: var(--lp-ink); cursor: pointer; white-space: nowrap; }
+.lp-nav-login:hover { text-decoration: underline; text-decoration-color: var(--lp-gold); text-decoration-thickness: 2px; text-underline-offset: 4px; }
 .lp-nav .lp-btn.sm { min-height: 38px; padding: 0 15px; font-size: 14.5px; }
 .lp-menu-btn { display: none; }
 .lp-nav-start .short { display: none; }
@@ -115,7 +117,8 @@ export const SITE_CSS = `
 .lp-copy { margin-left: auto; }
 @media (prefers-reduced-motion: reduce) { .lp-btn.cta, .lp-btn.cta::after, .lp-btn.cta svg { animation: none; transition: none; } }
 @media (max-width: 760px) {
-  .lp-nav-links, .lp-nav-signin { display: none; }
+  .lp-nav-links { display: none; }
+  .lp-nav-login { display: none; }
   .lp-menu-btn { display: grid; }
   /* The full "Start GradeFarming" doesn't fit beside the logo on a phone. */
   .lp-nav-start .long { display: none; }
@@ -140,10 +143,10 @@ export function Wordmark({ size = 28, onClick, label = 'gradefarm. home' }) {
 }
 
 /**
- * The top nav: wordmark, `links` ([label, onClick, current?]), Sign in,
- * Start GradeFarming, the light/dark switch, and a menu on phones.
+ * The top nav: wordmark, `links` ([label, onClick, current?]), Log in,
+ * Start GradeFarming, and a menu on phones. Light or dark follows the device.
  */
-export function SiteNav({ theme, onToggleTheme, onSignIn, onStart, onLogo, links }) {
+export function SiteNav({ onSignIn, onStart, onLogo, links }) {
   const [scrolled, setScrolled] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   useEffect(() => {
@@ -167,14 +170,8 @@ export function SiteNav({ theme, onToggleTheme, onSignIn, onStart, onLogo, links
           {links.map(([label, fn, current]) => <button key={label} type="button" onClick={pick(fn)} aria-current={current ? 'page' : undefined}>{label}</button>)}
         </div>
         <div className="lp-nav-right">
-          <button type="button" className="lp-btn sm lp-nav-signin" onClick={onSignIn}>Sign in</button>
+          <button type="button" className="lp-nav-login" onClick={onSignIn}>Log in</button>
           <button type="button" className="lp-btn sm gold lp-nav-start" onClick={onStart} aria-label="Start GradeFarming"><span className="long">Start GradeFarming</span><span className="short" aria-hidden="true">Start</span></button>
-          {onToggleTheme && (
-            <button type="button" className="lp-icon-btn" onClick={onToggleTheme}
-              aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} title={theme === 'dark' ? 'Light mode' : 'Dark mode'}>
-              {theme === 'dark' ? <Sun size={15} aria-hidden="true" /> : <Moon size={15} aria-hidden="true" />}
-            </button>
-          )}
           <button type="button" className="lp-icon-btn lp-menu-btn" onClick={() => setMenuOpen(o => !o)}
             aria-expanded={menuOpen} aria-controls="lp-menu" aria-label={menuOpen ? 'Close menu' : 'Open menu'}>
             {menuOpen ? <X size={16} aria-hidden="true" /> : <Menu size={16} aria-hidden="true" />}
@@ -185,7 +182,7 @@ export function SiteNav({ theme, onToggleTheme, onSignIn, onStart, onLogo, links
         <div id="lp-menu" className="lp-in">
           <div className="lp-menu">
             {links.map(([label, fn]) => <button key={label} type="button" onClick={pick(fn)}>{label}</button>)}
-            <button type="button" onClick={pick(onSignIn)}>Sign in</button>
+            <button type="button" onClick={pick(onSignIn)}>Log in</button>
           </div>
         </div>
       )}

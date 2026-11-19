@@ -129,7 +129,7 @@ export default function TutorSignupScreen({ theme = 'dark', onToggleTheme }) {
               {error && <Note tone="danger" theme={theme}>{error}</Note>}
               <button type="submit" className="af-btn" style={authBtn(t, 'primary', { full: true })}>Continue</button>
               <p style={{ margin: 0, textAlign: 'center', fontSize: 13, color: t.textMuted }}>
-                Have an account? <button type="button" className="af-link" onClick={() => navigate('/auth')} style={linkStyle(t)}>Sign in</button>
+                Have an account? <button type="button" className="af-link" onClick={() => navigate('/auth')} style={linkStyle(t)}>Log in</button>
               </p>
             </form>
           ) : (

@@ -598,7 +598,7 @@ function Subjects({ onPick }) {
   )
 }
 
-export default function LandingPage({ theme = 'light', onToggleTheme, onSignIn }) {
+export default function LandingPage({ theme = 'light', onSignIn }) {
   const navigate = useNavigate()
   const location = useLocation()
   const [pricing, setPricing] = useState(null)
@@ -633,7 +633,7 @@ export default function LandingPage({ theme = 'light', onToggleTheme, onSignIn }
   return (
     <div className={`lp gfx solo${dark ? ' dark' : ''}`} style={{ ...themeVars(theme), colorScheme: dark ? 'dark' : 'light' }}>
       <style>{SITE_FONTS + SITE_CSS + HOME_CSS + EXTRA_CSS}</style>
-      <SiteNav theme={theme} onToggleTheme={onToggleTheme} onSignIn={onSignIn} onStart={start}
+      <SiteNav onSignIn={onSignIn} onStart={start}
         onLogo={() => window.scrollTo({ top: 0, behavior: 'smooth' })} links={NAV} />
 
       <main>

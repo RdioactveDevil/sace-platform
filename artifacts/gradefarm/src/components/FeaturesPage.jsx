@@ -675,7 +675,7 @@ const PANELS = [InfiniteQuestions, AdaptiveDifficulty, ComebackMode, SpacedRepet
 
 /* ─── page ─────────────────────────────────────────────────────────────── */
 
-export default function FeaturesPage({ theme = 'light', onToggleTheme, onSignIn }) {
+export default function FeaturesPage({ theme = 'light', onSignIn }) {
   const navigate = useNavigate()
   const location = useLocation()
   const open = featureFromHash(location.hash)
@@ -694,7 +694,7 @@ export default function FeaturesPage({ theme = 'light', onToggleTheme, onSignIn 
   return (
     <div className={`lp gfx${dark ? ' dark' : ''}`} style={{ ...themeVars(theme), colorScheme: dark ? 'dark' : 'light' }}>
       <style>{SITE_FONTS + SITE_CSS + FEATURES_CSS + EXTRA_CSS}</style>
-      <SiteNav theme={theme} onToggleTheme={onToggleTheme} onSignIn={onSignIn} onStart={start} onLogo={() => navigate('/home')} links={NAV} />
+      <SiteNav onSignIn={onSignIn} onStart={start} onLogo={() => navigate('/home')} links={NAV} />
 
       <main>
         <div className="fwrap">
