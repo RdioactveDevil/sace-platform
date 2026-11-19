@@ -2,7 +2,7 @@
 // Colours come from the site theme (themeVars in SiteChrome.jsx) through the tokens on .gfx.
 export const FEATURES_CSS = `
 .gfx{--win:var(--lp-win);--page:var(--lp-page);--card:var(--lp-card);--subtle:var(--lp-subtle);--line:var(--lp-line);--line2:var(--lp-line-2);--ink:var(--lp-ink);--ink2:var(--lp-ink-2);--muted:var(--lp-muted);--faint:var(--lp-faint);--gold:var(--lp-gold);--goldt:var(--lp-gold-text);--ok:var(--lp-ok);--okbg:var(--lp-ok-bg);--bad:var(--lp-bad);--badbg:var(--lp-bad-bg);--sel:var(--lp-sel-row);--sq0:var(--lp-sq0);--sq2:var(--lp-sq2);--sq3:var(--lp-sq3);--faded:var(--lp-faded);--onbg:var(--lp-on-bg);--onfg:var(--lp-on-fg);--float:var(--lp-float);--logo:var(--lp-logo-g);--logof:var(--lp-logo-f);--city:rgba(12,16,55,.07);--ga:.30;--gb:.20;--wave:1}
-.gfx.dark{--city:rgba(255,255,255,.05);--ga:.16;--gb:.10;--wave:.8}
+.gfx.dark{--city:rgba(255,255,255,.05)}
 .gfx a{color:inherit}
 .gfx a:hover{color:inherit}
 .gfx{min-height:100vh;background:var(--win);color:var(--ink);font-family:'Plus Jakarta Sans','Segoe UI',sans-serif;font-size:15px;line-height:1.6;overflow-x:clip;-webkit-font-smoothing:antialiased;transition:background-color .3s,color .3s}
@@ -13,7 +13,7 @@ export const FEATURES_CSS = `
 .gfx button{font-family:inherit;cursor:pointer}
 .gfx button:disabled{cursor:default}
 .gfx :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
-.gfx .in{max-width:1160px;margin:0 auto;padding:0 28px}
+.gfx .in{max-width:var(--lp-max,1160px);margin:0 auto;padding:0 var(--lp-gutter,28px)}
 .gfx .m{font-family:'Cambria Math','STIX Two Math','Latin Modern Math','Times New Roman',serif;font-size:1.08em;letter-spacing:0}
 .gfx .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:42px;padding:0 18px;border-radius:10px;font-size:14px;font-weight:800;white-space:nowrap;border:1px solid var(--line);background:var(--card);color:var(--ink);text-decoration:none}
 .gfx .btn:hover{border-color:var(--line2);color:var(--ink)}
@@ -474,8 +474,7 @@ export const FEATURES_CSS = `
 .gfx .live{max-width:560px}
 .gfx .four{grid-template-columns:repeat(2,minmax(0,1fr))}
 .gfx .navl{display:none}}
-@media (max-width:760px){.gfx .in{padding:0 16px}
-.gfx .nav .in{gap:10px}
+@media (max-width:760px){.gfx .nav .in{gap:10px}
 .gfx .nav-in{display:none}
 .gfx .hero{padding:44px 0 72px}
 .gfx .lead{font-size:17px}

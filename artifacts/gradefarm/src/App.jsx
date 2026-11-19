@@ -1053,6 +1053,20 @@ function RouteFallback({ theme }) {
   )
 }
 
+/** 'dark' or 'light' from the device's own setting, following it if it changes. */
+function useSystemTheme() {
+  const query = '(prefers-color-scheme: dark)'
+  const [dark, setDark] = useState(() => { try { return window.matchMedia(query).matches } catch { return false } })
+  useEffect(() => {
+    let m
+    try { m = window.matchMedia(query) } catch { return undefined }
+    const onChange = (e) => setDark(e.matches)
+    m.addEventListener?.('change', onChange)
+    return () => m.removeEventListener?.('change', onChange)
+  }, [])
+  return dark ? 'dark' : 'light'
+}
+
 function AppInner() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -1083,6 +1097,8 @@ function AppInner() {
   })
   setActivePalette(palette) // before anything below reads THEMES
   const theme = modeOf(palette)
+  // The public site (home, features, pricing) has no switch: it follows the device's light / dark setting.
+  const siteTheme = useSystemTheme()
   // Every theme token as a CSS variable (--t-bg, --t-text, ...), plus the ink
   // colour as an RGB triple for translucent lines and fills, so screens can
   // style with var() and follow light and dark without their own palettes.
@@ -1820,8 +1836,8 @@ function AppInner() {
       <Route path="/privacy" element={<PrivacyScreen />} />
       <Route path="/reset-password" element={<ResetPasswordScreen {...commonProps} signedIn={!!user} />} />
       {/* Features — public, signed in or not */}
-      <Route path="/features" element={<FeaturesPage {...commonProps} onSignIn={() => navigate('/auth')} />} />
-      <Route path="/pricing" element={<PricingPage {...commonProps} onSignIn={() => navigate('/auth')} signedIn={!!(user && profile)} profileState={(user && profile?.state) || null} />} />
+      <Route path="/features" element={<FeaturesPage theme={siteTheme} onSignIn={() => navigate('/auth')} />} />
+      <Route path="/pricing" element={<PricingPage theme={siteTheme} onSignIn={() => navigate('/auth')} signedIn={!!(user && profile)} profileState={(user && profile?.state) || null} />} />
       {/* Parents of advanced Year 6 students (selective-entry prep) — public */}
       <Route path="/year-6" element={<Year6Page signedIn={!!(user && profile)} />} />
       <Route path="/selective" element={<Navigate to="/year-6" replace />} />
@@ -1899,7 +1915,7 @@ function AppInner() {
           : !profile.app_tutorial_completed_at && selectedSubject
             ? <Navigate to={'/question-bank'} replace />
           : <Navigate to={profile.is_tutor ? '/tutor' : '/question-bank'} replace />
-          : <LandingPage {...commonProps} onSignIn={() => navigate('/auth')} />
+          : <LandingPage theme={siteTheme} onSignIn={() => navigate('/auth')} />
       } />
 
       {/* Auth — public */}

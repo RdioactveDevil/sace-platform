@@ -346,7 +346,7 @@ function DetailsStep({ details, chosen, names, summary, today }) {
         <p className="pp-fine">By continuing you agree to the <a className="lp-link" href="/terms" target="_blank" rel="noreferrer">terms</a> and <a className="lp-link" href="/privacy" target="_blank" rel="noreferrer">privacy policy</a>.</p>
         <div className="pp-alt">
           <button type="button" className="lp-link" onClick={() => details.onParent(chosen)} disabled={busy}>Setting this up for your child?</button>
-          <span>Have an account? <button type="button" className="lp-link" onClick={() => details.onSignIn(email.trim(), chosen)} disabled={busy}>Sign in</button></span>
+          <span>Have an account? <button type="button" className="lp-link" onClick={() => details.onSignIn(email.trim(), chosen)} disabled={busy}>Log in</button></span>
         </div>
       </form>
     </>

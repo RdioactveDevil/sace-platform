@@ -309,7 +309,7 @@ export default function Year6Page({ signedIn = false }) {
         <div className="in">
           <div className="brand"><img src={IMG.crest} alt="Titanium Tutoring crest" /><div><b>grade<i>farm.</i></b><span>by Titanium Tutoring</span></div></div>
           <div className="top-actions">
-            <a className="signin" href={signedIn ? '/home' : '/auth'} onClick={go}>{signedIn ? 'Open gradefarm' : 'Sign in'}</a>
+            <a className="signin" href={signedIn ? '/home' : '/auth'} onClick={go}>{signedIn ? 'Open gradefarm' : 'Log in'}</a>
             <a className="cta" href="/readiness-check" onClick={go}>Free readiness check</a>
           </div>
         </div>
@@ -357,7 +357,7 @@ export default function Year6Page({ signedIn = false }) {
                 <h2 className="h2">A practice app that works like a tutor sitting beside your child.</h2>
                 <p className="lead">gradefarm is an online maths and English practice app, made by Titanium Tutoring. Your child answers exam-style questions for 15 minutes a day. Every answer tells it a little more about where they are, and it picks the next question to match.</p>
                 <div className="facts">
-                  <div className="fact"><span className="ic">✓</span><div><b>Works on any laptop, tablet or phone</b><p>Nothing to install. Sign in from the browser.</p></div></div>
+                  <div className="fact"><span className="ic">✓</span><div><b>Works on any laptop, tablet or phone</b><p>Nothing to install. Log in from the browser.</p></div></div>
                   <div className="fact"><span className="ic">∞</span><div><b>Hundreds of selective-level questions</b><p>Maths and English, with worked solutions, and new ones written whenever they run out.</p></div></div>
                   <div className="fact"><span className="ic">★</span><div><b>An AI tutor, Titan, for when they're stuck</b><p>It coaches with hints and questions, one step at a time.</p></div></div>
                 </div>
@@ -576,7 +576,7 @@ export default function Year6Page({ signedIn = false }) {
         </section>
       </main>
 
-      <footer><div className="in"><span>gradefarm. by Titanium Tutoring · Adelaide, South Australia</span><span><a href="/terms" onClick={go}>Terms</a> · <a href="/privacy" onClick={go}>Privacy</a> · <a href={signedIn ? '/home' : '/auth'} onClick={go}>{signedIn ? 'Open gradefarm' : 'Sign in'}</a></span></div></footer>
+      <footer><div className="in"><span>gradefarm. by Titanium Tutoring · Adelaide, South Australia</span><span><a href="/terms" onClick={go}>Terms</a> · <a href="/privacy" onClick={go}>Privacy</a> · <a href={signedIn ? '/home' : '/auth'} onClick={go}>{signedIn ? 'Open gradefarm' : 'Log in'}</a></span></div></footer>
 
       <div className={`sticky${showBar ? ' show' : ''}`}><div className="t"><b>Free readiness check</b><br />20 questions · no card</div><a className="cta" href="/readiness-check" onClick={go}>Start free</a></div>
     </div>

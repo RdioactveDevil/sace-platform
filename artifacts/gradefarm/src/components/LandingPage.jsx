@@ -11,6 +11,7 @@ import CalmBackground from './CalmBackground'
 import TryItBox from './site/TryItBox'
 import { HOME_CSS } from './site/homeCss'
 import { FEATURE_SLUGS } from './site/features'
+import { SpotStudy, SpotChem, ResultsFigure, SPOT_CSS } from './site/Spotlights'
 
 // The public homepage (/home), as approved on the design canvas:
 //
@@ -27,7 +28,33 @@ import { FEATURE_SLUGS } from './site/features'
 // the saved light/dark theme through themeVars.
 
 const EXTRA_CSS = `
-.gfx .sec { scroll-margin-top: 72px; }
+.gfx .sec { scroll-margin-top: var(--lp-header, 72px); }
+/* "gradefarm is the rest." on its own line, after a gap. */
+.gfx .cmp-rest { display: block; margin-top: .55em; }
+/* Dark mode: the Without / With switch uses the site's inverse colours (a light pill with dark text) for
+   Without, and gold for With, so both positions read against the dark pill. The Without cards sit a
+   shade lighter than the page so they lift off it. */
+.gfx.dark .sw { background: #232328; border-color: #34343c; }
+.gfx.dark .sw .thumb { background: var(--onbg); }
+.gfx.dark .sw.on .thumb { background: var(--gold); }
+.gfx.dark .sw button { color: #c9c9d1; }
+.gfx.dark .sw button[aria-pressed="true"] { color: var(--onfg); }
+.gfx.dark .sw.on button[aria-pressed="true"] { color: #0c1037; }
+.gfx.dark .tile:not(.on *) { background: #232328; border-color: #3a3a42; }
+/* One continuous page: the background (CalmBackground, fixed) shows through every section, which are split
+   by thin lines that stop at the content's width. The footer stays solid. */
+.gfx main { position: relative; z-index: 1; }
+.gfx .sec.pg { background: transparent; }
+.gfx .sec, .gfx .end { border-top: 0; }
+.gfx .sec::before, .gfx .end::before { content: ""; position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: min(calc(var(--lp-max) - 2 * var(--lp-gutter)), calc(100% - 2 * var(--lp-gutter))); height: 1px; background: var(--line); }
+.gfx .lp-foot { position: relative; z-index: 1; background: var(--win); }
+/* The closing call to action: words on the left, the results figure on the right. */
+.gfx .end .in.end-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 40px; align-items: center; text-align: left; }
+.gfx .end-copy { display: flex; flex-direction: column; align-items: flex-start; gap: 18px; }
+.gfx .end-copy .lead { margin: 0; font-size: clamp(16.5px, 1.5vw, 19px); color: var(--ink2); }
+@media (max-width: 900px) { .gfx .end .in.end-grid { grid-template-columns: minmax(0, 1fr); text-align: center; } .gfx .end-copy { align-items: center; } }
+/* The header sits over the hero, so the hero starts below it. */
+.gfx .hero { padding-top: calc(var(--lp-header) + 40px); }
 .gfx .hc { color: inherit; text-decoration: none; }
 .gfx .wq .mt > span { white-space: nowrap !important; }
 /* Hero: six parts and three bits of clutter, messy without gradefarm.; tidy in a 3 x 2 grid with it. */
@@ -43,7 +70,6 @@ const EXTRA_CSS = `
   .gfx .tile .b { grid-template-columns: 92px minmax(0, 1fr); gap: 12px; padding: 12px; }
   .gfx .tile .b strong { font-size: 15px; }
   .gfx .tile .b em { font-size: 12.5px; }
-  .gfx .cap { top: 448px; }
   /* The clutter sits behind, half hidden or hanging off the edge, and flies off when gradefarm. is on. */
   .gfx .tile.junk { z-index: 0; transition: opacity .45s ease, transform .6s cubic-bezier(.65,0,.25,1); }
   .gfx .tile.junk.x0 { left: -4%; top: 18px; transform: rotate(-7deg); }
@@ -59,7 +85,7 @@ const EXTRA_CSS = `
   .gfx .tile.t4 { transform: rotate(1deg); } .gfx .tile.t5 { transform: rotate(-1.2deg); }
   .gfx .on .tile.t4, .gfx .on .tile.t5 { transform: none; }
 }
-/* ── Hero, Without gradefarm.: wobbling cards, crumpled paper, ink, coffee and stationery ── */
+/* ── Hero, Without gradefarm.: wobbling cards, crumpled paper and ink ── */
 @keyframes gfx-wob { 0% { translate: 0 0; rotate: 0deg; } 50% { translate: 1.5px -2px; rotate: .5deg; } 100% { translate: -1.5px 1px; rotate: -.4deg; } }
 @keyframes gfx-snake { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
 @keyframes gfx-snake-fade { 0%, 100% { opacity: 0; } 20%, 70% { opacity: 1; } }
@@ -93,12 +119,6 @@ const EXTRA_CSS = `
 /* Loose on the desk. */
 .gfx .mess { position: absolute; inset: 0; pointer-events: none; transition: opacity .5s ease; }
 .gfx .on .mess { opacity: 0; }
-.gfx .mess .coffee { position: absolute; left: -13%; top: 236px; width: 230px; z-index: 0; }
-.gfx .mess .coffee .spill { fill: rgba(140, 88, 38, .17); }
-.gfx .mess .coffee .ring { fill: none; stroke: rgba(118, 70, 28, .33); stroke-width: 5; stroke-dasharray: 230 40; }
-.gfx .mess .pencil { position: absolute; left: 3%; top: 436px; width: 200px; transform: rotate(-7deg); z-index: 2; filter: drop-shadow(0 4px 4px rgba(12,16,55,.18)); }
-.gfx .mess .pen { position: absolute; right: -9%; top: 150px; width: 170px; transform: rotate(-62deg); z-index: 2; filter: drop-shadow(0 4px 4px rgba(12,16,55,.2)); }
-.gfx .mess .eraser { position: absolute; right: 9%; top: 440px; width: 66px; transform: rotate(14deg); z-index: 2; filter: drop-shadow(0 3px 3px rgba(12,16,55,.18)); }
 .gfx .mess .loose { left: 54%; top: -2px; font-size: 25px; color: #d4382c; transform: rotate(-5deg); z-index: 2; }
 /* "make the switch", pointing at With gradefarm. */
 .gfx .swr { position: relative; }
@@ -136,7 +156,7 @@ const EXTRA_CSS = `
 .gfx .il.marks div { display: flex; flex-direction: column; gap: 3px; font-size: 11px; font-weight: 700; }
 .gfx .il.marks .y { color: var(--ok); } .gfx .il.marks .n { color: var(--bad); }
 .gfx .il.paper .pp { width: 108px; height: 72px; background: #fff; border: 1px solid var(--line2); border-radius: 4px; padding: 6px 7px; display: flex; flex-direction: column; gap: 2px; box-shadow: 4px 4px 0 var(--line); }
-.gfx .il.paper .pp .wm { font-size: 9px; } .gfx .il.paper .pp b { font-size: 9.5px; color: #0c1037; line-height: 1.2; } .gfx .il.paper .pp small { font-size: 8.5px; color: #64748b; }
+.gfx .il.paper .pp .wm { font-size: 9px; color: #0c1037; } .gfx .il.paper .pp b { font-size: 9.5px; color: #0c1037; line-height: 1.2; } .gfx .il.paper .pp small { font-size: 8.5px; color: #64748b; }
 .gfx .il.paper .pp i { height: 3px; background: #e3e6f0; border-radius: 2px; } .gfx .il.paper .pp i.s { width: 60%; }
 .gfx .il.time .tl { display: flex; align-items: center; width: 100%; }
 .gfx .il.time .tl span { flex: 1; text-align: center; font-size: 10.5px; font-weight: 800; color: var(--ink); position: relative; padding-top: 20px; }
@@ -191,13 +211,11 @@ const EXTRA_CSS = `
 .gfx .pick { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 8px 0 4px; }
 .gfx .pk-h { font-size: 21px; font-weight: 800; letter-spacing: -.02em; color: var(--ink); }
 .gfx .pk-opts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; width: 100%; }
-.gfx .pk { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 100px; padding: 14px 10px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--card); color: var(--ink); text-align: center; cursor: pointer; transition: border-color .2s, background .2s, transform .15s; }
+.gfx .pk { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 72px; padding: 14px 10px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--card); color: var(--ink); text-align: center; cursor: pointer; transition: border-color .2s, background .2s, transform .15s; }
 .gfx .pk:hover { border-color: var(--gold); background: var(--sel); transform: translateY(-2px); }
 .gfx .pk:active { transform: scale(.98); }
 .gfx .pk b { font-size: 18px; font-weight: 800; }
-.gfx .pk span { font-size: 13px; font-weight: 600; color: var(--muted); }
 .gfx .prog .subj-tag { padding: 3px 10px; border-radius: 999px; background: var(--sel); border: 1px solid var(--sq2); font-size: 12.5px; font-weight: 800; color: var(--ink); }
-@media (max-width: 760px) { .gfx .pk-opts { grid-template-columns: minmax(0, 1fr); } .gfx .pk { min-height: 64px; } }
 /* "gradefarm is the rest.": the wordmark at the heading's own size. */
 .gfx .h2 .cmpwm { font-size: 1.08em; letter-spacing: .04em; }
 .gfx .end .city { color: var(--city); }
@@ -207,7 +225,86 @@ const EXTRA_CSS = `
 .gfx .hv.covers .cv.sace { left: auto; right: calc(50% + 6px); }
 .gfx .hv.covers .cv.vce { right: auto; left: calc(50% + 6px); top: 30px; }
 .gfx .tonext { display: flex; justify-content: center; margin: 36px 0 0; }
-.gfx .tonext .try { min-height: 56px; padding: 0 24px; font-size: 16.5px; border-radius: 14px; gap: 8px; }
+.gfx .tonext .try { min-height: 56px; padding: 0 24px; font-size: 16.5px; border-radius: 999px; gap: 8px; }
+/* After Try it now: just an arrow to the next section, bobbing gently. */
+.gfx .tonext .nextarrow { width: 56px; height: 56px; min-height: 0; padding: 0; justify-content: center; animation: gfx-nudge 2.4s ease-in-out infinite; }
+@keyframes gfx-nudge { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(5px); } }
+@media (prefers-reduced-motion: reduce) { .gfx .tonext .nextarrow { animation: none; } }
+.gfx .cmp-hint { display: none; }
+
+/* ── Phones ── */
+@media (max-width: 760px) {
+  .gfx .hero { padding: calc(var(--lp-header) + 20px) 0 52px; }
+  .gfx.solo .hg { gap: 30px; }
+  /* Hero cards: two narrow columns instead of one full-width stack, so all six fit in about a screen. */
+  .gfx .stage { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: stretch; }
+  .gfx .stage .tile, .gfx .on .stage .tile { min-height: 0; }
+  .gfx .on .stage .mob-adapt { grid-column: 1 / -1; }
+  .gfx .on .stage .mob-adapt { margin: 4px 0 0; padding: 12px 14px; font-size: 14px; }
+  /* Without: the name and line on top, the scribble underneath so it never sits on the text. */
+  .gfx .tile .a { padding: 12px 12px 38px; }
+  .gfx .tile .a b { font-size: 13.5px; line-height: 1.25; }
+  .gfx .tile .a span { margin-top: 4px; font-size: 12px; line-height: 1.4; }
+  .gfx .tile .a .n0, .gfx .tile .a .n1, .gfx .tile .a .n5 { right: 10px; bottom: 9px; font-size: 19px; }
+  .gfx .tile .x-mark { right: 8px; bottom: 6px; width: 30px; height: 30px; }
+  .gfx .tile .strike { left: 10px; top: 36px; width: 82%; height: 12px; }
+  /* With: a smaller drawing, then the name and line. */
+  .gfx .tile .b { padding: 8px 8px 12px; gap: 2px; }
+  .gfx .tile .b strong { font-size: 13.5px; line-height: 1.25; margin: 6px 4px 0; }
+  .gfx .tile .b em { font-size: 12px; line-height: 1.4; margin: 0 4px; }
+  .gfx .il { height: 96px; zoom: .74; border-radius: 12px; }
+  .gfx .il.stack .q1 { width: 84%; } .gfx .il.stack .q2 { width: 78%; } .gfx .il.stack .q3 { width: 72%; }
+  .gfx .il.stack .q1 i { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .gfx .il.stack .plus { top: 3px; right: 4px; z-index: 1; }
+  .gfx .il.chat p { max-width: 100%; }
+  .gfx .il.bars div { grid-template-columns: 86px 1fr 30px; }
+  .gfx .ctas2 { margin-top: 22px; gap: 10px; }
+  .gfx .ctas2 .try { min-height: 54px; }
+  /* The ladder's middle words stay on one line. */
+  .gfx .lad div { gap: 10px; padding: 9px 12px; font-size: 13px; }
+  .gfx .lad .s { min-width: 70px; font-size: 12px; letter-spacing: .04em; }
+  /* The comparison only shows two columns at a time, so say it scrolls. */
+  .gfx .cmp-hint { display: block; margin: 18px 0 -28px; text-align: right; font-size: 13px; font-weight: 700; color: var(--muted); }
+  /* ── Try it now ── */
+  .gfx .tqrow { margin-top: 24px; }
+  .gfx .pick { gap: 12px; padding: 4px 0 0; }
+  .gfx .pk-h { font-size: 19px; }
+  /* The three subjects side by side, names only. */
+  .gfx .pk-opts { gap: 8px; }
+  .gfx .pk { min-height: 56px; padding: 10px 6px; }
+  .gfx .pk b { font-size: 15px; line-height: 1.2; }
+  .gfx .top { padding-bottom: 12px; row-gap: 8px; }
+  .gfx .prog { flex-wrap: wrap; gap: 6px 8px; font-size: 12.5px; }
+  .gfx .prog .subj-tag { padding: 2px 9px; font-size: 12px; }
+  .gfx .cbp { white-space: nowrap; font-size: 12px; padding: 3px 9px; }
+  .gfx .diff { font-size: 12px; } .gfx .diff .star { font-size: 16px; } .gfx .diff b { font-size: 12.5px; }
+  .gfx .stem { margin-top: 14px; font-size: 18px; }
+  .gfx .opts { gap: 8px; margin-top: 14px; }
+  .gfx .opts.short { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .gfx .opt { min-height: 50px; gap: 10px; padding: 8px 12px; font-size: 18px; }
+  .gfx .opt .k { width: 24px; height: 24px; border-radius: 6px; font-size: 11.5px; }
+  .gfx .res { margin-top: 14px; }
+  .gfx .rh { gap: 8px; }
+  .gfx .ic { width: 44px; height: 44px; } .gfx .ic svg { width: 22px; height: 22px; }
+  .gfx .rt b { font-size: 20px; } .gfx .rt > span { font-size: 15px; }
+  .gfx .nx { margin-top: 12px; padding: 10px 12px; } .gfx .nx b { font-size: 15px; } .gfx .nx .nm { font-size: 12.5px; }
+  .gfx .ra { margin-top: 14px; gap: 10px; }
+  .gfx .lgi b { font-size: 14px; } .gfx .lgi span { font-size: 12.5px; }
+  .gfx .skip { margin-top: 14px; }
+  .gfx .tonext { margin-top: 24px; }
+  .gfx .fin h3 { font-size: 23px; } .gfx .fin > p { font-size: 14.5px; } .gfx .fin > p .wm { font-size: 14.5px; }
+  .gfx .frows { gap: 8px; margin-top: 16px; }
+  .gfx .frow { padding: 10px 12px; } .gfx .frow span { font-size: 12.5px; } .gfx .frow b { font-size: 14px; }
+  .gfx .fbtn { flex-direction: column; gap: 10px; margin-top: 18px; }
+  .gfx .fbtn .lp-btn, .gfx .fbtn .btn { width: 100%; justify-content: center; }
+  /* Pricing buttons side by side, filling the row. */
+  .gfx .pcta { flex-wrap: nowrap; }
+  .gfx .pcta .btn { flex: 1; justify-content: center; }
+}
+@media (max-width: 360px) {
+  .gfx .stage { gap: 8px; }
+  .gfx .il { zoom: .68; }
+}
 `
 
 /** The four parts of gradefarm. in the hero: what they replace, and the real screen. */
@@ -317,24 +414,6 @@ const CRUMPLED = new Set([2, 4])
 function DeskMess() {
   return (
     <div className="mess" aria-hidden="true">
-      <svg className="coffee" viewBox="0 0 220 170">
-        <path className="spill" d="M34 78 C 18 46, 62 22, 96 38 C 128 12, 184 32, 172 68 C 204 88, 184 132, 140 122 C 118 152, 62 152, 54 126 C 20 130, 8 98, 34 78 Z" />
-        <circle className="spill" cx="196" cy="40" r="7" /><circle className="spill" cx="20" cy="146" r="5" /><circle className="spill" cx="160" cy="150" r="4" />
-        <circle className="ring" cx="104" cy="82" r="48" />
-      </svg>
-      <svg className="pencil" viewBox="0 0 230 26">
-        <polygon points="0,13 22,3 22,23" fill="#e9cfa2" /><polygon points="0,13 8,9.5 8,16.5" fill="#3a3a44" />
-        <rect x="22" y="3" width="168" height="20" fill="#f1be43" /><rect x="22" y="3" width="168" height="6" fill="#f7d77e" />
-        <rect x="190" y="2" width="10" height="22" fill="#b9bdc9" /><rect x="200" y="2" width="26" height="22" rx="5" fill="#f2a1ad" />
-      </svg>
-      <svg className="pen" viewBox="0 0 200 24">
-        <polygon points="0,12 14,7 14,17" fill="#1b1f3a" /><rect x="14" y="5" width="120" height="14" rx="4" fill="#20285e" />
-        <rect x="132" y="3" width="64" height="18" rx="6" fill="#2d3780" /><rect x="140" y="0" width="44" height="5" rx="2" fill="#b9bdc9" />
-      </svg>
-      <svg className="eraser" viewBox="0 0 90 44">
-        <rect x="2" y="4" width="86" height="36" rx="7" fill="#f6b3bd" /><rect x="40" y="4" width="48" height="36" rx="2" fill="#5d7fd1" />
-        <rect x="2" y="30" width="86" height="10" rx="5" fill="rgba(0,0,0,.08)" />
-      </svg>
       <span className="doodle hand loose">due tomorrow!!</span>
     </div>
   )
@@ -347,8 +426,6 @@ function Hero({ theme, onStart, onTry }) {
   const [on, setOn] = useState(false)
   return (
     <header className="hero">
-      {/* Drifting gold glows and waves, the same calm background as sign-in. */}
-      <CalmBackground theme={theme} contained />
       <div className="in hg">
         <div>
           <h1 className="h1"><span className="s">The <ScrambleWord /> learning system for Australian students.</span></h1>
@@ -379,7 +456,6 @@ function Hero({ theme, onStart, onTry }) {
             ))}
             <p className="mob-adapt"><Wordmark size={15} /> identifies what you already know and what you need to work on.</p>
             {CLUTTER.map(([name, what], i) => <div key={name} className={`tile junk x${i}${i === 2 ? ' crumpled' : ''}`} aria-hidden={on}><div className="a"><b>{name}</b><span>{what}</span></div></div>)}
-            <p className="cap">All separate. None of them knows what you got wrong.</p>
           </div>
           <div className="ctas2">
             <StartButton onClick={onStart} />
@@ -473,7 +549,8 @@ function Compare() {
   return (
     <section className="sec" id="compare" aria-labelledby="gfx-cmp-h">
       <div className="in">
-        <h2 className="h2" id="gfx-cmp-h">Your textbook has the questions. Your tutor has an hour a week. <span className="wm cmpwm">grade<span>farm</span></span> is the rest.</h2>
+        <h2 className="h2" id="gfx-cmp-h">Your textbook has the questions. Your tutor has an hour a week.<span className="cmp-rest"><span className="wm cmpwm">grade<span>farm</span></span> is the rest.</span></h2>
+        <p className="cmp-hint" aria-hidden="true">Swipe to compare →</p>
         <div className="card cmp">
           <table>
             <thead><tr><th><span className="lp-sr">What</span></th><th>Textbook</th><th>Past papers</th><th>ChatGPT</th><th>Tutor</th><th className="gf"><Wordmark size={15} /></th></tr></thead>
@@ -523,7 +600,7 @@ function Subjects({ onPick }) {
   )
 }
 
-export default function LandingPage({ theme = 'light', onToggleTheme, onSignIn }) {
+export default function LandingPage({ theme = 'light', onSignIn }) {
   const navigate = useNavigate()
   const location = useLocation()
   const [pricing, setPricing] = useState(null)
@@ -557,14 +634,18 @@ export default function LandingPage({ theme = 'light', onToggleTheme, onSignIn }
 
   return (
     <div className={`lp gfx solo${dark ? ' dark' : ''}`} style={{ ...themeVars(theme), colorScheme: dark ? 'dark' : 'light' }}>
-      <style>{SITE_FONTS + SITE_CSS + HOME_CSS + EXTRA_CSS}</style>
-      <SiteNav theme={theme} onToggleTheme={onToggleTheme} onSignIn={onSignIn} onStart={start}
+      <style>{SITE_FONTS + SITE_CSS + HOME_CSS + SPOT_CSS + EXTRA_CSS}</style>
+      {/* One background for the whole page (the hero's: drifting gold glows, slow waves, grain), fixed behind every section. */}
+      <CalmBackground theme={theme} matchLight />
+      <SiteNav overlay onSignIn={onSignIn} onStart={start}
         onLogo={() => window.scrollTo({ top: 0, behavior: 'smooth' })} links={NAV} />
 
       <main>
         <Hero theme={theme} onStart={start} onTry={(e) => { e.preventDefault(); go('try') }} />
-        <TryItBox onStart={start} onNext={(e) => { e.preventDefault(); go('inside') }} />
+        <TryItBox onStart={start} onNext={(e) => { e.preventDefault(); go('anywhere') }} />
+        <SpotStudy onInside={(e) => { e.preventDefault(); go('inside') }} />
         <Inside open={openFeatures} />
+        <SpotChem />
         <Compare />
         <Subjects onPick={start} />
 
@@ -605,10 +686,12 @@ export default function LandingPage({ theme = 'light', onToggleTheme, onSignIn }
         </section>
 
         <section className="end" aria-labelledby="gfx-end-h">
-          <div className="calm" aria-hidden="true"><span className="glow a" /><span className="glow b" /></div>
-          <div className="in">
-            <h2 id="gfx-end-h">Start with one subject, free.</h2>
-            <StartButton onClick={start} />
+          <div className="in end-grid">
+            <div className="end-copy">
+              <h2 id="gfx-end-h">The unfair advantage, now available to everyone.</h2>
+              <StartButton onClick={start} />
+            </div>
+            <ResultsFigure />
           </div>
           <CitySkyline state="SA" className="city" />
         </section>
