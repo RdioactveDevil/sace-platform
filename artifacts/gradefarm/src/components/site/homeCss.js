@@ -10,7 +10,7 @@ export const HOME_CSS = `
 :where(.gfx) h1,:where(.gfx) p{margin:0}
 .gfx button{font-family:inherit;cursor:pointer}
 .gfx :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
-.gfx .in{max-width:1220px;margin:0 auto;padding:0 28px}
+.gfx .in{max-width:var(--lp-max,1376px);margin:0 auto;padding:0 var(--lp-gutter,28px)}
 .gfx .m{font-family:'Cambria Math','STIX Two Math','Times New Roman',serif;font-size:1.08em}
 .gfx .wm{display:inline-flex;align-items:baseline;font-family:'Sifonn Pro','Plus Jakarta Sans',sans-serif;font-size:28px;letter-spacing:.08em;line-height:1;white-space:nowrap;text-decoration:none;color:var(--lp-logo-g)}
 .gfx .wm span{color:var(--lp-logo-f)}
@@ -42,14 +42,13 @@ export const HOME_CSS = `
 .gfx :where(.lp.solo) .h1{font-size:clamp(44px,5.2vw,72px)}
 .gfx .lead{font-size:19px;color:var(--ink2);margin-top:22px;max-width:34em;line-height:1.55;text-wrap:pretty}
 .gfx .ctas{display:flex;flex-wrap:wrap;gap:12px;margin-top:30px}
-.gfx .card{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:var(--float)}
+.gfx .card{background:var(--card);border:1px solid var(--line);border-radius:20px;box-shadow:var(--float)}
 .gfx .sq{display:block;border-radius:6px;background:var(--sq0)}
 @keyframes gfx-pop{from{transform:scale(0)}to{transform:scale(1)}}
 @keyframes gfx-rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 @media (max-width:1000px){.gfx .hg{grid-template-columns:minmax(0,1fr)}
 .gfx .navl{display:none}}
-@media (max-width:760px){.gfx .in{padding:0 16px}
-.gfx .hero{padding:44px 0 64px}
+@media (max-width:760px){.gfx .hero{padding:44px 0 64px}
 .gfx .lead{font-size:17px}}
 @media (prefers-reduced-motion:reduce){.gfx *,.gfx *::before,.gfx *::after{animation:none !important;transition:none !important}}
 @keyframes gfx-swap{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
@@ -107,7 +106,7 @@ export const HOME_CSS = `
 .gfx .sq.s1{background:var(--card);box-shadow:inset 0 0 0 2px var(--ink);background-image:radial-gradient(circle,var(--ink) 0 18%,transparent 21%)}
 .gfx .sq.s2{background:var(--sq2)}
 .gfx .sq.s3{background:var(--sq3)}
-.gfx .sec{position:relative;padding:96px 0;border-top:1px solid var(--line);scroll-margin-top:20px}
+.gfx .sec{position:relative;padding:var(--lp-section,96px) 0;border-top:1px solid var(--line);scroll-margin-top:20px}
 .gfx .sec.pg{background:var(--page)}
 .gfx .h2{font-size:clamp(32px,4.2vw,54px);font-weight:800;line-height:1.06;letter-spacing:-.035em;text-align:center;max-width:22ch;margin:0 auto;text-wrap:balance}
 .gfx .shd{display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center}
@@ -220,7 +219,7 @@ export const HOME_CSS = `
 .gfx .faq summary::after{content:"+";font-weight:600;color:var(--muted)}
 .gfx .faq details[open] summary::after{content:"−"}
 .gfx .faq details p{padding:0 0 17px;color:var(--muted);max-width:70ch}
-.gfx .end{position:relative;padding:120px 0 200px;text-align:center;overflow:hidden;border-top:1px solid var(--line)}
+.gfx .end{position:relative;padding:96px 0 200px;text-align:center;overflow:hidden;border-top:1px solid var(--line)}
 .gfx .end .in{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:22px}
 .gfx .end h2{font-size:clamp(34px,4.6vw,58px);font-weight:800;letter-spacing:-.04em;line-height:1.05}
 .gfx .city{position:absolute;left:0;right:0;bottom:0;height:200px;color:var(--city);z-index:0}
@@ -234,9 +233,9 @@ export const HOME_CSS = `
 .gfx .calm{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0}
 .gfx .end h2{margin:0}
 .gfx .sec#compare .h2{max-width:24ch}
-@media (max-width:760px){.gfx .sec{padding:64px 0}
+@media (max-width:760px){
 .gfx .foot .cp{margin-left:0}
-.gfx .end{padding:80px 0 160px}
+.gfx .end{padding:56px 0 150px}
 .gfx .nav .in{gap:10px}
 .gfx .navr .btn:first-child{display:none}
 .gfx .sw button{padding:0 14px;font-size:13.5px}

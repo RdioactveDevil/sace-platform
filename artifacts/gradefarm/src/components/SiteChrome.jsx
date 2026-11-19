@@ -38,6 +38,9 @@ export function themeVars(theme) {
 export const SITE_FONTS = "@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&display=swap');\n@font-face { font-family: 'Sifonn Pro'; src: url('/SIFONN_PRO.otf') format('opentype'); font-display: swap; }"
 
 export const SITE_CSS = `
+/* Page dimensions: side margins, header height, section spacing and widest content. */
+.lp { --lp-gutter: clamp(22px, 4vw, 54px); --lp-header: 96px; --lp-section: clamp(36px, 5vw, 54px); --lp-max: 1376px; }
+@media (max-width: 832px) { .lp { --lp-header: 76px; } }
 .lp { min-height: 100vh; background: var(--lp-win); color: var(--lp-ink); font-family: ${FONT_B}; font-size: 15px; line-height: 1.6; overflow-x: clip; -webkit-font-smoothing: antialiased; }
 .lp *, .lp *::before, .lp *::after { box-sizing: border-box; }
 .lp h1, .lp h2, .lp h3 { margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
@@ -45,7 +48,7 @@ export const SITE_CSS = `
 .lp button { font-family: inherit; }
 .lp :focus-visible { outline: 2px solid var(--lp-gold); outline-offset: 2px; }
 .lp-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
-.lp-in { max-width: 1160px; margin: 0 auto; padding-left: max(28px, env(safe-area-inset-left, 0px)); padding-right: max(28px, env(safe-area-inset-right, 0px)); }
+.lp-in { max-width: var(--lp-max); margin: 0 auto; padding-left: max(var(--lp-gutter), env(safe-area-inset-left, 0px)); padding-right: max(var(--lp-gutter), env(safe-area-inset-right, 0px)); }
 .lp-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 42px; padding: 0 18px; border-radius: 10px; font-size: 14px; font-weight: 800; white-space: nowrap; cursor: pointer; border: 1px solid var(--lp-line); background: var(--lp-card); color: var(--lp-ink); }
 .lp-btn:hover { border-color: var(--lp-line-2); }
 .lp-btn.gold { border: none; background: var(--lp-gold); color: ${NAVY}; }
@@ -70,14 +73,14 @@ export const SITE_CSS = `
 .lp-card { background: var(--lp-card); border: 1px solid var(--lp-line); border-radius: 14px; }
 .lp-muted { color: var(--lp-muted); }
 /* nav */
-/* Semi-translucent: the page shows through, blurred, as it scrolls under the bar. */
-.lp-nav { position: sticky; top: 0; z-index: 50; background: var(--lp-win); border-bottom: 1px solid transparent; transition: border-color 0.15s, background 0.15s; }
+/* Clear at the top of the page; once scrolled, semi-translucent with the page blurred behind it. */
+.lp-nav { position: sticky; top: 0; z-index: 50; background: transparent; transition: background 0.2s, box-shadow 0.2s; }
+.lp-nav[data-scrolled="true"] { background: var(--lp-win); box-shadow: 0 1px 0 var(--lp-line), 0 2px 10px rgba(7, 8, 18, 0.08); }
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .lp-nav { background: color-mix(in srgb, var(--lp-win) 72%, transparent); -webkit-backdrop-filter: saturate(180%) blur(16px); backdrop-filter: saturate(180%) blur(16px); }
+  .lp-nav[data-scrolled="true"] { background: color-mix(in srgb, var(--lp-win) 60%, transparent); -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px); }
   .lp-nav[data-open="true"] { background: color-mix(in srgb, var(--lp-win) 94%, transparent); }
 }
-.lp-nav[data-scrolled="true"] { border-bottom-color: color-mix(in srgb, var(--lp-line) 70%, transparent); }
-.lp-nav .lp-in { display: flex; align-items: center; gap: 24px; height: 62px; }
+.lp-nav .lp-in { display: flex; align-items: center; gap: 24px; height: var(--lp-header); }
 .lp-nav-links { display: flex; gap: 22px; }
 .lp-nav-links button { border: none; background: none; padding: 4px 0; font-size: 15.5px; font-weight: 600; color: var(--lp-muted); cursor: pointer; }
 .lp-nav-links button:hover { color: var(--lp-ink); }
@@ -92,7 +95,7 @@ export const SITE_CSS = `
 .lp-sw button, .lp-sw span { border: none; background: transparent; font-size: 12px; font-weight: 700; color: var(--lp-muted); padding: 5px 10px; cursor: pointer; }
 .lp-sw > * + * { border-left: 1px solid var(--lp-line) !important; }
 .lp-sw [aria-pressed="true"], .lp-sw .on { background: var(--lp-on-bg); color: var(--lp-on-fg); }
-.lp-sec { padding-top: 72px; padding-bottom: 72px; border-top: 1px solid var(--lp-line); scroll-margin-top: 62px; }
+.lp-sec { padding-top: var(--lp-section); padding-bottom: var(--lp-section); border-top: 1px solid var(--lp-line); scroll-margin-top: var(--lp-header); }
 /* Section headings are centred, like "This is spaced repetition." */
 .lp-sec-head { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .lp-sec-head h2 { font-size: clamp(27px, 3.6vw, 40px); font-weight: 800; line-height: 1.1; letter-spacing: -0.03em; max-width: 26ch; }
@@ -112,13 +115,11 @@ export const SITE_CSS = `
 .lp-copy { margin-left: auto; }
 @media (prefers-reduced-motion: reduce) { .lp-btn.cta, .lp-btn.cta::after, .lp-btn.cta svg { animation: none; transition: none; } }
 @media (max-width: 760px) {
-  .lp-in { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
   .lp-nav-links, .lp-nav-signin { display: none; }
   .lp-menu-btn { display: grid; }
   /* The full "Start GradeFarming" doesn't fit beside the logo on a phone. */
   .lp-nav-start .long { display: none; }
   .lp-nav-start .short { display: inline; }
-  .lp-sec { padding-top: 52px; padding-bottom: 52px; }
   .lp-copy { margin-left: 0; }
 }
 `
@@ -161,7 +162,7 @@ export function SiteNav({ theme, onToggleTheme, onSignIn, onStart, onLogo, links
   return (
     <nav className="lp-nav" data-scrolled={scrolled || menuOpen} data-open={menuOpen} aria-label="Main">
       <div className="lp-in">
-        <Wordmark onClick={onLogo} />
+        <Wordmark size={26} onClick={onLogo} />
         <div className="lp-nav-links">
           {links.map(([label, fn, current]) => <button key={label} type="button" onClick={pick(fn)} aria-current={current ? 'page' : undefined}>{label}</button>)}
         </div>

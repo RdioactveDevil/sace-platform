@@ -13,7 +13,7 @@ export const FEATURES_CSS = `
 .gfx button{font-family:inherit;cursor:pointer}
 .gfx button:disabled{cursor:default}
 .gfx :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
-.gfx .in{max-width:1160px;margin:0 auto;padding:0 28px}
+.gfx .in{max-width:var(--lp-max,1160px);margin:0 auto;padding:0 var(--lp-gutter,28px)}
 .gfx .m{font-family:'Cambria Math','STIX Two Math','Latin Modern Math','Times New Roman',serif;font-size:1.08em;letter-spacing:0}
 .gfx .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:42px;padding:0 18px;border-radius:10px;font-size:14px;font-weight:800;white-space:nowrap;border:1px solid var(--line);background:var(--card);color:var(--ink);text-decoration:none}
 .gfx .btn:hover{border-color:var(--line2);color:var(--ink)}
@@ -474,8 +474,7 @@ export const FEATURES_CSS = `
 .gfx .live{max-width:560px}
 .gfx .four{grid-template-columns:repeat(2,minmax(0,1fr))}
 .gfx .navl{display:none}}
-@media (max-width:760px){.gfx .in{padding:0 16px}
-.gfx .nav .in{gap:10px}
+@media (max-width:760px){.gfx .nav .in{gap:10px}
 .gfx .nav-in{display:none}
 .gfx .hero{padding:44px 0 72px}
 .gfx .lead{font-size:17px}

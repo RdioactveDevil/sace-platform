@@ -27,7 +27,7 @@ import { FEATURE_SLUGS } from './site/features'
 // the saved light/dark theme through themeVars.
 
 const EXTRA_CSS = `
-.gfx .sec { scroll-margin-top: 72px; }
+.gfx .sec { scroll-margin-top: var(--lp-header, 72px); }
 .gfx .hc { color: inherit; text-decoration: none; }
 .gfx .wq .mt > span { white-space: nowrap !important; }
 /* Hero: six parts and three bits of clutter, messy without gradefarm.; tidy in a 3 x 2 grid with it. */
@@ -214,7 +214,7 @@ const EXTRA_CSS = `
   .gfx.solo .hg { gap: 30px; }
   /* Hero cards: two narrow columns instead of one full-width stack, so all six fit in about a screen. */
   .gfx .stage { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: stretch; }
-  .gfx .stage .tile, .gfx .on .stage .tile { min-height: 0; border-radius: 12px; }
+  .gfx .stage .tile, .gfx .on .stage .tile { min-height: 0; }
   .gfx .stage .cap, .gfx .on .stage .mob-adapt { grid-column: 1 / -1; }
   .gfx .stage .cap { margin: 6px 0 0; font-size: 14px; }
   .gfx .on .stage .mob-adapt { margin: 4px 0 0; padding: 12px 14px; font-size: 14px; }
