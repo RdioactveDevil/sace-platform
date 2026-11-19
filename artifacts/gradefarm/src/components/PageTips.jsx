@@ -27,7 +27,7 @@ function cardPosition(rect, cardH, isMobile) {
   if (!rect) return { left: '50%', bottom: m, transform: 'translateX(-50%)', width: Math.min(CARD_W, vw - m * 2) }
   if (isMobile) {
     const inTop = rect.height > vh * 0.45 || (rect.top + rect.bottom) / 2 < vh / 2
-    return { left: m, right: m, ...(inTop ? { bottom: `calc(${m}px + env(safe-area-inset-bottom, 0px))` } : { top: m }) }
+    return { left: m, right: m, ...(inTop ? { bottom: `calc(${m}px + max(env(safe-area-inset-bottom, 0px), var(--gf-tabbar-h, 0px)))` } : { top: m }) }
   }
   const gap = 14
   const w = Math.min(CARD_W, vw - m * 2)
