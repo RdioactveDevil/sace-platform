@@ -58,7 +58,6 @@ const EXTRA_CSS = `
   .gfx .tile .b { grid-template-columns: 92px minmax(0, 1fr); gap: 12px; padding: 12px; }
   .gfx .tile .b strong { font-size: 15px; }
   .gfx .tile .b em { font-size: 12.5px; }
-  .gfx .cap { top: 448px; }
   /* The clutter sits behind, half hidden or hanging off the edge, and flies off when gradefarm. is on. */
   .gfx .tile.junk { z-index: 0; transition: opacity .45s ease, transform .6s cubic-bezier(.65,0,.25,1); }
   .gfx .tile.junk.x0 { left: -4%; top: 18px; transform: rotate(-7deg); }
@@ -74,7 +73,7 @@ const EXTRA_CSS = `
   .gfx .tile.t4 { transform: rotate(1deg); } .gfx .tile.t5 { transform: rotate(-1.2deg); }
   .gfx .on .tile.t4, .gfx .on .tile.t5 { transform: none; }
 }
-/* ── Hero, Without gradefarm.: wobbling cards, crumpled paper, ink, coffee and stationery ── */
+/* ── Hero, Without gradefarm.: wobbling cards, crumpled paper and ink ── */
 @keyframes gfx-wob { 0% { translate: 0 0; rotate: 0deg; } 50% { translate: 1.5px -2px; rotate: .5deg; } 100% { translate: -1.5px 1px; rotate: -.4deg; } }
 @keyframes gfx-snake { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
 @keyframes gfx-snake-fade { 0%, 100% { opacity: 0; } 20%, 70% { opacity: 1; } }
@@ -108,12 +107,6 @@ const EXTRA_CSS = `
 /* Loose on the desk. */
 .gfx .mess { position: absolute; inset: 0; pointer-events: none; transition: opacity .5s ease; }
 .gfx .on .mess { opacity: 0; }
-.gfx .mess .coffee { position: absolute; left: -13%; top: 236px; width: 230px; z-index: 0; }
-.gfx .mess .coffee .spill { fill: rgba(140, 88, 38, .17); }
-.gfx .mess .coffee .ring { fill: none; stroke: rgba(118, 70, 28, .33); stroke-width: 5; stroke-dasharray: 230 40; }
-.gfx .mess .pencil { position: absolute; left: 3%; top: 436px; width: 200px; transform: rotate(-7deg); z-index: 2; filter: drop-shadow(0 4px 4px rgba(12,16,55,.18)); }
-.gfx .mess .pen { position: absolute; right: -9%; top: 150px; width: 170px; transform: rotate(-62deg); z-index: 2; filter: drop-shadow(0 4px 4px rgba(12,16,55,.2)); }
-.gfx .mess .eraser { position: absolute; right: 9%; top: 440px; width: 66px; transform: rotate(14deg); z-index: 2; filter: drop-shadow(0 3px 3px rgba(12,16,55,.18)); }
 .gfx .mess .loose { left: 54%; top: -2px; font-size: 25px; color: #d4382c; transform: rotate(-5deg); z-index: 2; }
 /* "make the switch", pointing at With gradefarm. */
 .gfx .swr { position: relative; }
@@ -221,6 +214,10 @@ const EXTRA_CSS = `
 .gfx .hv.covers .cv.vce { right: auto; left: calc(50% + 6px); top: 30px; }
 .gfx .tonext { display: flex; justify-content: center; margin: 36px 0 0; }
 .gfx .tonext .try { min-height: 56px; padding: 0 24px; font-size: 16.5px; border-radius: 999px; gap: 8px; }
+/* After Try it now: just an arrow to the next section, bobbing gently. */
+.gfx .tonext .nextarrow { width: 56px; height: 56px; min-height: 0; padding: 0; justify-content: center; animation: gfx-nudge 2.4s ease-in-out infinite; }
+@keyframes gfx-nudge { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(5px); } }
+@media (prefers-reduced-motion: reduce) { .gfx .tonext .nextarrow { animation: none; } }
 .gfx .cmp-hint { display: none; }
 
 /* ── Phones ── */
@@ -230,8 +227,7 @@ const EXTRA_CSS = `
   /* Hero cards: two narrow columns instead of one full-width stack, so all six fit in about a screen. */
   .gfx .stage { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: stretch; }
   .gfx .stage .tile, .gfx .on .stage .tile { min-height: 0; }
-  .gfx .stage .cap, .gfx .on .stage .mob-adapt { grid-column: 1 / -1; }
-  .gfx .stage .cap { margin: 6px 0 0; font-size: 14px; }
+  .gfx .on .stage .mob-adapt { grid-column: 1 / -1; }
   .gfx .on .stage .mob-adapt { margin: 4px 0 0; padding: 12px 14px; font-size: 14px; }
   /* Without: the name and line on top, the scribble underneath so it never sits on the text. */
   .gfx .tile .a { padding: 12px 12px 38px; }
@@ -406,24 +402,6 @@ const CRUMPLED = new Set([2, 4])
 function DeskMess() {
   return (
     <div className="mess" aria-hidden="true">
-      <svg className="coffee" viewBox="0 0 220 170">
-        <path className="spill" d="M34 78 C 18 46, 62 22, 96 38 C 128 12, 184 32, 172 68 C 204 88, 184 132, 140 122 C 118 152, 62 152, 54 126 C 20 130, 8 98, 34 78 Z" />
-        <circle className="spill" cx="196" cy="40" r="7" /><circle className="spill" cx="20" cy="146" r="5" /><circle className="spill" cx="160" cy="150" r="4" />
-        <circle className="ring" cx="104" cy="82" r="48" />
-      </svg>
-      <svg className="pencil" viewBox="0 0 230 26">
-        <polygon points="0,13 22,3 22,23" fill="#e9cfa2" /><polygon points="0,13 8,9.5 8,16.5" fill="#3a3a44" />
-        <rect x="22" y="3" width="168" height="20" fill="#f1be43" /><rect x="22" y="3" width="168" height="6" fill="#f7d77e" />
-        <rect x="190" y="2" width="10" height="22" fill="#b9bdc9" /><rect x="200" y="2" width="26" height="22" rx="5" fill="#f2a1ad" />
-      </svg>
-      <svg className="pen" viewBox="0 0 200 24">
-        <polygon points="0,12 14,7 14,17" fill="#1b1f3a" /><rect x="14" y="5" width="120" height="14" rx="4" fill="#20285e" />
-        <rect x="132" y="3" width="64" height="18" rx="6" fill="#2d3780" /><rect x="140" y="0" width="44" height="5" rx="2" fill="#b9bdc9" />
-      </svg>
-      <svg className="eraser" viewBox="0 0 90 44">
-        <rect x="2" y="4" width="86" height="36" rx="7" fill="#f6b3bd" /><rect x="40" y="4" width="48" height="36" rx="2" fill="#5d7fd1" />
-        <rect x="2" y="30" width="86" height="10" rx="5" fill="rgba(0,0,0,.08)" />
-      </svg>
       <span className="doodle hand loose">due tomorrow!!</span>
     </div>
   )
@@ -466,7 +444,6 @@ function Hero({ theme, onStart, onTry }) {
             ))}
             <p className="mob-adapt"><Wordmark size={15} /> identifies what you already know and what you need to work on.</p>
             {CLUTTER.map(([name, what], i) => <div key={name} className={`tile junk x${i}${i === 2 ? ' crumpled' : ''}`} aria-hidden={on}><div className="a"><b>{name}</b><span>{what}</span></div></div>)}
-            <p className="cap">All separate. None of them knows what you got wrong.</p>
           </div>
           <div className="ctas2">
             <StartButton onClick={onStart} />
@@ -653,8 +630,8 @@ export default function LandingPage({ theme = 'light', onSignIn }) {
 
       <main>
         <Hero theme={theme} onStart={start} onTry={(e) => { e.preventDefault(); go('try') }} />
-        <TryItBox onStart={start} onNext={(e) => { e.preventDefault(); go('inside') }} />
-        <SpotStudy />
+        <TryItBox onStart={start} onNext={(e) => { e.preventDefault(); go('anywhere') }} />
+        <SpotStudy onInside={(e) => { e.preventDefault(); go('inside') }} />
         <Inside open={openFeatures} />
         <SpotChem />
         <Compare />
@@ -699,8 +676,7 @@ export default function LandingPage({ theme = 'light', onSignIn }) {
         <section className="end" aria-labelledby="gfx-end-h">
           <div className="in end-grid">
             <div className="end-copy">
-              <h2 id="gfx-end-h">Start with one subject, free.</h2>
-              <p className="lead">Add more subjects whenever you're ready.</p>
+              <h2 id="gfx-end-h">The unfair advantage, now available to everyone.</h2>
               <StartButton onClick={start} />
             </div>
             <ResultsFigure />

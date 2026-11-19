@@ -190,7 +190,7 @@ export default function TryItBox({ onStart, onNext }) {
         {playing && <p className="skip"><button type="button" className="wk" onClick={skip}>Skip to the end</button></p>}
         {onNext && (
           <p className="tonext">
-            <a className="btn lg try" href="#inside" onClick={onNext}>See what's inside<ArrowDown size={18} strokeWidth={2.6} aria-hidden="true" /></a>
+            <a className="btn lg try nextarrow" href="#anywhere" onClick={onNext} aria-label="Next"><ArrowDown size={22} strokeWidth={2.6} aria-hidden="true" /></a>
           </p>
         )}
       </div>
