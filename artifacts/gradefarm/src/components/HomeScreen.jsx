@@ -310,11 +310,17 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
             )
           })}
         </div>
-      ) : segment([
-        { value: 'mcq', label: 'Multiple choice', disabled: formatCounts.mcq === 0 },
-        { value: 'saq', label: 'Short answer', disabled: formatCounts.saq === 0 },
-        { value: 'mixed', label: 'Mixed' },
-      ], startFormat, chooseFormat, 'Format')}
+      ) : (
+        // The card on the right is too narrow for every full word: MCQ, and Short
+        // in a very narrow one.
+        <div style={{ containerType: 'inline-size' }}>
+          {segment([
+            { value: 'mcq', label: <><span className="hs-lbl-long">Multiple choice</span><span className="hs-lbl-short">MCQ</span></>, title: 'Multiple choice', disabled: formatCounts.mcq === 0 },
+            { value: 'saq', label: <><span className="hs-lbl-long2">Short answer</span><span className="hs-lbl-short2">Short</span></>, title: 'Short answer', disabled: formatCounts.saq === 0 },
+            { value: 'mixed', label: 'Mixed' },
+          ], startFormat, chooseFormat, 'Format')}
+        </div>
+      )}
     </div>
   )
   const examField = (size) => examAvailable && (
@@ -696,6 +702,10 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
         .hs-right { width: 360px; flex-shrink: 0; padding: 28px 32px 32px 0; display: flex; flex-direction: column; gap: 16px; position: sticky; top: 0; box-sizing: border-box; }
         .hs-mobile-cards { display: none; flex-direction: column; gap: 14px; }
         .hs-startbar { display: none; }
+        .hs-lbl-short { display: none; }
+        .hs-lbl-short2 { display: none; }
+        @container (max-width: 330px) { .hs-lbl-long { display: none; } .hs-lbl-short { display: inline; } }
+        @container (max-width: 250px) { .hs-lbl-long2 { display: none; } .hs-lbl-short2 { display: inline; } }
         .hs-sheet-wrap { position: fixed; inset: 0; z-index: 1200; display: flex; align-items: flex-end; }
         .hs-sheet-back { position: absolute; inset: 0; background: rgba(0,0,0,0.45); animation: hs-fade 0.2s ease; }
         .hs-sheet { position: relative; width: 100%; max-height: 88dvh; overflow-y: auto; box-sizing: border-box; border-radius: 20px 20px 0 0; padding: 10px 18px calc(18px + env(safe-area-inset-bottom)); animation: hs-up 0.28s cubic-bezier(.3,.7,.2,1); font-family: inherit; }

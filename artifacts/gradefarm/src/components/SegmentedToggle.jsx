@@ -13,7 +13,8 @@ const EASE = 'cubic-bezier(.3,.7,.2,1)'
  *   onChange  (value) => void
  *   label     the group's accessible name
  *   size      'md' (default, 38px) | 'sm' (32px)
- *   fill      stretch to the container, options sharing the width equally
+ *   fill      stretch to the container; each option is as wide as its label
+ *             plus an equal share of the room left over
  *   optionMinWidth  a minimum width for each option (evens out short labels)
  *   kind      'radio' (role="radiogroup") or 'pressed' (aria-pressed buttons)
  */
@@ -39,6 +40,8 @@ export default function SegmentedToggle({
     if (typeof ResizeObserver === 'undefined') return () => cancelAnimationFrame(id)
     const ro = new ResizeObserver(measure) // widths change once the font loads
     ro.observe(wrap)
+    // Options can change width on their own (shorter labels in a narrow space).
+    wrap.querySelectorAll('[data-seg-opt]').forEach(el => ro.observe(el))
     return () => { cancelAnimationFrame(id); ro.disconnect() }
   }, [index, opts.length])
 
@@ -72,7 +75,7 @@ export default function SegmentedToggle({
             onClick={() => { if (!on) onChange(o.value) }}
             className="gf-seg-btn"
             style={{
-              position: 'relative', zIndex: 1, flex: fill ? '1 1 0' : '0 0 auto', minWidth: optionMinWidth || 0, height: h, padding: size === 'sm' ? '0 12px' : '0 18px',
+              position: 'relative', zIndex: 1, flex: fill ? '1 1 auto' : '0 0 auto', minWidth: optionMinWidth || 0, height: h, padding: size === 'sm' ? '0 11px' : '0 18px',
               display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, whiteSpace: 'nowrap',
               border: 'none', borderRadius: h, background: thumb ? 'transparent' : on ? 'var(--t-text)' : 'transparent',
               color: on ? 'var(--t-bg)' : 'var(--t-textMuted)', fontFamily: FONT_B, fontSize: size === 'sm' ? 12.5 : 14, fontWeight: on ? 800 : 700,
