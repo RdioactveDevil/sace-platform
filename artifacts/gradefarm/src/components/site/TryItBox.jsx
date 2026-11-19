@@ -85,7 +85,7 @@ export default function TryItBox({ onStart, onNext }) {
               <p className="pk-h">Pick a subject</p>
               <div className="pk-opts">
                 {TRY_SUBJECTS.map(x => (
-                  <button key={x.id} type="button" className="pk" onClick={() => choose(x.id)}><b>{x.name}</b><span>{x.note}</span></button>
+                  <button key={x.id} type="button" className="pk" onClick={() => choose(x.id)}><b>{x.name}</b></button>
                 ))}
               </div>
             </div>

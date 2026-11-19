@@ -191,13 +191,11 @@ const EXTRA_CSS = `
 .gfx .pick { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 8px 0 4px; }
 .gfx .pk-h { font-size: 21px; font-weight: 800; letter-spacing: -.02em; color: var(--ink); }
 .gfx .pk-opts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; width: 100%; }
-.gfx .pk { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 100px; padding: 14px 10px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--card); color: var(--ink); text-align: center; cursor: pointer; transition: border-color .2s, background .2s, transform .15s; }
+.gfx .pk { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 72px; padding: 14px 10px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--card); color: var(--ink); text-align: center; cursor: pointer; transition: border-color .2s, background .2s, transform .15s; }
 .gfx .pk:hover { border-color: var(--gold); background: var(--sel); transform: translateY(-2px); }
 .gfx .pk:active { transform: scale(.98); }
 .gfx .pk b { font-size: 18px; font-weight: 800; }
-.gfx .pk span { font-size: 13px; font-weight: 600; color: var(--muted); }
 .gfx .prog .subj-tag { padding: 3px 10px; border-radius: 999px; background: var(--sel); border: 1px solid var(--sq2); font-size: 12.5px; font-weight: 800; color: var(--ink); }
-@media (max-width: 760px) { .gfx .pk-opts { grid-template-columns: minmax(0, 1fr); } .gfx .pk { min-height: 64px; } }
 /* "gradefarm is the rest.": the wordmark at the heading's own size. */
 .gfx .h2 .cmpwm { font-size: 1.08em; letter-spacing: .04em; }
 .gfx .end .city { color: var(--city); }
@@ -248,10 +246,10 @@ const EXTRA_CSS = `
   .gfx .tqrow { margin-top: 24px; }
   .gfx .pick { gap: 12px; padding: 4px 0 0; }
   .gfx .pk-h { font-size: 19px; }
+  /* The three subjects side by side, names only. */
   .gfx .pk-opts { gap: 8px; }
-  .gfx .pk { min-height: 0; padding: 12px 14px; flex-direction: row; justify-content: space-between; gap: 10px; text-align: left; }
-  .gfx .pk b { font-size: 16px; }
-  .gfx .pk span { font-size: 12.5px; text-align: right; }
+  .gfx .pk { min-height: 56px; padding: 10px 6px; }
+  .gfx .pk b { font-size: 15px; line-height: 1.2; }
   .gfx .top { padding-bottom: 12px; row-gap: 8px; }
   .gfx .prog { flex-wrap: wrap; gap: 6px 8px; font-size: 12.5px; }
   .gfx .prog .subj-tag { padding: 2px 9px; font-size: 12px; }
