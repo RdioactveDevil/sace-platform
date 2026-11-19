@@ -99,15 +99,21 @@ export default function CalmBackground({ theme = 'dark', contained = false, matc
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)')
     let w = 0, h = 0, raf = 0, last = 0, refW = 0
 
+    // Resizing a canvas wipes it, so only resize when its box really changes size. Behind the whole
+    // window the canvas is 100vh tall (CSS below): on phones that's the full screen height, which stays
+    // put while the address bar slides in and out as you scroll, so scrolling never resizes it (sizing
+    // it to innerHeight did, and the background blinked and the waves jumped).
     const size = () => {
       const dpr = Math.min(window.devicePixelRatio || 1, 2)
-      const box = contained ? canvas.parentElement.getBoundingClientRect() : null
-      w = box ? box.width : window.innerWidth; h = box ? box.height : window.innerHeight
+      const box = (contained ? canvas.parentElement : canvas).getBoundingClientRect()
+      if (canvas.width && box.width === w && box.height === h) return false
+      w = box.width; h = box.height
       // Contained: lay out against the first height seen, and again only if the width changes
       // (e.g. a phone turned sideways), so content growing or shrinking never moves the waves.
       if (contained && (!opts.refH || w !== refW)) { opts.refH = h; refW = w }
       canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr)
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      return true
     }
     const still = () => drawCalm(ctx, w, h, 4000, opts)
     const tick = (now) => {
@@ -122,7 +128,8 @@ export default function CalmBackground({ theme = 'dark', contained = false, matc
       if (reduce?.matches || document.hidden || !onScreen) { still(); return }
       raf = requestAnimationFrame(tick)
     }
-    const onResize = () => { size(); if (reduce?.matches) still() }
+    // After a real resize, draw at once rather than leave the wiped canvas blank until the next frame.
+    const onResize = () => { if (size()) drawCalm(ctx, w, h, reduce?.matches ? 4000 : (last || 4000), opts) }
 
     size()
     start()
@@ -147,6 +154,6 @@ export default function CalmBackground({ theme = 'dark', contained = false, matc
 
   return (
     <canvas ref={ref} aria-hidden="true"
-      style={{ position: contained ? 'absolute' : 'fixed', inset: 0, width: '100%', height: '100%', zIndex: 0, pointerEvents: 'none', display: 'block' }} />
+      style={{ position: contained ? 'absolute' : 'fixed', top: 0, left: 0, width: '100%', height: contained ? '100%' : '100vh', zIndex: 0, pointerEvents: 'none', display: 'block' }} />
   )
 }
