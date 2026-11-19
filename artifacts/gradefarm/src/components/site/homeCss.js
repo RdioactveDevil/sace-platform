@@ -2,7 +2,7 @@
 // Colours come from the site theme (themeVars in SiteChrome.jsx) through the tokens on .gfx.
 export const HOME_CSS = `
 .gfx{--win:var(--lp-win);--page:var(--lp-page);--card:var(--lp-card);--subtle:var(--lp-subtle);--line:var(--lp-line);--line2:var(--lp-line-2);--ink:var(--lp-ink);--ink2:var(--lp-ink-2);--muted:var(--lp-muted);--faint:var(--lp-faint);--gold:var(--lp-gold);--goldt:var(--lp-gold-text);--ok:var(--lp-ok);--okbg:var(--lp-ok-bg);--bad:var(--lp-bad);--badbg:var(--lp-bad-bg);--sel:var(--lp-sel-row);--sq0:var(--lp-sq0);--sq2:var(--lp-sq2);--sq3:var(--lp-sq3);--faded:var(--lp-faded);--onbg:var(--lp-on-bg);--onfg:var(--lp-on-fg);--float:var(--lp-float);--logo:var(--lp-logo-g);--logof:var(--lp-logo-f);--city:rgba(12,16,55,.07);--ga:.30;--gb:.20;--wave:1}
-.gfx.dark{--city:rgba(255,255,255,.05);--ga:.16;--gb:.10;--wave:.8}
+.gfx.dark{--city:rgba(255,255,255,.05)}
 .gfx a{color:inherit}
 .gfx a:hover{color:inherit}
 .gfx{min-height:100vh;background:var(--win);color:var(--ink);font-family:'Plus Jakarta Sans','Segoe UI',sans-serif;font-size:15px;line-height:1.6;overflow-x:clip;-webkit-font-smoothing:antialiased}

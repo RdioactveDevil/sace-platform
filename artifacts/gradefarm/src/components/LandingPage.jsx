@@ -636,7 +636,7 @@ export default function LandingPage({ theme = 'light', onSignIn }) {
     <div className={`lp gfx solo${dark ? ' dark' : ''}`} style={{ ...themeVars(theme), colorScheme: dark ? 'dark' : 'light' }}>
       <style>{SITE_FONTS + SITE_CSS + HOME_CSS + SPOT_CSS + EXTRA_CSS}</style>
       {/* One background for the whole page (the hero's: drifting gold glows, slow waves, grain), fixed behind every section. */}
-      <CalmBackground theme={theme} glow={dark ? 1.8 : 1} />
+      <CalmBackground theme={theme} matchLight />
       <SiteNav overlay onSignIn={onSignIn} onStart={start}
         onLogo={() => window.scrollTo({ top: 0, behavior: 'smooth' })} links={NAV} />
 

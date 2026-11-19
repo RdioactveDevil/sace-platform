@@ -34,20 +34,22 @@ const WAVES = [[0.72, 34, 0.0042, 0], [0.84, 26, 0.0055, 2.1], [0.58, 22, 0.0035
 // Each wave is three strokes, wide and faint to narrow, so it reads as a soft band.
 const STROKES = [[150, 0.035], [80, 0.04], [26, 0.05]]
 
-export function drawCalm(ctx, w, h, t, { gold, dark, grain, refH, glow = 1 }) {
+export function drawCalm(ctx, w, h, t, { gold, dark, grain, refH, matchLight = false }) {
   ctx.clearRect(0, 0, w, h)
   // Glows and waves are placed against refH when given (a contained background
   // keeps its layout when its box grows), else against the canvas height.
   const H = refH || h
+  // Dark mode normally draws the glows and waves fainter; matchLight keeps the light-mode strengths.
+  const faint = dark && !matchLight
   const a = t / 5200
   const R = Math.max(w, H)
   const spots = [
-    [w * (0.82 + 0.1 * Math.sin(a)), H * (0.12 + 0.12 * Math.cos(a * 1.3)), R * 0.55, dark ? 0.16 : 0.3],
-    [w * (0.12 + 0.09 * Math.cos(a * 0.8)), H * (0.92 + 0.07 * Math.sin(a * 1.1)), R * 0.45, dark ? 0.1 : 0.2],
+    [w * (0.82 + 0.1 * Math.sin(a)), H * (0.12 + 0.12 * Math.cos(a * 1.3)), R * 0.55, faint ? 0.16 : 0.3],
+    [w * (0.12 + 0.09 * Math.cos(a * 0.8)), H * (0.92 + 0.07 * Math.sin(a * 1.1)), R * 0.45, faint ? 0.1 : 0.2],
   ]
   for (const [x, y, r, al] of spots) {
     const gr = ctx.createRadialGradient(x, y, 0, x, y, r)
-    gr.addColorStop(0, rgba(gold, Math.min(1, al * glow)))
+    gr.addColorStop(0, rgba(gold, al))
     gr.addColorStop(1, rgba(gold, 0))
     ctx.fillStyle = gr
     ctx.fillRect(0, 0, w, h)
@@ -57,7 +59,7 @@ export function drawCalm(ctx, w, h, t, { gold, dark, grain, refH, glow = 1 }) {
   for (const [yb, amp, f, ph] of WAVES) {
     const y0 = H * yb
     for (const [lw, al] of STROKES) {
-      ctx.strokeStyle = rgba(gold, Math.min(1, al * (dark ? 0.8 : 1) * glow))
+      ctx.strokeStyle = rgba(gold, al * (faint ? 0.8 : 1))
       ctx.lineWidth = lw
       ctx.beginPath()
       for (let x = -40; x <= w + 40; x += 12) {
@@ -76,9 +78,10 @@ export function drawCalm(ctx, w, h, t, { gold, dark, grain, refH, glow = 1 }) {
 
 /**
  * `contained`: fill the positioned parent instead of the window (the homepage
- * hero), and only animate while it's on screen. `glow` scales how strong the glows and waves are.
+ * hero), and only animate while it's on screen. `matchLight`: in dark mode, draw the glows and waves as
+ * strongly as in light mode (the public pages) instead of the fainter dark setting (sign-in).
  */
-export default function CalmBackground({ theme = 'dark', contained = false, glow = 1 }) {
+export default function CalmBackground({ theme = 'dark', contained = false, matchLight = false }) {
   const ref = useRef(null)
 
   useEffect(() => {
@@ -87,7 +90,7 @@ export default function CalmBackground({ theme = 'dark', contained = false, glow
     const ctx = canvas.getContext('2d')
     if (!ctx) return undefined
     const t = THEMES[theme] || THEMES.dark
-    const opts = { gold: t.accent, dark: theme === 'dark', grain: makeGrain(), glow }
+    const opts = { gold: t.accent, dark: theme === 'dark', grain: makeGrain(), matchLight }
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)')
     let w = 0, h = 0, raf = 0, last = 0, refW = 0
 
@@ -135,7 +138,7 @@ export default function CalmBackground({ theme = 'dark', contained = false, glow
       document.removeEventListener('visibilitychange', start)
       reduce?.removeEventListener?.('change', start)
     }
-  }, [theme, contained, glow])
+  }, [theme, contained, matchLight])
 
   return (
     <canvas ref={ref} aria-hidden="true"
