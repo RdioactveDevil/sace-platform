@@ -65,9 +65,6 @@ export const SPOT_CSS = `
 .gfx .eyebrow { font-size: 12.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--goldt); }
 .gfx .spot h2 { margin: 0; font-size: clamp(32px, 4.2vw, 54px); font-weight: 800; line-height: 1.05; letter-spacing: -.035em; text-wrap: balance; }
 .gfx .spot .lead { margin: 0; font-size: clamp(16.5px, 1.5vw, 19px); color: var(--ink2); line-height: 1.6; }
-.gfx .ticks { list-style: none; padding: 0; margin: 4px 0 0; display: flex; flex-direction: column; gap: 10px; }
-.gfx .ticks li { display: flex; gap: 10px; align-items: flex-start; color: var(--ink2); }
-.gfx .ticks li::before { content: ""; width: 18px; height: 18px; flex-shrink: 0; margin-top: 3px; border-radius: 50%; background: var(--gold) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 12.5l4 4 8-9' fill='none' stroke='%230c1037' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 12px no-repeat; }
 .gfx .spot .spot-stage { position: relative; min-height: 520px; display: flex; align-items: center; justify-content: center; }
 @media (max-width: 900px) { .gfx .spot .in { grid-template-columns: minmax(0, 1fr); } .gfx .spot.flip .copy { order: 0; } .gfx .spot .spot-stage { min-height: 460px; } }
 @media (max-width: 560px) { .gfx .spot .spot-stage { zoom: .66; min-height: 520px; } }
@@ -156,7 +153,6 @@ export function SpotStudy({ onInside }) {
           <span className="eyebrow">Ten minutes on the bus counts</span>
           <h2 id="gfx-spot1-h">Study properly, wherever you are.</h2>
           <p className="lead">Real exam-style questions with graphs, diagrams and full working, built for a phone screen. Pick up where you left off on any device.</p>
-          <ul className="ticks"><li>Questions at your level, from one star to five</li><li>Rough work space beside every question</li><li>Ask Titan for a hint without being given the answer</li></ul>
         </div>
         <div className="spot-stage">
           <div className="tiltwrap"><div className="tilt" ref={tilt}>
@@ -196,8 +192,7 @@ export function SpotChem() {
       <div className="in">
         <div className="copy">
           <h2 id="gfx-spot2-h">Structures, equations and graphs, not just words.</h2>
-          <p className="lead">Organic structures, balanced equations with states, titration curves and data tables, drawn the way they appear in your exam, so the questions feel like the real thing.</p>
-          <ul className="ticks"><li>Every question sits under a topic from your course</li><li>Full working for every answer</li><li>Report a question and it's checked and fixed</li></ul>
+          <p className="lead">Organic structures, balanced equations with states, titration curves and data tables, drawn the way they appear in your exam.</p>
         </div>
         <div className="spot-stage">
           <div className="tiltwrap"><div className="tilt r" ref={tilt}>
