@@ -320,7 +320,7 @@ export function tryFinish(state) {
  */
 export function tryResult(state) {
   const last = state.step >= TRY_RUN_LENGTH - 1
-  const nextQuestion = `Question ${state.step + 2} of ${TRY_RUN_LENGTH}`
+  const nextQuestion = `Question ${state.step + 2}`
   const q = state.question
   const out = {
     title: state.correct ? 'Correct.' : 'Not quite.',
@@ -331,7 +331,7 @@ export function tryResult(state) {
   if (state.mode === 'main' && state.correct) {
     out.line = last ? 'Your difficulty goes up for next time.' : 'Increasing difficulty for the next question.'
     if (last) out.nextNote = 'How your three questions changed things'
-    else { out.nextTitle = `${nextQuestion}: a harder one`; out.nextNote = `Difficulty ${state.level} of 5`; out.nextStars = true }
+    else { out.nextTitle = `${nextQuestion}: a harder one`; out.nextNote = `Difficulty ${state.level}`; out.nextStars = true }
   } else if (state.mode === 'main' && state.comebackNext) {
     out.button = 'Try one like it'
     out.nextTitle = 'Comeback Mode: try one like it'
@@ -341,7 +341,7 @@ export function tryResult(state) {
   } else {
     if (state.correct) out.line = 'That’s Comeback Mode: practise it straight after you miss it.'
     out.button = last ? 'See your results' : 'Back to your questions'
-    out.nextNote = last ? 'How your three questions changed things' : `Back to your questions at difficulty ${state.level} of 5`
+    out.nextNote = last ? 'How your three questions changed things' : `Back to your questions at difficulty ${state.level}`
     out.nextStars = !last
   }
   return out

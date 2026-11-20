@@ -63,7 +63,6 @@ export default function TryItBox({ onStart, onNext }) {
   const q = s.question
   const picking = !subject
   const playing = !picking && s.phase !== 'done'
-  const subjectName = TRY_SUBJECTS.find(x => x.id === s.subject)?.name
   const inComeback = s.mode === 'comeback'
   const r = s.phase === 'result' ? tryResult(s) : null
   const lit = tryLegend(s)
@@ -97,12 +96,11 @@ export default function TryItBox({ onStart, onNext }) {
                   <div className="prog"><span className="cbp"><Icon d={LOOP} width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />Comeback Mode</span><span>One like the one you missed</span></div>
                 ) : (
                   <div className="prog">
-                    <span className="subj-tag">{subjectName}</span>
-                    <span>Question {s.step + 1} of {TRY_RUN_LENGTH}</span>
+                    <span>Question {s.step + 1}</span>
                     <span className="dots" aria-hidden="true">{Array.from({ length: TRY_RUN_LENGTH }, (_, j) => <i key={j} className={j < s.step ? 'done' : j === s.step ? 'cur' : ''} />)}</span>
                   </div>
                 )}
-                <div className="diff"><span>Difficulty</span><Stars level={s.level} pop={s.levelUp} /><b>{s.level} of 5</b></div>
+                <div className="diff"><b>Difficulty {s.level}</b><Stars level={s.level} pop={s.levelUp} /></div>
               </div>
               <div key={s.key} className={s.key % 2 ? 'qa' : 'qb'}>
                 <p className="stem"><MathText text={q.stem} /></p>
@@ -171,7 +169,7 @@ export default function TryItBox({ onStart, onNext }) {
               <h3>That's the point. You'll never run out.</h3>
               <p>Run low and <span className="wm">grade<span>farm.</span></span> writes 10 more instantly, so there's always a next question.</p>
               <div className="frows">
-                <div className="frow"><span>Difficulty reached</span><b className="fst"><Stars level={sum.level} /><span>{sum.level} of 5</span></b></div>
+                <div className="frow"><span>Difficulty reached</span><b className="fst"><Stars level={sum.level} /><span>{sum.level}</span></b></div>
                 <div className="frow"><span>Spaced Repetition</span><b>{sum.spaced}</b></div>
                 <div className="frow"><span>Comeback Mode</span><b>{sum.comeback}</b></div>
               </div>

@@ -38,7 +38,7 @@ test('all right: three questions, each harder than the last', () => {
   s = right(s)
   assert.equal(s.level, 3)
   assert.equal(tryResult(s).line, 'Increasing difficulty for the next question.')
-  assert.equal(tryResult(s).nextTitle, 'Question 2 of 3: a harder one')
+  assert.equal(tryResult(s).nextTitle, 'Question 2: a harder one')
   assert.deepEqual(tryLegend(s), { difficulty: true, spaced: false, comeback: false })
   s = tryContinue(s)
   assert.equal(s.question, TRY_QUESTIONS.methods[3][0])

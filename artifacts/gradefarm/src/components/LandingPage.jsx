@@ -219,7 +219,6 @@ const EXTRA_CSS = `
 .gfx .pk:hover { border-color: var(--gold); background: var(--sel); transform: translateY(-2px); }
 .gfx .pk:active { transform: scale(.98); }
 .gfx .pk b { font-size: 18px; font-weight: 800; }
-.gfx .prog .subj-tag { padding: 3px 10px; border-radius: 999px; background: var(--sel); border: 1px solid var(--sq2); font-size: 12.5px; font-weight: 800; color: var(--ink); }
 /* "gradefarm is the rest.": the wordmark at the heading's own size. */
 .gfx .h2 .cmpwm { font-size: 1.08em; letter-spacing: .04em; }
 .gfx .end .city { color: var(--city); }
@@ -235,6 +234,12 @@ const EXTRA_CSS = `
 @keyframes gfx-nudge { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(5px); } }
 @media (prefers-reduced-motion: reduce) { .gfx .tonext .nextarrow { animation: none; } }
 .gfx .cmp-hint { display: none; }
+/* The tick or cross on an answer is drawn by an animation; with reduced motion (animations off) it never
+   drew, leaving an empty circle. Show it drawn. */
+@media (prefers-reduced-motion: reduce) { .gfx .ic path { stroke-dashoffset: 0; } }
+/* An answer's text fills the room beside its letter. Left to size itself inside the flex button, Safari on
+   iPhone could shrink it to its narrowest word, so "I ran." broke after "I". */
+.gfx .opt > .mth { flex: 1 1 auto; min-width: 0; line-height: 1.35; }
 
 /* ── Phones ── */
 @media (max-width: 760px) {
@@ -277,16 +282,20 @@ const EXTRA_CSS = `
   .gfx .pk-opts { gap: 8px; }
   .gfx .pk { min-height: 56px; padding: 10px 6px; }
   .gfx .pk b { font-size: 15px; line-height: 1.2; }
-  .gfx .top { padding-bottom: 12px; row-gap: 8px; }
-  .gfx .prog { flex-wrap: wrap; gap: 6px 8px; font-size: 12.5px; }
-  .gfx .prog .subj-tag { padding: 2px 9px; font-size: 12px; }
+  /* The question card: a touch wider than the page's text (closer to the screen's edges), softer and rounder. */
+  .gfx .tqrow .tq { margin-left: calc(12px - var(--lp-gutter)); margin-right: calc(12px - var(--lp-gutter)); padding: 18px 16px 20px; border-radius: 24px; box-shadow: 0 24px 50px -30px rgba(8,10,30,.45); }
+  /* Header on one line: question count and dots on the left, the stars on the right. No subject pill, no divider. */
+  .gfx .top { flex-wrap: nowrap; align-items: center; padding-bottom: 0; border-bottom: 0; gap: 10px; }
+  .gfx .prog { flex-wrap: wrap; gap: 6px 8px; font-size: 13px; min-width: 0; }
   .gfx .cbp { white-space: nowrap; font-size: 12px; padding: 3px 9px; }
-  .gfx .diff { font-size: 12px; } .gfx .diff .star { font-size: 16px; } .gfx .diff b { font-size: 12.5px; }
-  .gfx .stem { margin-top: 14px; font-size: 18px; }
-  .gfx .opts { gap: 8px; margin-top: 14px; }
+  .gfx .prog .cbp + span { display: none; }
+  .gfx .diff { flex-shrink: 0; gap: 6px; font-size: 12px; }
+  .gfx .diff .star { font-size: 15px; } .gfx .diff b { font-size: 13px; }
+  .gfx .stem { margin-top: 18px; font-size: 19px; line-height: 1.4; }
+  .gfx .opts { gap: 10px; margin-top: 16px; }
   .gfx .opts.short { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .gfx .opt { min-height: 50px; gap: 10px; padding: 8px 12px; font-size: 18px; }
-  .gfx .opt .k { width: 24px; height: 24px; border-radius: 6px; font-size: 11.5px; }
+  .gfx .opt { min-height: 54px; gap: 12px; padding: 12px 14px; font-size: 17px; line-height: 1.35; border-radius: 14px; }
+  .gfx .opt .k { width: 26px; height: 26px; border-radius: 7px; font-size: 11.5px; }
   .gfx .res { margin-top: 14px; }
   .gfx .rh { gap: 8px; }
   .gfx .ic { width: 44px; height: 44px; } .gfx .ic svg { width: 22px; height: 22px; }
