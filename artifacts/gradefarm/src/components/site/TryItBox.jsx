@@ -102,7 +102,7 @@ export default function TryItBox({ onStart, onNext }) {
                     <span className="dots" aria-hidden="true">{Array.from({ length: TRY_RUN_LENGTH }, (_, j) => <i key={j} className={j < s.step ? 'done' : j === s.step ? 'cur' : ''} />)}</span>
                   </div>
                 )}
-                <div className="diff"><span>Difficulty</span><Stars level={s.level} pop={s.levelUp} /><b>{s.level} of 5</b></div>
+                <div className="diff"><b>Difficulty {s.level}</b><Stars level={s.level} pop={s.levelUp} /></div>
               </div>
               <div key={s.key} className={s.key % 2 ? 'qa' : 'qb'}>
                 <p className="stem"><MathText text={q.stem} /></p>
@@ -171,7 +171,7 @@ export default function TryItBox({ onStart, onNext }) {
               <h3>That's the point. You'll never run out.</h3>
               <p>Run low and <span className="wm">grade<span>farm.</span></span> writes 10 more instantly, so there's always a next question.</p>
               <div className="frows">
-                <div className="frow"><span>Difficulty reached</span><b className="fst"><Stars level={sum.level} /><span>{sum.level} of 5</span></b></div>
+                <div className="frow"><span>Difficulty reached</span><b className="fst"><Stars level={sum.level} /><span>{sum.level}</span></b></div>
                 <div className="frow"><span>Spaced Repetition</span><b>{sum.spaced}</b></div>
                 <div className="frow"><span>Comeback Mode</span><b>{sum.comeback}</b></div>
               </div>

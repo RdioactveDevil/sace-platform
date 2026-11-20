@@ -292,8 +292,7 @@ const EXTRA_CSS = `
   .gfx .cbp { white-space: nowrap; font-size: 12px; padding: 3px 9px; }
   .gfx .prog .cbp + span { display: none; }
   .gfx .diff { flex-shrink: 0; gap: 6px; font-size: 12px; }
-  .gfx .diff > span:first-child { display: none; }
-  .gfx .diff .star { font-size: 15px; } .gfx .diff b { font-size: 12.5px; color: var(--muted); }
+  .gfx .diff .star { font-size: 15px; } .gfx .diff b { font-size: 13px; }
   .gfx .stem { margin-top: 18px; font-size: 19px; line-height: 1.4; }
   .gfx .opts { gap: 10px; margin-top: 16px; }
   .gfx .opts.short { grid-template-columns: repeat(2, minmax(0, 1fr)); }
