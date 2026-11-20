@@ -235,6 +235,9 @@ const EXTRA_CSS = `
 @keyframes gfx-nudge { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(5px); } }
 @media (prefers-reduced-motion: reduce) { .gfx .tonext .nextarrow { animation: none; } }
 .gfx .cmp-hint { display: none; }
+/* The tick or cross on an answer is drawn by an animation; with reduced motion (animations off) it never
+   drew, leaving an empty circle. Show it drawn. */
+@media (prefers-reduced-motion: reduce) { .gfx .ic path { stroke-dashoffset: 0; } }
 /* An answer's text fills the room beside its letter. Left to size itself inside the flex button, Safari on
    iPhone could shrink it to its narrowest word, so "I ran." broke after "I". */
 .gfx .opt > .mth { flex: 1 1 auto; min-width: 0; line-height: 1.35; }

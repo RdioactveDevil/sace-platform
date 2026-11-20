@@ -320,7 +320,7 @@ export function tryFinish(state) {
  */
 export function tryResult(state) {
   const last = state.step >= TRY_RUN_LENGTH - 1
-  const nextQuestion = `Question ${state.step + 2} of ${TRY_RUN_LENGTH}`
+  const nextQuestion = `Question ${state.step + 2}`
   const q = state.question
   const out = {
     title: state.correct ? 'Correct.' : 'Not quite.',

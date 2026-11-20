@@ -98,7 +98,7 @@ export default function TryItBox({ onStart, onNext }) {
                 ) : (
                   <div className="prog">
                     <span className="subj-tag">{subjectName}</span>
-                    <span>Question {s.step + 1} of {TRY_RUN_LENGTH}</span>
+                    <span>Question {s.step + 1}</span>
                     <span className="dots" aria-hidden="true">{Array.from({ length: TRY_RUN_LENGTH }, (_, j) => <i key={j} className={j < s.step ? 'done' : j === s.step ? 'cur' : ''} />)}</span>
                   </div>
                 )}
