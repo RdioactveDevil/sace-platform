@@ -219,7 +219,6 @@ const EXTRA_CSS = `
 .gfx .pk:hover { border-color: var(--gold); background: var(--sel); transform: translateY(-2px); }
 .gfx .pk:active { transform: scale(.98); }
 .gfx .pk b { font-size: 18px; font-weight: 800; }
-.gfx .prog .subj-tag { padding: 3px 10px; border-radius: 999px; background: var(--sel); border: 1px solid var(--sq2); font-size: 12.5px; font-weight: 800; color: var(--ink); }
 /* "gradefarm is the rest.": the wordmark at the heading's own size. */
 .gfx .h2 .cmpwm { font-size: 1.08em; letter-spacing: .04em; }
 .gfx .end .city { color: var(--city); }
@@ -288,7 +287,6 @@ const EXTRA_CSS = `
   /* Header on one line: question count and dots on the left, the stars on the right. No subject pill, no divider. */
   .gfx .top { flex-wrap: nowrap; align-items: center; padding-bottom: 0; border-bottom: 0; gap: 10px; }
   .gfx .prog { flex-wrap: wrap; gap: 6px 8px; font-size: 13px; min-width: 0; }
-  .gfx .prog .subj-tag { display: none; }
   .gfx .cbp { white-space: nowrap; font-size: 12px; padding: 3px 9px; }
   .gfx .prog .cbp + span { display: none; }
   .gfx .diff { flex-shrink: 0; gap: 6px; font-size: 12px; }
