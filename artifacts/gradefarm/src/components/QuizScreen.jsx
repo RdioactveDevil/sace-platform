@@ -125,6 +125,18 @@ function getTargetDifficulty(sessionResults, questions) {
  */
 function ExtraPracticeStrip({ streak, target, status, topic, onReturnToQuiz, theme = 'dark' }) {
   const t = THEMES[theme]
+  const [tipOpen, setTipOpen] = useState(false)
+  // Open the hint to the left of the card when the quiz area has room for it there, else below the label.
+  const stripRef = useRef(null)
+  const [tipSide, setTipSide] = useState('below')
+  const placeTip = () => {
+    const strip = stripRef.current
+    if (!strip) return
+    let box = strip.parentElement
+    while (box && !/(auto|scroll|hidden)/.test(getComputedStyle(box).overflowY)) box = box.parentElement
+    const room = strip.getBoundingClientRect().left - (box ? box.getBoundingClientRect().left : 0)
+    setTipSide(room >= 320 ? 'left' : 'below')
+  }
   const done = Math.min(streak, target)
   const message = status === 'generating'
     ? 'Getting practice questions like this one ready…'
@@ -134,11 +146,29 @@ function ExtraPracticeStrip({ streak, target, status, topic, onReturnToQuiz, the
         ? "This one's tricky. Keep going with an easier question, or go back to your session."
         : status === 'needs_review'
           ? 'Added to your study plan to come back to. Continue to go back to your session.'
-          : `${target} in a row${topic ? ` on ${topic}` : ''}, then back to your session`
+          : `Get ${target} in a row correct to continue your quiz.`
   return (
-    <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '9px 14px', borderRadius: 10, background: t.bgCard, border: `1px solid ${status === 'complete' ? t.success : t.border}`, fontSize: 12.5 }}>
-      <strong style={{ color: t.text }}>Comeback Mode</strong>
-      <span style={{ color: t.textMuted, flex: 1, minWidth: 0 }}>{message}</span>
+    <div ref={stripRef} className="qz-strip" data-side={tipSide} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '9px 14px', borderRadius: 10, background: t.bgCard, border: `1px solid ${status === 'complete' ? t.success : t.border}`, fontSize: 12.5 }}>
+      {/* What Comeback Mode is: on hover or focus (tap on a phone), opening to the left of the card where there's room, else below. */}
+      <style>{`
+        .qz-cb { position: relative; display: inline-flex; }
+        .qz-cb-btn { border: none; background: none; padding: 0; font: inherit; font-weight: 800; color: ${t.text}; cursor: help; text-decoration: underline dotted ${t.textMuted}; text-underline-offset: 3px; }
+        .qz-cb-btn:focus-visible { outline: 2px solid ${t.accent}; outline-offset: 3px; border-radius: 4px; }
+        .qz-cb-tip { position: absolute; z-index: 40; top: calc(100% + 10px); left: 0; width: min(300px, calc(100vw - 32px)); padding: 12px 14px; border-radius: 12px; background: ${t.bgElevated || t.bgCard}; border: 1px solid ${t.border}; box-shadow: ${t.shadowModal || '0 18px 40px rgba(0,0,0,.3)'}; color: ${t.textSub}; font-size: 13px; line-height: 1.55; font-weight: 500; text-align: left; opacity: 0; visibility: hidden; transform: translateY(-4px); transition: opacity .15s, transform .15s, visibility 0s .15s; pointer-events: none; }
+        .qz-cb-tip b { display: block; color: ${t.text}; font-weight: 800; margin-bottom: 4px; }
+        .qz-cb:hover .qz-cb-tip, .qz-cb:focus-within .qz-cb-tip, .qz-cb.open .qz-cb-tip { opacity: 1; visibility: visible; transform: none; transition: opacity .15s, transform .15s; }
+        .qz-strip[data-side="left"] .qz-cb { position: static; }
+        .qz-strip[data-side="left"] .qz-cb-tip { top: 0; left: auto; right: calc(100% + 14px); width: 290px; transform: translateX(4px); }
+        @media (prefers-reduced-motion: reduce) { .qz-cb-tip { transition: none; } }
+      `}</style>
+      <span className={`qz-cb${tipOpen ? ' open' : ''}`} onMouseEnter={placeTip} onMouseLeave={() => setTipOpen(false)}>
+        <button type="button" className="qz-cb-btn" aria-describedby="qz-cb-tip" aria-expanded={tipOpen} onFocus={placeTip} onClick={() => { placeTip(); setTipOpen(o => !o) }} onBlur={() => setTipOpen(false)}>Comeback Mode</button>
+        <span role="tooltip" id="qz-cb-tip" className="qz-cb-tip">
+          <b>Comeback Mode</b>
+          When you miss a question, the Gradefarm Engine identifies a weakness. It gives you similar questions to consolidate the topic. Get {target} in a row correct to continue your quiz. If you consistently miss the questions, the subtopic gets added to your study plan.
+        </span>
+      </span>
+      <span role="status" style={{ color: t.textMuted, flex: 1, minWidth: 0 }}>{message}</span>
       {status === 'struggling' && onReturnToQuiz && (
         <button type="button" onClick={onReturnToQuiz} style={{ border: 'none', background: 'none', padding: 0, fontFamily: FONT_B, fontSize: 12.5, fontWeight: 700, color: t.text, cursor: 'pointer', textDecoration: 'underline', textDecorationColor: t.accent, textUnderlineOffset: 3 }}>
           Back to my session
@@ -365,6 +395,21 @@ export default function QuizScreen({
     const ro = new ResizeObserver(([entry]) => setQuestionAreaWidth(entry.contentRect.width))
     ro.observe(questionAreaEl)
     return () => ro.disconnect()
+  }, [questionAreaEl])
+
+  // The question area scrolls only when what's in it is really taller than the screen. A few pixels'
+  // overflow (rounding with the app's zoom, a board or tip sized to the area) otherwise showed a
+  // scrollbar on a short question. Re-measured whenever the area or anything in it changes size.
+  const [areaScrolls, setAreaScrolls] = useState(false)
+  useEffect(() => {
+    if (!questionAreaEl || typeof ResizeObserver === 'undefined') return
+    const measure = () => setAreaScrolls(questionAreaEl.scrollHeight - questionAreaEl.clientHeight > 4)
+    const ro = new ResizeObserver(measure)
+    const watch = () => { ro.disconnect(); ro.observe(questionAreaEl); for (const c of questionAreaEl.children) ro.observe(c); measure() }
+    watch()
+    const mo = typeof MutationObserver !== 'undefined' ? new MutationObserver(watch) : null
+    mo?.observe(questionAreaEl, { childList: true })
+    return () => { ro.disconnect(); mo?.disconnect() }
   }, [questionAreaEl])
 
   // Reset timer when a new exam session starts
@@ -1740,7 +1785,7 @@ export default function QuizScreen({
   // Only while a question (and so the dialog) is on screen.
   const questionOnScreen = !showingSummary && !!currentQ && !generatingMore && !(freeQuota && freeQuota.used >= freeQuota.limit && !showAns)
   const blocker = useBlocker(({ currentLocation, nextLocation }) =>
-    !leavingRef.current && questionOnScreen && currentLocation.pathname !== nextLocation.pathname)
+    !leavingRef.current && !nextLocation.state?.keepQuiz && questionOnScreen && currentLocation.pathname !== nextLocation.pathname)
   useEffect(() => {
     if (blocker.state !== 'blocked') return
     if (examRun) setShowFinishExam(true)
@@ -2058,7 +2103,7 @@ export default function QuizScreen({
   const nextButtonLabel = goalReached
     ? 'Finish assignment'
     : remediationPendingEntry
-    ? `Practise ${remediationTarget} like this`
+    ? 'Enter Comeback Mode'
     : inRemediationQuestion && remediationStatus === 'complete'
       ? 'Back to my session'
     : inRemediationQuestion && remediationStatus === 'struggling'
@@ -2318,7 +2363,7 @@ export default function QuizScreen({
       </div>
 
       <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: 'hidden' }}>
-        <div ref={setQuestionAreaEl} style={{ position: 'relative', flex: 1, padding: isMobile ? (roughOpen ? `14px 14px ${roughSheetH + 16}px` : '16px 14px') : '28px 28px 48px', overflowY: 'auto', overscrollBehavior: 'contain', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <div ref={setQuestionAreaEl} style={{ position: 'relative', flex: 1, padding: isMobile ? (roughOpen ? `14px 14px ${roughSheetH + 16}px` : '16px 14px') : '28px 28px 48px', overflowY: areaScrolls ? 'auto' : 'hidden', overscrollBehavior: 'contain', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           {/* Phones: a short question sits in the middle of the screen (auto margins
               centre it, and fall to zero once it's taller, so nothing is cut off). */}
           <div style={{ width: '100%', maxWidth: sidePassage ? 1280 : splitFeedback ? 1180 : 640, ...(isMobile ? { marginTop: 'auto', marginBottom: 'auto' } : {}), display: 'flex', flexDirection: markedLayout && isMobile ? 'column' : 'row', gap: markedLayout && isMobile ? 12 : 24, alignItems: markedLayout && isMobile ? 'stretch' : 'flex-start' }}>
@@ -2429,13 +2474,15 @@ export default function QuizScreen({
                         disabled={showAns}
                         // Choosing only selects: a misclick can be changed before Check answer.
                         onClick={() => { if (showAns || checking) return; if (examRun) chooseExamResponse(i); else setSelected(i) }}
-                        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: isMobile ? '13px 14px' : '11px 14px', minHeight: isMobile ? 54 : undefined, borderRadius: isMobile ? 12 : 10, textAlign: 'left', fontFamily: FONT_B, fontSize: isMobile ? 15.5 : 14.5, fontWeight: 500, WebkitTapHighlightColor: 'transparent',
+                        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: isMobile ? '13px 14px' : '12px 14px', minHeight: isMobile ? 54 : 52, borderRadius: isMobile ? 12 : 10, textAlign: 'left', fontFamily: FONT_B, fontSize: isMobile ? 15.5 : 14.5, fontWeight: 500, WebkitTapHighlightColor: 'transparent',
                           border: `1px solid ${t.border}`, background: t.bgCard, color: s.text, cursor: showAns ? 'default' : 'pointer', ...s.box }}
                       >
                         <span aria-hidden="true" style={{ width: 24, height: 24, borderRadius: 6, border: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11.5, fontWeight: 800, flexShrink: 0, color: t.textMuted, ...s.key }}>
                           {String.fromCharCode(65 + i)}
                         </span>
-                        <span style={{ minWidth: 0, flex: 1, overflowX: 'auto' }}><MathText text={opt} /></span>
+                        {/* No scroll box: a fraction is a little taller than a line, and overflow-x: auto made a vertical scrollbar for it. */}
+                        {/* Fractions at full size (\dfrac), not shrunk to fit a line, so an answer like 15/20 reads easily. */}
+                        <span style={{ minWidth: 0, flex: 1, lineHeight: 1.5, overflowWrap: 'anywhere' }}><MathText text={typeof opt === 'string' ? opt.replace(/\\frac(?=[\s{])/g, '\\dfrac') : opt} /></span>
                         {s.tag && <span style={{ fontSize: 12, fontWeight: 700, color: s.tag[1], whiteSpace: 'nowrap' }}>{s.tag[0]}</span>}
                       </button>
                     )

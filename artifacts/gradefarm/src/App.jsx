@@ -2085,6 +2085,13 @@ function AppInner() {
             {/* Ask Titan from a question: a resizable pane beside it, like in a lesson. */}
             {titanRequest && (
               <TitanDock open={titanOpen} request={titanRequest} onClose={() => setTitanOpen(false)}
+                onOpenChat={(chat) => {
+                  // Open Chat: the pane's conversation carries on as the full chat in Titan AI. The quiz is
+                  // kept to come back to (keepQuiz lets the quiz's leave check through without asking).
+                  setTitanOpen(false)
+                  setLearnRequest({ type: 'carry', ...chat, at: Date.now() })
+                  navigate('/learn', { state: { keepQuiz: true } })
+                }}
                 profile={profile} struggleMap={struggleMap} questions={questions} subject={selectedSubject} theme={theme}
                 interests={learnInterests} setInterests={setLearnInterests}
                 onUpgrade={selectedAccess === 'free' ? openUpgrade : null} />

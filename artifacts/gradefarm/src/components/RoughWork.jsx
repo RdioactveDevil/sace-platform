@@ -150,6 +150,7 @@ export default function RoughWork({
   const [busy, setBusy] = useState(null)          // 'save' | 'check'
   const [exporting, setExporting] = useState(false)
   const [hostH, setHostH] = useState(0)
+  const [hostFits, setHostFits] = useState(true)
 
   const surfaceRef = useRef(null)
   const exportRef = useRef(null)
@@ -171,10 +172,13 @@ export default function RoughWork({
     if (mode !== 'overlay') return
     const host = surfaceRef.current?.parentElement
     if (!host) return
+    // clientHeight is rounded: as a height it could be half a pixel taller than the area, enough for a
+    // scrollbar. When nothing reaches below the area, the board stretches to its bottom edge instead (fill).
     const measure = () => {
       let bottom = host.clientHeight
       for (const c of host.children) if (c !== surfaceRef.current) bottom = Math.max(bottom, c.offsetTop + c.offsetHeight + 48)
       setHostH(bottom)
+      setHostFits(bottom <= host.clientHeight)
     }
     measure()
     const ro = new ResizeObserver(measure)
@@ -183,6 +187,7 @@ export default function RoughWork({
     return () => ro.disconnect()
   }, [mode])
   const boardH = mode === 'overlay' ? Math.max(hostH, inkBottom(items) + (open ? 120 : 24)) : undefined
+  const fill = mode === 'overlay' && hostFits && boardH === hostH
 
   const finishDraft = () => {
     const d = draftRef.current
@@ -520,7 +525,7 @@ export default function RoughWork({
       <div ref={surfaceRef} {...pointerHandlers}
         aria-label={open ? 'Rough work board' : undefined}
         style={{
-          position: 'absolute', top: 0, left: 0, right: 0, height: boardH, zIndex: 6,
+          position: 'absolute', top: 0, left: 0, right: 0, ...(fill ? { bottom: 0 } : { height: boardH }), zIndex: 6,
           display: 'flex', flexDirection: 'column',
           pointerEvents: open ? 'auto' : 'none', touchAction: open ? 'none' : 'auto', cursor: open ? cursor : undefined,
         }}>
