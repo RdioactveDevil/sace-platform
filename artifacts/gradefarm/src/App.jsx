@@ -64,6 +64,8 @@ const TutorScreen           = lazyWithReload(() => import('./components/TutorScr
 const TutorPlanGate         = lazyWithReload(() => import('./components/TutorPlan'))
 const WritingScreen         = lazyWithReload(() => import('./components/WritingScreen'))
 const DiagnosticScreen      = lazyWithReload(() => import('./components/DiagnosticScreen'))
+const BookCallScreen        = lazyWithReload(() => import('./components/BookCallScreen'))
+const GuestCallScreen       = lazyWithReload(() => import('./components/GuestCallScreen'))
 const InviteScreen          = lazyWithReload(() => import('./components/InviteScreen'))
 const PricingPage           = lazyWithReload(() => import('./components/PricingPage'))
 const QuestionLabScreen     = lazyWithReload(() => import('./components/QuestionLabScreen'))
@@ -1901,6 +1903,10 @@ function AppInner() {
 
       {/* Diagnostic assessment — public, no auth required */}
       <Route path="/diagnostic/:token" element={<DiagnosticScreen {...commonProps} />} />
+
+      {/* Consultation call — public, no auth required: book a time, then the guest's call link */}
+      <Route path="/book/:token" element={<BookCallScreen {...commonProps} />} />
+      <Route path="/call/:guestToken" element={<GuestCallScreen {...commonProps} />} />
 
       {/* Tutor invite — public; accepting needs the invited account signed in */}
       <Route path="/invite/:token" element={<InviteScreen {...commonProps} signedIn={!!(user && profile)} />} />

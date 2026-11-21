@@ -2145,6 +2145,45 @@ export async function submitDiagnosticAnswers(token, { studentName, answers }) {
   return json
 }
 
+// ── Consultation calls: public pages (no auth) ────────────────────────────────
+
+/** Plain fetch of a public consultation route; errors carry `status` and `body` (a 409 has the fresh `slots` or the existing `booking`). */
+async function consultationFetch(path, options, fallback) {
+  const res = await fetch(path, options)
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    const err = new Error(json.error || fallback)
+    err.status = res.status
+    err.body = json
+    throw err
+  }
+  return json
+}
+
+/** Open times for a prospect's finished diagnostic: { slots, timeZone, callMinutes, senderName, email, parentEmail, questionnaireUrl, booking, noHours? }. */
+export function loadConsultationSlots(token) {
+  return consultationFetch(`/api/consultation/${encodeURIComponent(token)}/slots`, undefined, 'Could not load times.')
+}
+
+/** Book a time ({ start, email, parentEmail?, name?, timeZone }): { start, joinUrl, questionnaireUrl }. */
+export function bookConsultationAsProspect(token, { start, email, parentEmail, name, timeZone }) {
+  return consultationFetch(`/api/consultation/${encodeURIComponent(token)}/book`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ start, email, parentEmail, name, timeZone }),
+  }, 'Could not book that time.')
+}
+
+/** The call link's details: { title, start, minutes, tutorName, canJoinFrom, status }. */
+export function loadGuestCall(guestToken) {
+  return consultationFetch(`/api/consultation/join/${encodeURIComponent(guestToken)}`, undefined, "This call link isn't valid.")
+}
+
+/** A room token for the guest: { token, wsUrl }. A 403 carries `body.canJoinFrom`. */
+export function joinGuestCall(guestToken) {
+  return consultationFetch(`/api/consultation/join/${encodeURIComponent(guestToken)}`, { method: 'POST' }, 'Could not join the call.')
+}
+
 /** Download a diagnostic assessment PDF report (tutor). */
 export async function downloadDiagnosticReportPdf(assessmentId, studentName) {
   const session = await getSession()

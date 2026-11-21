@@ -119,3 +119,34 @@ export function zonedToIso(date, time, timeZone) {
   guess = wall - offsetAt(guess, timeZone) // settle across a daylight-saving change
   return new Date(guess).toISOString()
 }
+
+/** The city in a zone name ("Australia/Melbourne" -> "Melbourne"), for "Times are in Melbourne time". */
+export function zoneCity(timeZone) {
+  return String(timeZone || '').split('/').pop().replace(/_/g, ' ')
+}
+
+/** The clock time ("4:30 pm") of an instant in a zone. */
+export function clockIn(iso, timeZone) {
+  return clock(new Date(iso), timeZone || undefined)
+}
+
+/**
+ * What a guest reads before the call opens: "You can join from 4:20 pm, in 5 minutes."
+ * More than an hour away it names the day instead. Null once the call is open (or no time is known).
+ */
+export function joinCountdownText(canJoinFrom, nowMs, timeZone) {
+  if (!canJoinFrom) return null
+  const opens = Date.parse(canJoinFrom)
+  if (!Number.isFinite(opens)) return null
+  const ms = opens - nowMs
+  if (ms <= 0) return null
+  const zone = timeZone || undefined
+  const at = clock(new Date(opens), zone)
+  if (ms < 60_000) return `You can join from ${at}, in under a minute.`
+  if (ms < 3_600_000) {
+    const mins = Math.ceil(ms / 60_000)
+    return `You can join from ${at}, in ${plural(mins, 'minute')}.`
+  }
+  const p = partsIn(new Date(opens), zone, { weekday: 'short', day: 'numeric', month: 'short' })
+  return `You can join from ${at} on ${p.weekday} ${p.day} ${p.month}.`
+}

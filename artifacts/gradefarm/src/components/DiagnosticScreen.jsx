@@ -1,19 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
-import { loadDiagnosticByToken, submitDiagnosticAnswers, prepareDiagnostic, startDiagnostic } from '../lib/db'
+import { loadDiagnosticByToken, submitDiagnosticAnswers, prepareDiagnostic, startDiagnostic, loadConsultationSlots } from '../lib/db'
 import MathText from './MathText'
 import { MathLiveInput, MathKeyboard, isTouchDevice } from './MathInput'
 import { Check } from 'lucide-react'
 import { AuthLayout, Field } from './AuthLayout'
+import { FONT, C, Panel, H1, P, OkLine, btnStyle } from './publicUi'
+import BookingPicker from './BookingPicker'
 
-const FONT  = "'Plus Jakarta Sans', sans-serif"
 // Colours come from the app's theme variables (set on <html> by App), so the
-// page and its maths input follow light and dark mode.
-const C = {
-  text: 'var(--t-text)', sub: 'var(--t-textSub)', muted: 'var(--t-textMuted)', faint: 'var(--t-textFaint)',
-  card: 'var(--t-bgCard)', subtle: 'var(--t-bgSubtle)', hover: 'var(--t-bgHover)', border: 'var(--t-border)', bg: 'var(--t-bg)',
-  success: 'var(--t-success)', accent: 'var(--t-accent)',
-}
+// page and its maths input follow light and dark mode (see publicUi.jsx).
 
 // ── Subject detection ──────────────────────────────────────────────────────────
 
@@ -179,40 +175,38 @@ function Dots() {
   )
 }
 
-// A centred card for the short screens (loading, done, errors).
-function Panel({ children }) {
-  return (
-    <div className="af-in" style={{ width: '100%', maxWidth: 460, margin: '0 auto', background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 'clamp(20px, 5vw, 28px)', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 14 }}>
-      {children}
-    </div>
-  )
-}
-const H1 = ({ children }) => <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.25, color: C.text, textWrap: 'balance' }}>{children}</h1>
-const P = ({ children, muted }) => <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: muted ? C.muted : C.sub }}>{children}</p>
-const OkLine = ({ children }) => <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 14, fontWeight: 700, color: C.success }}><Check size={16} strokeWidth={2.5} aria-hidden="true" />{children}</div>
-const btnStyle = (kind, full = true) => ({
-  display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minHeight: 42, padding: '0 18px', borderRadius: 10,
-  fontFamily: FONT, fontSize: 14, fontWeight: 800, cursor: 'pointer', width: full ? '100%' : undefined,
-  ...(kind === 'primary' ? { border: 'none', background: C.accent, color: 'var(--t-onAccent)' } : { border: `1px solid ${C.border}`, background: C.card, color: C.text }),
-})
-
 // A link diagnostic, sent to someone who isn't the sender's student yet (often
 // before a consultation call): the sender is named in full, never "your tutor".
-function SubmittedScreen({ preCallFormUrl, onRedirect, studentName, senderName }) {
+function SubmittedScreen({ token, theme, preCallFormUrl, onRedirect, studentName, senderName }) {
+  // A prospect can book a consultation call right here. Until we know whether
+  // times are on offer, nothing redirects; if they aren't (or the call fails),
+  // this is today's finish screen.
+  const [offer, setOffer] = useState({ state: 'checking', data: null })
   useEffect(() => {
-    if (preCallFormUrl) {
+    let cancelled = false
+    loadConsultationSlots(token)
+      .then(data => { if (!cancelled) setOffer({ state: data.noHours || (!data.booking && !data.slots?.length) ? 'none' : 'offered', data }) })
+      .catch(() => { if (!cancelled) setOffer({ state: 'none', data: null }) })
+    return () => { cancelled = true }
+  }, [token])
+  const offered = offer.state === 'offered'
+
+  useEffect(() => {
+    if (preCallFormUrl && offer.state === 'none') {
       const timer = setTimeout(onRedirect, 6000)
       return () => clearTimeout(timer)
     }
-  }, [preCallFormUrl, onRedirect])
+  }, [preCallFormUrl, onRedirect, offer.state])
 
   const first = (studentName || '').trim().split(' ')[0]
+  const redirecting = !!preCallFormUrl && offer.state === 'none'
   return (
     <Panel>
       <OkLine>{senderName ? `Sent to ${senderName}` : 'Sent'}</OkLine>
       <H1>Thanks{first ? `, ${first}` : ''}. That's done.</H1>
-      <P muted>{senderName ? `${senderName} will go through your answers with you on your call.` : 'Your answers will be gone through with you on your call.'}{preCallFormUrl ? '' : ' You can close this page.'}</P>
-      {preCallFormUrl && (
+      <P muted>{senderName ? `${senderName} will go through your answers with you on your call.` : 'Your answers will be gone through with you on your call.'}{offered || redirecting ? '' : ' You can close this page.'}</P>
+      {offered && <BookingPicker token={token} data={offer.data} theme={theme} name={studentName} />}
+      {redirecting && (
         <>
           <P muted>Next, a few questions to help {senderName || 'them'} prepare for your call. They open in a few seconds.</P>
           <button type="button" className="af-btn" onClick={onRedirect} style={btnStyle('primary')}>Open the questions now</button>
@@ -537,6 +531,8 @@ export default function DiagnosticScreen({ theme = 'dark', onToggleTheme }) {
         )}
         {phase === 'result' && !result?.linked && (
           <SubmittedScreen
+            token={token}
+            theme={theme}
             preCallFormUrl={result?.preCallFormUrl || assessment?.pre_call_form_url}
             onRedirect={handleRedirect}
             studentName={studentName}

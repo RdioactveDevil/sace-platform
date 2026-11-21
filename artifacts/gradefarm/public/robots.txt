@@ -24,6 +24,8 @@ Disallow: /writing
 Disallow: /session
 Disallow: /room
 Disallow: /diagnostic
+Disallow: /book/
+Disallow: /call/
 # A parent's readiness-check report: private, reached only from their email.
 Disallow: /readiness-check/report
 

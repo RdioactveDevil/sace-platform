@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  reminderLabel, groupSlotsByDay, emptyWeek, isValidHHMM, formatWhen, zonedToIso, reminderToMinutes, splitReminder, ZONES, nextBlock,
+  reminderLabel, groupSlotsByDay, emptyWeek, isValidHHMM, formatWhen, zonedToIso, reminderToMinutes, splitReminder, ZONES, nextBlock, zoneCity, joinCountdownText,
 } from './bookingFormat.js'
 
 test('reminderLabel', () => {
@@ -91,4 +91,24 @@ test('the zone list is the seven the server accepts', () => {
     'Australia/Adelaide', 'Australia/Darwin', 'Australia/Brisbane', 'Australia/Sydney',
     'Australia/Melbourne', 'Australia/Hobart', 'Australia/Perth',
   ])
+})
+
+test('zoneCity is the last segment of the zone, underscores as spaces', () => {
+  assert.equal(zoneCity('Australia/Melbourne'), 'Melbourne')
+  assert.equal(zoneCity('America/Argentina/Buenos_Aires'), 'Buenos Aires')
+  assert.equal(zoneCity('UTC'), 'UTC')
+  assert.equal(zoneCity(''), '')
+  assert.equal(zoneCity(undefined), '')
+})
+
+test('joinCountdownText says when the call opens, in the viewer zone', () => {
+  const from = '2026-11-03T05:20:00.000Z' // 4:20 pm Melbourne
+  const at = (iso) => Date.parse(iso)
+  assert.equal(joinCountdownText(from, at('2026-11-03T05:20:00.000Z'), 'Australia/Melbourne'), null)
+  assert.equal(joinCountdownText(from, at('2026-11-03T05:30:00.000Z'), 'Australia/Melbourne'), null)
+  assert.equal(joinCountdownText(from, at('2026-11-03T05:19:30.000Z'), 'Australia/Melbourne'), 'You can join from 4:20 pm, in under a minute.')
+  assert.equal(joinCountdownText(from, at('2026-11-03T05:15:00.000Z'), 'Australia/Melbourne'), 'You can join from 4:20 pm, in 5 minutes.')
+  assert.equal(joinCountdownText(from, at('2026-11-03T05:19:00.000Z'), 'Australia/Melbourne'), 'You can join from 4:20 pm, in 1 minute.')
+  assert.equal(joinCountdownText(from, at('2026-11-03T03:00:00.000Z'), 'Australia/Melbourne'), 'You can join from 4:20 pm on Tue 3 Nov.')
+  assert.equal(joinCountdownText(null, 0, 'Australia/Melbourne'), null)
 })
