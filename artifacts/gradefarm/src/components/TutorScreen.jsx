@@ -5,6 +5,7 @@ import { LayoutDashboard, Users, School, ClipboardList, Video, Folder, ChartColu
 import SessionsTab from './SessionsTab'
 import ResourcesTab from './ResourcesTab'
 import StudentsTab from './StudentsTab'
+import DiagnosticScopePicker from './DiagnosticScopePicker'
 import TutorToday from './TutorToday'
 import { reportPortalBadges } from '../lib/portalNav'
 import MessagesView from './MessagesView'
@@ -1664,6 +1665,7 @@ function DiagnosticTab({ profile, theme }) {
   const [yearLevel, setYearLevel] = useState('')
   const [selectedSubjectId, setSelectedSubjectId] = useState('')
   const [selectedTopics, setSelectedTopics] = useState([])
+  const [selectedSubtopicIds, setSelectedSubtopicIds] = useState([]) // database subjects; none = whole subject
   const [writingType, setWritingType] = useState('paragraph')
   const [studentName, setStudentName] = useState('')
   const [preCallFormUrl, setPreCallFormUrl] = useState('')
@@ -1706,17 +1708,19 @@ function DiagnosticTab({ profile, theme }) {
     )
   }
 
+  // What the test covers, as sent to the server. A database subject sends its
+  // curriculum and the chosen subtopics (none = the whole subject).
+  const buildSubjectConfig = () => selectedSubject.fromDb
+    ? { name: selectedSubject.name, topics: selectedSubject.topics, curriculumId: selectedSubject.curriculumId, subtopicIds: selectedSubtopicIds }
+    : { name: selectedSubject.name, topics: selectedTopics, ...(selectedSubject.isWriting ? { writingType } : {}) }
+
   const handleGenerate = async () => {
     setGenError('')
     if (!yearLevel) { setGenError('Please select a year level.'); return }
     if (!selectedSubjectId) { setGenError('Please select a subject.'); return }
-    if (selectedTopics.length === 0) { setGenError('Please select at least one topic.'); return }
+    if (!selectedSubject.fromDb && selectedTopics.length === 0) { setGenError('Please select at least one topic.'); return }
+    const subjectConfig = buildSubjectConfig()
 
-    const subjectConfig = {
-      name: selectedSubject.name,
-      topics: selectedTopics,
-      ...(selectedSubject.isWriting ? { writingType } : {}),
-    }
 
     setGenerating(true)
     try {
@@ -1732,11 +1736,7 @@ function DiagnosticTab({ profile, theme }) {
   const handleCreate = async () => {
     setSaveError('')
     setSaving(true)
-    const subjectConfig = {
-      name: selectedSubject.name,
-      topics: selectedTopics,
-      ...(selectedSubject.isWriting ? { writingType } : {}),
-    }
+    const subjectConfig = buildSubjectConfig()
     try {
       const json = await createDiagnosticAssessment({
         yearLevel,
@@ -1781,6 +1781,7 @@ function DiagnosticTab({ profile, theme }) {
     setYearLevel('')
     setSelectedSubjectId('')
     setSelectedTopics([])
+    setSelectedSubtopicIds([])
     setWritingType('paragraph')
     setStudentName('')
     setPreCallFormUrl('')
@@ -1833,7 +1834,7 @@ function DiagnosticTab({ profile, theme }) {
               {/* Year level */}
               <div>
                 <label style={labelStyle}>Year level</label>
-                <select className="td-input-gold" value={yearLevel} onChange={e => { setYearLevel(e.target.value); setSelectedSubjectId(''); setSelectedTopics([]) }} style={inputStyle}>
+                <select className="td-input-gold" value={yearLevel} onChange={e => { setYearLevel(e.target.value); setSelectedSubjectId(''); setSelectedTopics([]); setSelectedSubtopicIds([]) }} style={inputStyle}>
                   <option value="">Select year level…</option>
                   {YEAR_LEVEL_GROUPS.map(g => (
                     <optgroup key={g.label} label={g.label}>
@@ -1846,14 +1847,21 @@ function DiagnosticTab({ profile, theme }) {
               {/* Subject */}
               <div>
                 <label style={labelStyle}>Subject</label>
-                <select className="td-input-gold" value={selectedSubjectId} onChange={e => { setSelectedSubjectId(e.target.value); setSelectedTopics([]) }} style={inputStyle} disabled={!yearLevel}>
+                <select className="td-input-gold" value={selectedSubjectId} onChange={e => { setSelectedSubjectId(e.target.value); setSelectedTopics([]); setSelectedSubtopicIds([]) }} style={inputStyle} disabled={!yearLevel}>
                   <option value="">{yearLevel ? 'Select subject…' : 'Select a year level first…'}</option>
                   {availableSubjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               </div>
 
               {/* Topics */}
-              {selectedSubject && (
+              {selectedSubject?.fromDb && (
+                <div>
+                  <label style={labelStyle}>Topics / Subtopics <span style={{ color: t.textFaint, fontWeight: 400, textTransform: 'none' }}>— tick topics or single subtopics, or leave all unticked for the whole subject</span></label>
+                  <DiagnosticScopePicker key={selectedSubject.curriculumId} subject={{ id: selectedSubject.curriculumId, label: selectedSubject.name }}
+                    selected={selectedSubtopicIds} onChange={setSelectedSubtopicIds} theme={theme} defaultOpen />
+                </div>
+              )}
+              {selectedSubject && !selectedSubject.fromDb && (
                 <div>
                   <label style={labelStyle}>Topics / Subtopics <span style={{ color: t.textFaint, fontWeight: 400, textTransform: 'none' }}>— select all that apply</span></label>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
