@@ -26,7 +26,8 @@ export type Questionnaire = { intro: string; items: QItem[] };
  * the item allows Other. many: array of distinct option ids, plus at most one
  * { other: text } object when the item allows Other.
  */
-export type Answers = Record<string, string | string[] | { choice: string; other?: string }>;
+export type OtherAnswer = { other: string };
+export type Answers = Record<string, string | Array<string | OtherAnswer> | { choice: string; other?: string }>;
 
 export const MAX_ITEMS = 60;
 export const MAX_LABEL = 300;
@@ -36,6 +37,7 @@ export const MAX_OPTION_LABEL = 200;
 export const MAX_INTRO = 2000;
 export const MAX_ANSWER = 5000;
 
+const RESERVED_IDS = ["__proto__", "constructor", "prototype"];
 const TYPES = ["section", "short", "long", "one", "many"] as const;
 const newId = () => randomBytes(6).toString("base64url"); // 8 url-safe chars
 
@@ -204,6 +206,7 @@ export function validateQuestionnaire(raw: unknown): { questionnaire: Questionna
     if (!isObj(r)) return { error: "Each item must be an object." };
     const eid = explicit(r.id);
     if (eid === null) return { error: "Item ids must be short text." };
+    if (eid !== undefined && RESERVED_IDS.includes(eid)) return { error: "That item id is reserved." };
     if (eid !== undefined && !claim(eid)) return { error: "Item ids must be unique." };
     for (const o of Array.isArray(r.options) ? r.options : []) {
       const oid = isObj(o) ? explicit(o.id) : undefined;
@@ -267,7 +270,7 @@ export function validateAnswers(q: Questionnaire, raw: unknown): { answers: Answ
   const answers: Answers = {};
   for (const item of q.items) {
     if (item.type === "section") continue;
-    const v = raw[item.id];
+    const v = Object.hasOwn(raw, item.id) ? raw[item.id] : undefined;
     const missing = () => ({ error: `Please answer: ${item.label}` });
     const invalid = () => ({ error: `That answer isn't valid: ${item.label}` });
     const blank = v === undefined || v === null || v === "";
@@ -329,7 +332,7 @@ export function validateAnswers(q: Questionnaire, raw: unknown): { answers: Answ
       if (item.required) return missing();
       continue;
     }
-    answers[item.id] = (other ? [...picked, other] : picked) as string[];
+    answers[item.id] = other ? [...picked, other] : picked;
   }
   return { answers };
 }

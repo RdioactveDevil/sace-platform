@@ -207,3 +207,22 @@ test("questionnaireStatus", () => {
   assert.equal(s({ hasSnapshot: true, submittedAt: null, hasLiveBooking: true }), "waiting");
   assert.equal(s({ hasSnapshot: true, submittedAt: "2026-12-01", hasLiveBooking: false }), "submitted");
 });
+
+test("many + Other round-trips with the right type", () => {
+  const q: Questionnaire = { intro: "", items: [{ ...Q.items[4], other: true }] };
+  const r = validateAnswers(q, { m: ["y", { other: "mine" }] });
+  assert.ok("answers" in r);
+  const v = r.answers.m;
+  assert.ok(Array.isArray(v));
+  const last: string | { other: string } = v[1];
+  assert.deepEqual(last, { other: "mine" });
+  assert.equal(countRedFlags(q, r.answers), 0);
+  assert.equal(countRedFlags(q, { m: ["x", { other: "x" }] }), 1);
+});
+
+test("reserved item ids rejected; inherited keys not read as answers", () => {
+  for (const id of ["constructor", "__proto__", "prototype"])
+    bad(validateQuestionnaire({ intro: "", items: [{ id, ...short() }] }));
+  const q: Questionnaire = { intro: "", items: [{ id: "toString", type: "short", label: "Q", required: true }] };
+  bad(validateAnswers(q, {}));
+});
