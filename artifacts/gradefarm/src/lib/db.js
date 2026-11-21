@@ -2059,11 +2059,23 @@ export async function generateDiagnosticQuestions({ yearLevel, subjects }) {
 }
 
 /** Save a diagnostic assessment and get the unique student link. */
-export async function createDiagnosticAssessment({ yearLevel, subjects, questions, studentName, preCallFormUrl, prospectEmail, parentEmail }) {
+export async function createDiagnosticAssessment({ yearLevel, subjects, questions, studentName, questionnaire, prospectEmail, parentEmail }) {
   return tutorFetch('/api/tutor/diagnostic/create', {
     method: 'POST',
-    body: JSON.stringify({ yearLevel, subjects, questions, studentName, preCallFormUrl, prospectEmail, parentEmail }),
+    // `questionnaire`: a tailored copy for this student; leave it out to use the tutor's own.
+    body: JSON.stringify({ yearLevel, subjects, questions, studentName, ...(questionnaire ? { questionnaire } : {}), prospectEmail, parentEmail }),
   })
+}
+
+/** The tutor's pre-call questionnaire: { questionnaire: { intro, items }, isDefault }. */
+export async function fetchQuestionnaire() {
+  return tutorFetch('/api/tutor/questionnaire')
+}
+
+/** Save the tutor's pre-call questionnaire ({ intro, items }); rejects with the server's message if it is invalid. */
+export async function saveQuestionnaire({ intro, items }) {
+  const json = await tutorFetch('/api/tutor/questionnaire', { method: 'PUT', body: JSON.stringify({ intro, items }) })
+  return json.questionnaire
 }
 
 /** Email a sent diagnostic to the prospect again (restarts its 30 days and its reminder). */

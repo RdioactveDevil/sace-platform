@@ -51,13 +51,15 @@ import {
   fetchBookingSettings,
   fetchDiagnosticAssessments,
   fetchDiagnosticReport,
+  fetchQuestionnaire,
   fetchTutorResources,
   fetchTutoringSessions,
   fetchUnreadMessageCount,
 } from '../lib/db'
 import { fetchLiveCurricula, loadCurriculumMacroGroups } from '../lib/curriculaDb'
 import { dbDiagnosticSubject } from '../lib/diagnosticSubjects'
-import { statusChip } from '../lib/diagnosticStatus'
+import { statusChip, questionnaireChip } from '../lib/diagnosticStatus'
+import { QuestionnaireTab, QuestionnaireSection, QuestionnaireAnswers } from './QuestionnaireBlocks'
 import { ASSIGNMENT_DIFFICULTIES, assignmentGoalLabel } from '../lib/engine'
 import { WEEKDAYS, defaultDueDays, describeDue, describeRepeat, localYmd } from '../lib/recurring'
 import SegmentedToggle from './SegmentedToggle'
@@ -1680,7 +1682,10 @@ function DiagnosticTab({ profile, theme }) {
   const [studentName, setStudentName] = useState('')
   const [prospectEmail, setProspectEmail] = useState('')
   const [parentEmail, setParentEmail] = useState('')
-  const [preCallFormUrl, setPreCallFormUrl] = useState('')
+  const [master, setMaster] = useState(null)          // the tutor's own questionnaire, for the create form's summary
+  const [masterError, setMasterError] = useState(false)
+  const [tailored, setTailored] = useState(null)        // a copy edited for this student, or null to use the master
+  const [openAnswers, setOpenAnswers] = useState({})    // diagnostic id -> answers shown
 
   // ── Generated data ──
   const [generating, setGenerating]   = useState(false)
@@ -1726,6 +1731,16 @@ function DiagnosticTab({ profile, theme }) {
 
   useEffect(() => { loadList() }, [loadList])
 
+  // The tutor's own questionnaire (re-read when the create form is shown again, so edits in its tab show).
+  useEffect(() => {
+    if (step !== 'form') return
+    let cancelled = false
+    fetchQuestionnaire()
+      .then(r => { if (!cancelled) { setMaster(r.questionnaire); setMasterError(false) } })
+      .catch(() => { if (!cancelled) setMasterError(true) })
+    return () => { cancelled = true }
+  }, [step])
+
   const toggleTopic = (topic) => {
     setSelectedTopics(prev =>
       prev.includes(topic) ? prev.filter(t => t !== topic) : [...prev, topic]
@@ -1769,7 +1784,7 @@ function DiagnosticTab({ profile, theme }) {
         subjects: [subjectConfig],
         questions,
         studentName: studentName.trim() || null,
-        preCallFormUrl: preCallFormUrl.trim() || null,
+        questionnaire: tailored || undefined,
         prospectEmail: prospectEmail.trim() || null,
         parentEmail: parentEmail.trim() || null,
       })
@@ -1845,7 +1860,7 @@ function DiagnosticTab({ profile, theme }) {
     setStudentName('')
     setProspectEmail('')
     setParentEmail('')
-    setPreCallFormUrl('')
+    setTailored(null)
     setCreatedSend(null)
     setQuestions([])
     setCreatedLink('')
@@ -1869,18 +1884,25 @@ function DiagnosticTab({ profile, theme }) {
       {/* ── Tab sub-nav ── */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
         {[
-          { key: 'form',    label: 'New diagnostic' },
-          { key: 'list',    label: `Sent diagnostics (${diagnostics.length})` },
-        ].map(btn => (
-          <button
-            key={btn.key}
-            onClick={() => { if (btn.key === 'form') resetForm(); else setStep('list') }}
-            style={{ padding: '8px 16px', borderRadius: 8, border: `1px solid ${(step === btn.key || (step === 'preview' && btn.key === 'form') || (step === 'created' && btn.key === 'form')) ? 'var(--t-text)' : t.border}`, background: (step === btn.key || (step === 'preview' && btn.key === 'form') || (step === 'created' && btn.key === 'form')) ? 'var(--t-bgSubtle)' : 'transparent', color: (step === btn.key || (step === 'preview' && btn.key === 'form') || (step === 'created' && btn.key === 'form')) ? t.text : t.textMuted, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B }}
-          >
-            {btn.label}
-          </button>
-        ))}
+          { key: 'form',          label: 'New diagnostic' },
+          { key: 'list',          label: `Sent diagnostics (${diagnostics.length})` },
+          { key: 'questionnaire', label: 'Pre-call questionnaire' },
+        ].map(btn => {
+          const active = step === btn.key || ((step === 'preview' || step === 'created') && btn.key === 'form') || (step === 'report' && btn.key === 'list')
+          return (
+            <button
+              key={btn.key}
+              onClick={() => { if (btn.key === 'form') resetForm(); else setStep(btn.key) }}
+              aria-current={active ? 'page' : undefined}
+              style={{ padding: '8px 16px', borderRadius: 8, border: `1px solid ${active ? 'var(--t-text)' : t.border}`, background: active ? 'var(--t-bgSubtle)' : 'transparent', color: active ? t.text : t.textMuted, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B }}
+            >
+              {btn.label}
+            </button>
+          )
+        })}
       </div>
+
+      {step === 'questionnaire' && <QuestionnaireTab theme={theme} />}
 
       {/* ── Step: Form ── */}
       {step === 'form' && (
@@ -1986,11 +2008,7 @@ function DiagnosticTab({ profile, theme }) {
                   <input className="td-input-gold" type="email" value={parentEmail} onChange={e => setParentEmail(e.target.value)} placeholder="e.g. parent@example.com" style={inputStyle} />
                   <div style={{ fontSize: 11, color: t.textFaint, marginTop: 4 }}>Gets a copy of the emails about the consultation call.</div>
                 </div>
-                <div>
-                  <label style={labelStyle}>Pre-lesson questionnaire link <span style={{ fontWeight: 400, textTransform: 'none', color: t.textFaint }}>(optional)</span></label>
-                  <input className="td-input-gold" value={preCallFormUrl} onChange={e => setPreCallFormUrl(e.target.value)} placeholder="https://forms.google.com/…" style={inputStyle} />
-                  <div style={{ fontSize: 11, color: t.textFaint, marginTop: 4 }}>Student is redirected here after completing the test</div>
-                </div>
+                <QuestionnaireSection master={master} masterError={masterError} tailored={tailored} onTailor={setTailored} theme={theme} labelStyle={labelStyle} />
               </div>
 
               {genError && <div style={{ fontSize: 13, color: t.danger, padding: '10px 14px', borderRadius: 8, background: t.dangerBg, border: `1px solid ${t.danger}40` }}>{genError}</div>}
@@ -2103,10 +2121,7 @@ function DiagnosticTab({ profile, theme }) {
                   <label style={labelStyle}>Student name <span style={{ fontWeight: 400, textTransform: 'none', color: t.textFaint }}>(optional)</span></label>
                   <input className="td-input-gold" value={studentName} onChange={e => setStudentName(e.target.value)} placeholder="e.g. Sarah Jones" style={inputStyle} />
                 </div>
-                <div>
-                  <label style={labelStyle}>Pre-lesson questionnaire link <span style={{ fontWeight: 400, textTransform: 'none', color: t.textFaint }}>(optional)</span></label>
-                  <input className="td-input-gold" value={preCallFormUrl} onChange={e => setPreCallFormUrl(e.target.value)} placeholder="https://forms.google.com/…" style={inputStyle} />
-                </div>
+                <QuestionnaireSection master={master} masterError={masterError} tailored={tailored} onTailor={setTailored} theme={theme} labelStyle={labelStyle} />
               </div>
               {saveError && <div style={{ fontSize: 13, color: t.danger }}>{saveError}</div>}
               <button onClick={handleCreate} disabled={saving}
@@ -2160,7 +2175,6 @@ function DiagnosticTab({ profile, theme }) {
                 <li style={{ fontSize: 13, color: t.textMuted }}>The student opens the link and completes the test at their own pace</li>
                 <li style={{ fontSize: 13, color: t.textMuted }}>AI marks the assessment automatically on submission</li>
                 <li style={{ fontSize: 13, color: t.textMuted }}>The full report appears here in your tutor portal, and we email you when it's in</li>
-                {preCallFormUrl && <li style={{ fontSize: 13, color: t.textMuted }}>After submission, the student is redirected to your pre-call questionnaire</li>}
               </ol>
             </div>
 
@@ -2200,6 +2214,10 @@ function DiagnosticTab({ profile, theme }) {
                 const chipColor = { success: t.success, gold: t.goldText, danger: t.danger, muted: t.textMuted }[chip.tone]
                 const chipBorder = { success: `${t.success}59`, gold: 'var(--t-border)', danger: `${t.danger}59`, muted: 'var(--t-border)' }[chip.tone]
                 const chipBg = { success: t.successBg, gold: 'var(--t-bgSubtle)', danger: t.dangerBg, muted: 'var(--t-bgSubtle)' }[chip.tone]
+                const chipStyle = c => ({ fontSize: 11, padding: '2px 8px', borderRadius: 12, border: `1px solid ${{ success: `${t.success}59`, gold: 'var(--t-border)', danger: `${t.danger}59`, muted: 'var(--t-border)' }[c.tone]}`, background: { success: t.successBg, gold: 'var(--t-bgSubtle)', danger: t.dangerBg, muted: 'var(--t-bgSubtle)' }[c.tone], color: { success: t.success, gold: t.goldText, danger: t.danger, muted: t.textMuted }[c.tone], fontWeight: 700 })
+                const qChip = d.student_id ? null : questionnaireChip(d.questionnaire_status)
+                const hasAnswers = !d.student_id && !!d.questionnaire && !!d.questionnaire_answers
+                const answersOpen = !!openAnswers[d.id]
                 const busy = rowBusy === d.id
                 // A finished prospect's diagnostic can have a call booked; a roster student's can't.
                 const isProspect = !d.student_id && d.tutor_id === profile.id
@@ -2208,11 +2226,13 @@ function DiagnosticTab({ profile, theme }) {
                 return (
                   <div key={d.id} style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
                         <span style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{d.year_level} · {subjectNames}</span>
                         <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 12, border: `1px solid ${chipBorder}`, background: chipBg, color: chipColor, fontWeight: 700 }}>
                           {chip.label}
                         </span>
+                        {qChip && <span style={chipStyle(qChip)}>{qChip.label}</span>}
+                        {d.red_flags > 0 && <span style={chipStyle({ tone: 'danger' })}>Red flag</span>}
                       </div>
                       <div style={{ fontSize: 11, color: t.textMuted }}>
                         {d.submitted_by_name || d.student_name || 'No name yet'}
@@ -2257,12 +2277,22 @@ function DiagnosticTab({ profile, theme }) {
                       <button onClick={() => handleCopy(d.link)} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>
                         Copy Link
                       </button>
+                      {hasAnswers && (
+                        <button onClick={() => setOpenAnswers(o => ({ ...o, [d.id]: !o[d.id] }))} aria-expanded={answersOpen} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.text, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>
+                          {answersOpen ? 'Hide answers' : 'Show answers'}
+                        </button>
+                      )}
                       {completed && (
                         <button onClick={() => handleViewReport(d)} style={{ padding: '6px 12px', borderRadius: 7, border: 'none', background: 'var(--t-accent)', color: 'var(--t-onAccent)', fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
                           View Report
                         </button>
                       )}
                     </div>
+                    {hasAnswers && answersOpen && (
+                      <div style={{ flexBasis: '100%', background: 'var(--t-bgSubtle)', border: '1px solid var(--t-border)', borderRadius: 10, padding: '14px 16px' }}>
+                        <QuestionnaireAnswers questionnaire={d.questionnaire} answers={d.questionnaire_answers} submittedAt={d.questionnaire_submitted_at} theme={theme} />
+                      </div>
+                    )}
                   </div>
                 )
               })}
@@ -2311,6 +2341,18 @@ function DiagnosticTab({ profile, theme }) {
                     </div>
                   </div>
                 </div>
+
+                {/* Pre-call questionnaire answers */}
+                {a.questionnaire && a.questionnaire_answers && (
+                  <div style={card}>
+                    <div style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}` }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>Pre-call questionnaire</div>
+                    </div>
+                    <div style={{ padding: '16px 20px' }}>
+                      <QuestionnaireAnswers questionnaire={a.questionnaire} answers={a.questionnaire_answers} submittedAt={a.questionnaire_submitted_at} theme={theme} />
+                    </div>
+                  </div>
+                )}
 
                 {/* Section breakdown */}
                 <div style={card}>

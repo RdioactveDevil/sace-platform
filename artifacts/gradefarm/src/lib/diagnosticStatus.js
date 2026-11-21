@@ -13,3 +13,14 @@ const CHIPS = {
 export function statusChip(statusLabel) {
   return CHIPS[statusLabel] ? { ...CHIPS[statusLabel] } : { label: String(statusLabel ?? ''), tone: 'muted' }
 }
+
+const Q_CHIPS = {
+  none:      { label: 'Questionnaire: not booked yet', tone: 'muted' },
+  waiting:   { label: 'Questionnaire: waiting', tone: 'gold' },
+  submitted: { label: 'Questionnaire: filled in', tone: 'success' },
+}
+
+/** The questionnaire chip for a diagnostic's questionnaire_status; null (no questionnaire) shows none. */
+export function questionnaireChip(status) {
+  return Q_CHIPS[status] ? { ...Q_CHIPS[status] } : null
+}

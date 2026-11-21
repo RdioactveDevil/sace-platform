@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { statusChip } from './diagnosticStatus.js'
+import { statusChip, questionnaireChip } from './diagnosticStatus.js'
 
 test('each status has a label and a tone', () => {
   assert.deepEqual(statusChip('sent'), { label: 'Sent', tone: 'muted' })
@@ -14,4 +14,12 @@ test('each status has a label and a tone', () => {
 
 test('an unknown status shows as itself', () => {
   assert.deepEqual(statusChip('waived'), { label: 'waived', tone: 'muted' })
+})
+
+test('the questionnaire chip says where the questionnaire is up to', () => {
+  assert.deepEqual(questionnaireChip('none'), { label: 'Questionnaire: not booked yet', tone: 'muted' })
+  assert.deepEqual(questionnaireChip('waiting'), { label: 'Questionnaire: waiting', tone: 'gold' })
+  assert.deepEqual(questionnaireChip('submitted'), { label: 'Questionnaire: filled in', tone: 'success' })
+  assert.equal(questionnaireChip(null), null)
+  assert.equal(questionnaireChip(undefined), null)
 })
