@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { UserPlus } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 import { fetchIncludableSubjects, inviteStudent } from '../lib/db'
-import { signUpDefaults } from '../lib/signUp'
+import { signUpDefaults, carryState, carryMessage } from '../lib/signUp'
 import { InviteSubjectsSection } from './InviteSubjects'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
@@ -32,6 +32,7 @@ export default function SignUpModal({ row, theme, onClose, onDone }) {
   const [saved, setSaved] = useState(false) // invite saved, but its email didn't go out
   const [error, setError] = useState('')
   const emailRef = useRef(null)
+  const dialogRef = useRef(null)
   const openerRef = useRef(typeof document !== 'undefined' ? document.activeElement : null)
   const defaultsRef = useRef(signUpDefaults(row, {}))
 
@@ -52,7 +53,21 @@ export default function SignUpModal({ row, theme, onClose, onDone }) {
   useEffect(() => {
     emailRef.current?.focus()
     const opener = openerRef.current
-    const onKey = (e) => { if (e.key === 'Escape') onClose() }
+    const onKey = (e) => {
+      if (e.key === 'Escape') { onClose(); return }
+      if (e.key !== 'Tab') return
+      // Keep Tab inside the dialog.
+      const box = dialogRef.current
+      if (!box) return
+      const items = [...box.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')].filter(el => !el.disabled)
+      if (!items.length) { e.preventDefault(); return }
+      const first = items[0]
+      const last = items[items.length - 1]
+      const active = document.activeElement
+      if (!box.contains(active)) { e.preventDefault(); (e.shiftKey ? last : first).focus() }
+      else if (e.shiftKey && active === first) { e.preventDefault(); last.focus() }
+      else if (!e.shiftKey && active === last) { e.preventDefault(); first.focus() }
+    }
     document.addEventListener('keydown', onKey)
     return () => { document.removeEventListener('keydown', onKey); setTimeout(() => opener?.focus?.(), 0) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -68,9 +83,8 @@ export default function SignUpModal({ row, theme, onClose, onDone }) {
   }
 
   const sourceId = row.curriculum_id
-  const sourceKnown = !!includable && !!sourceId
-  const sourceTicked = subjects.includes(sourceId)
-  const carryWarning = sourceKnown && !sourceTicked
+  const state = includable ? carryState({ sourceId, ticked: subjects, canInclude: includable.canInclude, includableIds: includable.subjects.map(s => s.id) }) : null
+  const warning = carryMessage(state)
   const email = (toParent ? parentEmail : studentEmail).trim()
   const ready = !!includable && !saving && !saved
 
@@ -82,7 +96,7 @@ export default function SignUpModal({ row, theme, onClose, onDone }) {
     if (toParent && !child) { setError("Enter the child's first name."); return }
     setError(''); setSaving(true)
     try {
-      const picked = Object.fromEntries(subjects.filter(id => scope[id]?.length).map(id => [id, scope[id]]))
+      const picked = Object.fromEntries(subjects.filter(id => id !== (state === 'carries' ? sourceId : null) && scope[id]?.length).map(id => [id, scope[id]]))
       const res = await inviteStudent(email, includable.canInclude ? subjects : undefined, includable.canInclude ? picked : undefined,
         { parent: toParent, childName: child }, row.id)
       await onDone()
@@ -110,12 +124,12 @@ export default function SignUpModal({ row, theme, onClose, onDone }) {
 
   return createPortal(
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 16, overflowY: 'auto' }}>
-      <div role="dialog" aria-modal="true" aria-labelledby="su-title" style={{ background: t.bgCard, border: dark ? '1px solid var(--t-border)' : `1px solid ${t.border}`, borderRadius: 12, padding: 32, width: '100%', maxWidth: 520, fontFamily: FONT_B, margin: 'auto', backdropFilter: 'blur(16px)' }}>
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="su-title" style={{ background: t.bgCard, border: dark ? '1px solid var(--t-border)' : `1px solid ${t.border}`, borderRadius: 12, padding: 32, width: '100%', maxWidth: 520, fontFamily: FONT_B, margin: 'auto', backdropFilter: 'blur(16px)' }}>
         <h2 id="su-title" style={{ margin: '0 0 6px', fontSize: 17, fontWeight: 800, letterSpacing: '-0.01em', color: t.text, display: 'flex', alignItems: 'center', gap: 8 }}>
           <UserPlus size={17} aria-hidden="true" />Sign them up
         </h2>
         <p style={{ margin: '0 0 20px', fontSize: 13, color: t.textMuted }}>
-          Invite {who} to join your roster. They keep their consultation diagnostic when the subject below is included.
+          Invite {who} to join your roster.{(state === 'carries' || state === 'not-ticked') && ' They keep their consultation diagnostic when the subject below is included.'}
         </p>
 
         <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -144,14 +158,11 @@ export default function SignUpModal({ row, theme, onClose, onDone }) {
             <div style={{ fontSize: 13, color: t.textMuted }}>Loading your subjects…</div>
           ) : includable.canInclude && includable.subjects.length > 0 && (
             <InviteSubjectsSection subjects={includable.subjects} selected={subjects} scope={scope} theme={theme}
+              carriedId={sourceId}
               onToggle={id => setSubjects(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]))}
-              onScope={(id, v) => setScope(prev => ({ ...prev, [id]: v }))}>
-              {carryWarning && <div role="status" style={{ marginTop: 8, fontSize: 12, color: t.goldText, fontWeight: 600 }}>Their consultation diagnostic won't carry across without this subject.</div>}
-            </InviteSubjectsSection>
+              onScope={(id, v) => setScope(prev => ({ ...prev, [id]: v }))} />
           )}
-          {includable && !includable.canInclude && sourceKnown && (
-            <div role="status" style={{ fontSize: 12, color: t.goldText, fontWeight: 600 }}>Their consultation diagnostic won't carry across without this subject.</div>
-          )}
+          {warning && <div role="status" style={{ fontSize: 12, color: t.goldText, fontWeight: 600 }}>{warning}</div>}
 
           {error && <p role="alert" style={{ color: t.danger, fontSize: 13, margin: 0 }}>{error}</p>}
 

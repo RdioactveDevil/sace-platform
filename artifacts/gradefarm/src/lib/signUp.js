@@ -23,3 +23,23 @@ export function signUpChip(signup) {
   if (signup.status === 'invited') return { label: 'Invited', tone: 'gold' }
   return null
 }
+
+/** Whether the consultation diagnostic comes across with the invite:
+ *  'carries' | 'not-ticked' | 'cannot-include' | 'no-subject' (a built-in diagnostic has no subject). */
+export function carryState({ sourceId, ticked, canInclude, includableIds } = {}) {
+  if (!sourceId) return 'no-subject'
+  if (!canInclude || !(includableIds || []).includes(sourceId)) return 'cannot-include'
+  return (ticked || []).includes(sourceId) ? 'carries' : 'not-ticked'
+}
+
+/** The one warning to show for a carry state, or null. */
+export function carryMessage(state) {
+  if (state === 'not-ticked') return "Their consultation diagnostic won't carry across without this subject."
+  if (state === 'cannot-include') return "Their consultation diagnostic won't carry across, because this subject can't be included from your account."
+  return null
+}
+
+/** Whether some ticked subject still gets a new 20-question diagnostic (the carried one doesn't). */
+export function needsOwnDiagnostic(ticked, carriedId) {
+  return (ticked || []).some(id => id !== carriedId)
+}
