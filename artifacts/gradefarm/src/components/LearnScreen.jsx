@@ -15,7 +15,7 @@ import { visualPromptLines } from '../lib/lessonVisuals'
 import { buildCards, stepOfCard, upgradeLesson, lessonScore, runEndingAt, lessonProgressLabel, parseLessonJson, answerAt, withAnswer, cardLabel, describeLessonCard } from '../lib/lessonCards'
 import { awaitingParent } from '../lib/parentConsent'
 import { ANALOGY_STYLES, analogyInstruction, analogyLabel, cleanAnalogy, isCustomAnalogy, lessonAnalogyLine } from '../lib/analogy'
-import { ArrowUp, Camera, CircleHelp, History, Plus, RotateCcw, Search, X } from 'lucide-react'
+import { ArrowUp, ArrowUpRight, Camera, CircleHelp, History, Plus, RotateCcw, Search, X } from 'lucide-react'
 import { greetingContext, pickGreeting } from '../lib/greetings'
 import { QUICK_REPLIES_RULE, splitQuickReplies } from '../lib/quickReplies'
 import { lessonKey, fetchLessons, saveLesson as saveLessonRow, fetchRecentChats, fetchChat, createChat, updateChat } from '../lib/learnStore'
@@ -164,8 +164,9 @@ export default function LearnScreen({
   // The free subject: opens the upgrade pop-up ({ doneLabel }), else the plan builder.
   onUpgrade = null,
   // In a side pane beside a practice question (TitanDock): chat only, with a
-  // compact header and a close button.
-  docked = false, onClose = null,
+  // compact header and a close button. onOpenChat({ id, messages, topic, focus, interests })
+  // takes this conversation to the full chat on the Learn page.
+  docked = false, onClose = null, onOpenChat = null,
 }) {
   const navigate = useNavigate()
   const goUnlimited = () => (onUpgrade ? onUpgrade({ doneLabel: 'Back to my chat' }) : navigate('/get-access', { state: { subject } }))
@@ -661,8 +662,21 @@ export default function LearnScreen({
     } else if (learnRequest.type === 'chat') {
       setLearnRequest?.(null)
       fetchChat(learnRequest.id).then(row => { if (row) openChat(row) })
+    } else if (learnRequest.type === 'carry') {
+      // The chat from the pane beside a question (Open Chat): carry on here, still about that question.
+      const { id = null, messages: msgs = [], topic: carriedTopic = '', focus = null, interests: carriedInterests = null } = learnRequest
+      setLearnRequest?.(null)
+      openChat({ id, messages: msgs, topic: carriedTopic, interests: carriedInterests })
+      if (focus) { setQuestionFocus(focus); setFromContext(true); setContextSubtopic(focus.subtopic || focus.topic || null) }
     }
   }, [learnRequest, lessonsLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Docked: take this conversation to the full chat on the Learn page. Waits for a save in flight so
+  // the Learn page carries on the same saved chat rather than starting a second one in History.
+  const openFullChat = async () => {
+    if (chatSavingRef.current) { try { await chatSavingRef.current } catch {} }
+    onOpenChat?.({ id: chatIdRef.current, messages, topic, focus: questionFocus, interests })
+  }
 
   const openChat = (row) => {
     const msgs = Array.isArray(row.messages) ? row.messages : []
@@ -1700,14 +1714,18 @@ ${visualPromptLines(subjectName).join('\n')}${courseTopics.length ? `\nIf the le
 
       {docked ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 14px', borderBottom: `1px solid ${t.border}`, flexShrink: 0 }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 14.5, fontWeight: 800 }}>Ask Titan</div>
-            {topic && <div style={{ fontSize: 12, color: t.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{topic}</div>}
-          </div>
-          <button type="button" onClick={startNew} aria-label="New chat" title="New chat"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 32, padding: '0 10px', borderRadius: 999, border: `1px solid ${t.border}`, background: 'transparent', color: t.textSub, fontFamily: FONT_B, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
-            <Plus size={14} aria-hidden="true" />New
-          </button>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: 800 }}>Ask Titan</div>
+          {onOpenChat ? (
+            <button type="button" onClick={openFullChat} aria-label="Open this chat in Titan AI" title="Open the full chat"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 32, padding: '0 11px', borderRadius: 999, border: `1px solid ${t.border}`, background: 'transparent', color: t.textSub, fontFamily: FONT_B, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
+              Open Chat<ArrowUpRight size={14} aria-hidden="true" />
+            </button>
+          ) : (
+            <button type="button" onClick={startNew} aria-label="New chat" title="New chat"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 32, padding: '0 10px', borderRadius: 999, border: `1px solid ${t.border}`, background: 'transparent', color: t.textSub, fontFamily: FONT_B, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
+              <Plus size={14} aria-hidden="true" />New
+            </button>
+          )}
           {onClose && (
             <button type="button" onClick={onClose} aria-label="Close Titan" title="Close"
               style={{ width: 32, height: 32, borderRadius: 999, border: 'none', background: 'transparent', color: t.textMuted, cursor: 'pointer', display: 'grid', placeItems: 'center' }}>

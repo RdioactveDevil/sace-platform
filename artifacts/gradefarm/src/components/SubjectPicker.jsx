@@ -162,9 +162,8 @@ export default function SubjectPicker({ profile, subscriptions = [], fullAccess 
   const hero = pick && (
     <div className="sp-hero">
       <div className="sp-hero-main">
-        {hasOwn && !fullAccess && <span className="sp-kick">{pick.id === lastId ? 'Pick up where you left off' : 'Your subject'}</span>}
+        {hasOwn && !fullAccess && pick.id === lastId && <span className="sp-kick">Pick up where you left off</span>}
         <h2>{pick.name}</h2>
-        {pill(statusOf(pick))}
       </div>
       <button type="button" className="af-btn sp-go" onClick={() => go(pick)} aria-label={`${actionOf(pick)} ${pick.name}`}
         style={{ ...authBtn(t, 'primary'), minHeight: 48, fontSize: 15.5, padding: '0 26px', borderRadius: 12 }}>
@@ -204,6 +203,11 @@ export default function SubjectPicker({ profile, subscriptions = [], fullAccess 
     .sp-hero { padding: 22px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px 24px; align-items: center; }
     .sp-hero-main { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-width: 0; }
     .sp-kick { font-size: 12.5px; font-weight: 700; color: ${t.textMuted}; }
+    /* Continue: lifts and brightens on hover, presses in when tapped. */
+    .sp-go { transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease; box-shadow: 0 6px 16px -10px rgba(224,169,31,0.9); }
+    .sp-go:hover { transform: translateY(-1px); filter: brightness(1.05); box-shadow: 0 10px 22px -10px rgba(224,169,31,0.95); }
+    .sp-go:active { transform: translateY(1px) scale(0.98); filter: brightness(0.97); box-shadow: 0 3px 8px -6px rgba(224,169,31,0.9); }
+    @media (prefers-reduced-motion: reduce) { .sp-go { transition: none; } .sp-go:hover, .sp-go:active { transform: none; } }
     .sp-hero h2 { margin: 0; font-size: clamp(20px, 3.4vw, 24px); font-weight: 800; letter-spacing: -0.02em; line-height: 1.25; color: ${t.text}; text-wrap: balance; }
     .sp-topics { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
     .sp-topics span { font-size: 12.5px; font-weight: 600; padding: 4px 10px; border-radius: 8px; background: ${t.bgSubtle}; color: ${t.textSub}; }

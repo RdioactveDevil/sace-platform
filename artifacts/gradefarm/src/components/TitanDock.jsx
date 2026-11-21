@@ -27,7 +27,7 @@ const clampW = (w) => Math.round(Math.max(MIN_W, Math.min(maxWidth(), w)))
  * already in the pane just reopens it; a different question starts a new chat.
  * The pane stays mounted while closed, so reopening keeps the conversation.
  */
-export default function TitanDock({ open, request, onClose, profile, struggleMap, questions, subject, theme, interests, setInterests, onUpgrade }) {
+export default function TitanDock({ open, request, onClose, onOpenChat, profile, struggleMap, questions, subject, theme, interests, setInterests, onUpgrade }) {
   const [width, setWidth] = useState(() => clampW(readWidth()))
   const [dragging, setDragging] = useState(false)
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < MOBILE_MAX)
@@ -131,7 +131,7 @@ export default function TitanDock({ open, request, onClose, profile, struggleMap
       {/* While dragging, keep the chat from swallowing pointer moves. */}
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', pointerEvents: dragging ? 'none' : 'auto' }}>
         <Suspense fallback={null}>
-          <LearnScreen docked onClose={onClose} onBack={onClose}
+          <LearnScreen docked onClose={onClose} onBack={onClose} onOpenChat={onOpenChat}
             profile={profile} struggleMap={struggleMap} questions={questions} subject={subject} theme={theme} onUpgrade={onUpgrade}
             phase={phase} setPhase={setPhase} topic={topic} setTopic={setTopic} messages={messages} setMessages={setMessages}
             interests={interests} setInterests={setInterests} docContext={docContext} setDocContext={setDocContext}
