@@ -33,7 +33,7 @@ import { requireUser, getServiceClient, type Caller } from "../lib/auth";
 import { appUrl, getResend, sendEmail, type EmailContent } from "../lib/email";
 import { logger } from "../lib/logger";
 import { claimTutorSubjects, requireTutorPlan, studentLimitError, tutorHasFeature } from "../lib/tutor-plan";
-import { adoptionPlan } from "../lib/prospect-signup";
+import { adoptionPlan, INVITE_TTL_MS } from "../lib/prospect-signup";
 import { canIncludeSubject, includeSubjects, subjectLabel } from "../lib/included-subject";
 import { createStudentDiagnostic } from "../lib/student-diagnostic";
 import { FamilyError, addFamilyChild, contactEmailForLogin, familyIdOf, familyMembers, firstName } from "../lib/family";
@@ -42,7 +42,6 @@ import { liveCurriculum } from "./billing";
 const router = Router();
 
 /** An invite link stops working this long after it was last sent. */
-const INVITE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 /** A tutor can re-send the same invite at most this often. */
 const RESEND_INTERVAL_MS = 2 * 60 * 1000;
 
@@ -600,13 +599,17 @@ router.post("/invites/:token/accept", async (req: Request, res: Response) => {
           if (result.failed) subjectError = "Some of your tutor's subjects couldn't be unlocked just now. Ask them to include them again from their roster.";
           // Each comes with a diagnostic to do before practising it; the
           // consultation diagnostic stands in for its own subject's.
-          const source = invite.source_diagnostic_id
-            ? (await caller.admin.from("diagnostic_assessments").select("id, curriculum_id, student_id, student_name")
+          let source: { id: string; curriculum_id: string | null; student_id: string | null; student_name: string | null } | null = null;
+          if (invite.source_diagnostic_id) {
+            const { data, error: sourceErr } = await caller.admin.from("diagnostic_assessments").select("id, curriculum_id, student_id, student_name")
               .eq("id", invite.source_diagnostic_id)
-              .maybeSingle<{ id: string; curriculum_id: string | null; student_id: string | null; student_name: string | null }>()).data ?? null
-            : null;
-          const { data: haveRows } = await caller.admin
+              .maybeSingle<{ id: string; curriculum_id: string | null; student_id: string | null; student_name: string | null }>();
+            if (sourceErr) logger.warn({ inviteId: invite.id, error: sourceErr.message }, "invites: could not read the consultation diagnostic");
+            source = data ?? null;
+          }
+          const { data: haveRows, error: haveErr } = await caller.admin
             .from("diagnostic_assessments").select("curriculum_id").eq("student_id", studentId);
+          if (haveErr) logger.warn({ inviteId: invite.id, error: haveErr.message }, "invites: could not read the student's existing diagnostics");
           const existing = ((haveRows ?? []) as { curriculum_id: string | null }[])
             .map((r) => r.curriculum_id).filter((c): c is string => !!c);
           const plan = adoptionPlan({ unlockedIds: result.ids, source, existing });

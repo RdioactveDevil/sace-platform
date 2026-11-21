@@ -816,9 +816,9 @@ router.get("/tutor/diagnostic/list", async (req: Request, res: Response) => {
     };
 
     // Sign-up state: this tutor's invites that carry one of these diagnostics across.
-    type SignupInvite = { source_diagnostic_id: string; status: string; student_id: string | null };
+    type SignupInvite = { source_diagnostic_id: string; status: string; student_id: string | null; sent_at: string | null; created_at: string };
     const inviteResults = await Promise.all(inBatches(list.map((r) => r.id)).map((batch) =>
-      admin.from("tutor_invites").select("source_diagnostic_id, status, student_id")
+      admin.from("tutor_invites").select("source_diagnostic_id, status, student_id, sent_at, created_at")
         .eq("tutor_id", tutorId).in("source_diagnostic_id", batch)));
     const inviteFailed = inviteResults.find((r) => r.error);
     if (inviteFailed?.error) throw new Error(inviteFailed.error.message);
@@ -834,7 +834,8 @@ router.get("/tutor/diagnostic/list", async (req: Request, res: Response) => {
     }
     const signupFor = (row: Row) => signupState(
       invites.filter((i) => i.source_diagnostic_id === row.id)
-        .map((i) => ({ status: i.status, student_name: i.student_id ? signupNames.get(i.student_id) ?? null : null })),
+        .map((i) => ({ ...i, student_name: i.student_id ? signupNames.get(i.student_id) ?? null : null })),
+      now.getTime(),
     );
 
     const now = new Date();

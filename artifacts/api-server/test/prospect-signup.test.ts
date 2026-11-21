@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { adoptionPlan, signupState } from "../src/lib/prospect-signup";
+import { adoptionPlan, signupState, INVITE_TTL_MS } from "../src/lib/prospect-signup";
 
 const source = (over: Partial<{ id: string; curriculum_id: string | null; student_id: string | null }> = {}) =>
   ({ id: "d1", curriculum_id: "c-maths", student_id: null, ...over });
@@ -32,11 +32,23 @@ test("adoptionPlan: no source means every subject is created", () => {
   assert.equal(plan.get("b"), "keep-existing");
 });
 
+const DAY = 24 * 3_600_000;
+const NOW = Date.parse("2026-11-21T00:00:00.000Z");
+const ago = (days: number) => new Date(NOW - days * DAY).toISOString();
+
+test("signupState: a pending invite expires after the invite TTL", () => {
+  assert.equal(INVITE_TTL_MS, 30 * DAY);
+  assert.deepEqual(signupState([{ status: "pending", sent_at: ago(29), created_at: ago(35) }], NOW), { status: "invited" });
+  assert.equal(signupState([{ status: "pending", sent_at: ago(31), created_at: ago(31) }], NOW), null);
+  assert.equal(signupState([{ status: "pending", sent_at: null, created_at: ago(31) }], NOW), null);
+  assert.deepEqual(signupState([{ status: "accepted", sent_at: ago(40), created_at: ago(40) }], NOW), { status: "signed_up" });
+});
+
 test("signupState", () => {
-  assert.deepEqual(signupState([{ status: "pending" }]), { status: "invited" });
-  assert.deepEqual(signupState([{ status: "accepted", student_name: "Ada" }]), { status: "signed_up", studentName: "Ada" });
-  assert.deepEqual(signupState([{ status: "pending" }, { status: "accepted", student_name: "Ada" }]), { status: "signed_up", studentName: "Ada" });
-  assert.deepEqual(signupState([{ status: "accepted" }]), { status: "signed_up" });
-  for (const s of ["declined", "expired", "cancelled"]) assert.equal(signupState([{ status: s }]), null);
-  assert.equal(signupState([]), null);
+  assert.deepEqual(signupState([{ status: "pending", created_at: ago(1) }], NOW), { status: "invited" });
+  assert.deepEqual(signupState([{ status: "accepted", student_name: "Ada" }], NOW), { status: "signed_up", studentName: "Ada" });
+  assert.deepEqual(signupState([{ status: "pending", created_at: ago(1) }, { status: "accepted", student_name: "Ada" }], NOW), { status: "signed_up", studentName: "Ada" });
+  assert.deepEqual(signupState([{ status: "accepted" }], NOW), { status: "signed_up" });
+  for (const s of ["declined", "expired", "cancelled"]) assert.equal(signupState([{ status: s, created_at: ago(1) }], NOW), null);
+  assert.equal(signupState([], NOW), null);
 });

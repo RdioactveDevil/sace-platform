@@ -4,6 +4,9 @@
  * it becomes the student's diagnostic for that subject.
  */
 
+/** How long an invite stays open after it was sent (or created, if never sent). */
+export const INVITE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
 export type AdoptionAction = "adopt" | "keep-existing" | "create";
 
 /**
@@ -29,9 +32,16 @@ export function adoptionPlan(o: {
 export type SignupState = null | { status: "invited" | "signed_up"; studentName?: string };
 
 /** A diagnostic's sign-up state from the invites that reference it. */
-export function signupState(invites: Array<{ status: string; student_name?: string | null }>): SignupState {
+export function signupState(
+  invites: Array<{ status: string; sent_at?: string | null; created_at?: string | null; student_name?: string | null }>,
+  now: number,
+): SignupState {
   const accepted = invites.find((i) => i.status === "accepted");
   if (accepted) return accepted.student_name ? { status: "signed_up", studentName: accepted.student_name } : { status: "signed_up" };
-  if (invites.some((i) => i.status === "pending")) return { status: "invited" };
+  const open = (i: { sent_at?: string | null; created_at?: string | null }) => {
+    const from = i.sent_at ?? i.created_at;
+    return !from || now - new Date(from).getTime() <= INVITE_TTL_MS;
+  };
+  if (invites.some((i) => i.status === "pending" && open(i))) return { status: "invited" };
   return null;
 }

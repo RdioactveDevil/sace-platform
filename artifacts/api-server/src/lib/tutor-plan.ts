@@ -3,6 +3,7 @@ import type { Response } from "express";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ACCESS_STATUSES, periodEnd } from "./stripe-plans";
 import { logger } from "./logger";
+import { INVITE_TTL_MS } from "./prospect-signup";
 
 // Tutor plans: what a tutor pays for the tutor portal.
 //
@@ -218,7 +219,6 @@ export function planMetadata(tutorId: string, plan: TutorPlanOption): Record<str
 }
 
 /** An invite counts towards the student limit until it's accepted (it joins the roster) or expires. */
-const INVITE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
  * Students on the roster plus invites still waiting, optionally leaving out
