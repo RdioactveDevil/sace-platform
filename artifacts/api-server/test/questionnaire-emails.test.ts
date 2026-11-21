@@ -42,6 +42,7 @@ test("the tutor notice lists flagged answers and links the report", () => {
 const MIN = 60_000, HOUR = 60 * MIN, DAY = 24 * HOUR;
 const iso = (ms: number) => new Date(ms).toISOString();
 const TUTOR = "tutor-1";
+process.env.EMAIL_UNSUBSCRIBE_SECRET ??= "test-secret";
 
 function fakeResend() {
   const sent: Array<{ to: string[]; subject: string; replyTo?: string; idempotencyKey?: string }> = [];
