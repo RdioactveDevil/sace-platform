@@ -33,6 +33,7 @@ import { requireUser, getServiceClient, type Caller } from "../lib/auth";
 import { appUrl, getResend, sendEmail, type EmailContent } from "../lib/email";
 import { logger } from "../lib/logger";
 import { claimTutorSubjects, requireTutorPlan, studentLimitError, tutorHasFeature } from "../lib/tutor-plan";
+import { adoptionPlan } from "../lib/prospect-signup";
 import { canIncludeSubject, includeSubjects, subjectLabel } from "../lib/included-subject";
 import { createStudentDiagnostic } from "../lib/student-diagnostic";
 import { FamilyError, addFamilyChild, contactEmailForLogin, familyIdOf, familyMembers, firstName } from "../lib/family";
@@ -45,6 +46,7 @@ const INVITE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 /** A tutor can re-send the same invite at most this often. */
 const RESEND_INTERVAL_MS = 2 * 60 * 1000;
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const CHILD_NAME_RE = /^[\p{L}][\p{L}' -]{0,39}$/u;
 
@@ -65,6 +67,8 @@ interface InviteRow {
   sent_at: string | null;
   responded_at: string | null;
   reminded_at: string | null;
+  /** The consultation diagnostic this invite carries across on accept (lib/prospect-signup.ts). */
+  source_diagnostic_id?: string | null;
 }
 
 function fail(res: Response, err: unknown) {
@@ -224,7 +228,7 @@ router.post("/tutor/invites", async (req: Request, res: Response) => {
     const { admin, userId } = caller;
     if (!(await requireTutorPlan(admin, res, userId, caller.isAdmin))) return;
 
-    const body = (req.body ?? {}) as { email?: string; curriculumIds?: unknown; diagnosticSubtopics?: unknown; recipient?: unknown; childName?: unknown };
+    const body = (req.body ?? {}) as { email?: string; curriculumIds?: unknown; diagnosticSubtopics?: unknown; recipient?: unknown; childName?: unknown; sourceDiagnosticId?: unknown };
     const email = String(body.email ?? "").trim().toLowerCase();
     if (!EMAIL_RE.test(email)) return res.status(400).json({ error: "Enter a valid email address." });
     // Who it's for. Left out (a plain re-send) keeps the invite's current one.
@@ -251,6 +255,21 @@ router.post("/tutor/invites", async (req: Request, res: Response) => {
       const live = await Promise.all(curriculumIds.map((id) => liveCurriculum(admin, id)));
       if (live.some((c) => !c)) return res.status(400).json({ error: "One of those subjects isn't available." });
       subjectNames = live.map((c) => c!.name);
+    }
+
+    // The consultation diagnostic this invite carries across: the caller's own
+    // finished one that no student has taken over. Left out leaves it as it is.
+    let sourceDiagnosticId: string | null = null;
+    if ("sourceDiagnosticId" in body && body.sourceDiagnosticId != null) {
+      const badSource = () => res.status(400).json({ error: "That diagnostic can't be used for this invite." });
+      if (typeof body.sourceDiagnosticId !== "string" || !UUID_RE.test(body.sourceDiagnosticId)) return badSource();
+      const { data: src, error: srcErr } = await admin
+        .from("diagnostic_assessments").select("id, tutor_id, status, student_id")
+        .eq("id", body.sourceDiagnosticId)
+        .maybeSingle<{ id: string; tutor_id: string; status: string; student_id: string | null }>();
+      if (srcErr) return res.status(500).json({ error: srcErr.message });
+      if (!src || src.tutor_id !== userId || src.status !== "completed" || src.student_id !== null) return badSource();
+      sourceDiagnosticId = src.id;
     }
 
     const existingUserId = await findUserIdByEmail(admin, email);
@@ -303,13 +322,15 @@ router.post("/tutor/invites", async (req: Request, res: Response) => {
           tutor_id: userId, email, token: randomBytes(24).toString("base64url"),
           curriculum_ids: curriculumIds, diagnostic_subtopics: diagnosticSubtopics,
           recipient, child_name: childName,
+          ...(sourceDiagnosticId ? { source_diagnostic_id: sourceDiagnosticId } : {}),
         })
         .select("*")
         .single<InviteRow>();
       if (insertErr || !created) return res.status(500).json({ error: insertErr?.message ?? "Could not create the invite." });
       invite = created;
-    } else if (setsSubjects || setsRecipient) {
+    } else if (setsSubjects || setsRecipient || sourceDiagnosticId) {
       const changes = {
+        ...(sourceDiagnosticId ? { source_diagnostic_id: sourceDiagnosticId } : {}),
         ...(setsSubjects ? { curriculum_ids: curriculumIds, diagnostic_subtopics: diagnosticSubtopics } : {}),
         ...(setsRecipient ? { recipient, child_name: childName } : {}),
       };
@@ -577,8 +598,32 @@ router.post("/invites/:token/accept", async (req: Request, res: Response) => {
           const result = await includeSubjects(caller.admin, invite.tutor_id, studentId, invite.curriculum_ids);
           subjects = result.labels;
           if (result.failed) subjectError = "Some of your tutor's subjects couldn't be unlocked just now. Ask them to include them again from their roster.";
-          // Each comes with a diagnostic to do before practising it.
-          for (const id of result.ids) {
+          // Each comes with a diagnostic to do before practising it; the
+          // consultation diagnostic stands in for its own subject's.
+          const source = invite.source_diagnostic_id
+            ? (await caller.admin.from("diagnostic_assessments").select("id, curriculum_id, student_id, student_name")
+              .eq("id", invite.source_diagnostic_id)
+              .maybeSingle<{ id: string; curriculum_id: string | null; student_id: string | null; student_name: string | null }>()).data ?? null
+            : null;
+          const { data: haveRows } = await caller.admin
+            .from("diagnostic_assessments").select("curriculum_id").eq("student_id", studentId);
+          const existing = ((haveRows ?? []) as { curriculum_id: string | null }[])
+            .map((r) => r.curriculum_id).filter((c): c is string => !!c);
+          const plan = adoptionPlan({ unlockedIds: result.ids, source, existing });
+          for (const [id, action] of plan) {
+            if (action === "keep-existing") continue;
+            if (action === "adopt" && source) {
+              const { data: adopted, error: adoptErr } = await caller.admin
+                .from("diagnostic_assessments")
+                .update({
+                  student_id: studentId,
+                  // coalesce(student_name, <name>): a name typed on the link stays.
+                  student_name: source.student_name || studentName || (await displayName(caller.admin, studentId)) || null,
+                })
+                .eq("id", source.id).is("student_id", null).select("id");
+              if (!adoptErr && adopted?.length) continue;
+              if (adoptErr) logger.error({ err: adoptErr, inviteId: invite.id }, "invites: could not adopt the consultation diagnostic");
+            }
             await createStudentDiagnostic(caller.admin, invite.tutor_id, studentId, id, invite.diagnostic_subtopics?.[id] ?? [])
               .catch((err) => logger.error({ err, inviteId: invite.id, curriculumId: id }, "invites: could not set a diagnostic"));
           }

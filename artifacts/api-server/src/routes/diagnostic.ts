@@ -8,6 +8,7 @@ import { requireUser } from "../lib/auth";
 import { requireTutorPlan } from "../lib/tutor-plan";
 import { diagnosticScope, studentSummary, type ScopeTopic } from "../lib/student-diagnostic";
 import { scopeOutline, subtopicFieldHint } from "../lib/diagnostic-outline";
+import { signupState } from "../lib/prospect-signup";
 import { canResend, diagnosticStatus, normaliseProspectEmail, unavailableReason, type ProspectRow } from "../lib/prospect-status";
 import { prospectDiagnosticEmail, prospectLink, prospectSenderName } from "../lib/prospect-emails";
 import { getResend, sendEmail } from "../lib/email";
@@ -814,6 +815,28 @@ router.get("/tutor/diagnostic/list", async (req: Request, res: Response) => {
       return call ? { sessionId: call.id, start: call.scheduled_at, reminderMinutes: call.reminder_minutes ?? [] } : null;
     };
 
+    // Sign-up state: this tutor's invites that carry one of these diagnostics across.
+    type SignupInvite = { source_diagnostic_id: string; status: string; student_id: string | null };
+    const inviteResults = await Promise.all(inBatches(list.map((r) => r.id)).map((batch) =>
+      admin.from("tutor_invites").select("source_diagnostic_id, status, student_id")
+        .eq("tutor_id", tutorId).in("source_diagnostic_id", batch)));
+    const inviteFailed = inviteResults.find((r) => r.error);
+    if (inviteFailed?.error) throw new Error(inviteFailed.error.message);
+    const invites = inviteResults.flatMap((r) => (r.data ?? []) as SignupInvite[]);
+    const acceptedIds = [...new Set(invites.filter((i) => i.status === "accepted" && i.student_id).map((i) => i.student_id!))]
+      .filter((id) => !names.has(id));
+    const signupNames = new Map(names);
+    const signupProfiles = await Promise.all(inBatches(acceptedIds).map((batch) => admin.from("profiles").select("id, display_name").in("id", batch)));
+    for (const r of signupProfiles) {
+      for (const p of (r.data ?? []) as { id: string; display_name: string | null }[]) {
+        if (p.display_name) signupNames.set(p.id, p.display_name);
+      }
+    }
+    const signupFor = (row: Row) => signupState(
+      invites.filter((i) => i.source_diagnostic_id === row.id)
+        .map((i) => ({ status: i.status, student_name: i.student_id ? signupNames.get(i.student_id) ?? null : null })),
+    );
+
     const now = new Date();
     const rows = list.map((row) => {
       const booking = bookingFor(row);
@@ -822,6 +845,7 @@ router.get("/tutor/diagnostic/list", async (req: Request, res: Response) => {
       return {
       ...row,
       booking,
+      signup: signupFor(row),
       questionnaire_status: questionnaireStatus({ hasSnapshot: !!q, submittedAt: row.questionnaire_submitted_at, hasLiveBooking: !!booking }),
       red_flags: q && row.questionnaire_answers ? countRedFlags(q, row.questionnaire_answers) : 0,
       student_name: row.student_name || (row.student_id ? names.get(row.student_id) ?? null : null),
