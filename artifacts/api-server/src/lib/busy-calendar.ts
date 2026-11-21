@@ -1,4 +1,6 @@
 import ical from "node-ical";
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
 import { zonedToUtc, type Interval } from "./booking-slots";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -102,6 +104,34 @@ export function parseBusy(ics: string, from: number, to: number, timeZone: strin
   return out.sort((x, y) => x.start - y.start || x.end - y.end);
 }
 
+function isBlockedIp(raw: string): boolean {
+  const ip = raw.replace(/^\[|\]$/g, "").toLowerCase();
+  const fam = isIP(ip);
+  if (fam === 4) {
+    const [a, b] = ip.split(".").map(Number);
+    return (
+      a === 0 || a === 10 || a === 127 ||
+      (a === 100 && b >= 64 && b <= 127) ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168)
+    );
+  }
+  if (fam === 6) {
+    if (ip === "::" || ip === "::1") return true;
+    const mapped = ip.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+    if (mapped) return isBlockedIp(mapped[1]);
+    const hex = ip.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+    if (hex) {
+      const n = (parseInt(hex[1], 16) << 16) | parseInt(hex[2], 16);
+      return isBlockedIp(`${(n >>> 24) & 255}.${(n >>> 16) & 255}.${(n >>> 8) & 255}.${n & 255}`);
+    }
+    const first = parseInt(ip.split(":")[0] || "0", 16);
+    return (first & 0xfe00) === 0xfc00 || (first & 0xffc0) === 0xfe80;
+  }
+  return false;
+}
+
 export function checkIcalUrl(raw: unknown): { url: string | null } | { error: string } {
   if (raw === undefined || raw === null) return { url: null };
   if (typeof raw !== "string") return { error: "Calendar address must be text." };
@@ -115,13 +145,78 @@ export function checkIcalUrl(raw: unknown): { url: string | null } | { error: st
     return { error: "That doesn't look like a valid calendar address." };
   }
   if (u.protocol !== "https:") return { error: "Calendar address must start with https://." };
+  if (u.username || u.password) return { error: "Calendar address can't contain a username or password." };
+  const host = u.hostname.toLowerCase().replace(/\.$/, "");
+  if (
+    !host || host === "localhost" ||
+    host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal") ||
+    isBlockedIp(host)
+  ) {
+    return { error: "That calendar address isn't allowed." };
+  }
   return { url: s };
 }
 
-const cache = new Map<string, { at: number; busy: Interval[] }>();
+type Resolver = (host: string) => Promise<string[]>;
+const defaultResolver: Resolver = async (host) =>
+  (await lookup(host, { all: true })).map((a) => a.address);
+
+const MAX_ENTRIES = 200;
+const MAX_REDIRECTS = 3;
+const cache = new Map<string, { at: number; text: string }>();
 
 export function clearBusyCache(): void {
   cache.clear();
+}
+
+async function fetchText(
+  start: string,
+  fetchImpl: typeof fetch,
+  resolve: Resolver,
+  signal: AbortSignal,
+  ctrl: AbortController,
+): Promise<string> {
+  let current = start;
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    const ok = checkIcalUrl(current);
+    if ("error" in ok || !ok.url) throw new Error("blocked url");
+    const host = new URL(current).hostname.replace(/^\[|\]$/g, "");
+    if (!isIP(host)) {
+      const addrs = await resolve(host);
+      if (!addrs.length || addrs.some(isBlockedIp)) throw new Error("blocked address");
+    }
+    const res = await fetchImpl(current, { signal, redirect: "manual" });
+    if (res.status >= 300 && res.status < 400) {
+      const loc = res.headers.get("location");
+      if (!loc) throw new Error("redirect without location");
+      await res.body?.cancel().catch(() => {});
+      current = new URL(loc, current).toString();
+      continue;
+    }
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    const len = Number(res.headers.get("content-length"));
+    if (Number.isFinite(len) && len > MAX_BYTES) throw new Error("too large");
+    if (!res.body) {
+      const text = await res.text();
+      if (Buffer.byteLength(text) > MAX_BYTES) throw new Error("too large");
+      return text;
+    }
+    const reader = res.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_BYTES) {
+        ctrl.abort();
+        throw new Error("too large");
+      }
+      chunks.push(value);
+    }
+    return Buffer.concat(chunks).toString("utf8");
+  }
+  throw new Error("too many redirects");
 }
 
 export async function fetchBusy(
@@ -131,55 +226,32 @@ export async function fetchBusy(
   timeZone: string,
   fetchImpl: typeof fetch = fetch,
   timeoutMs = 5000,
+  deps: { resolve?: Resolver; now?: () => number } = {},
 ): Promise<{ busy: Interval[] } | { error: string }> {
-  const key = `${url}|${from}|${to}|${timeZone}`;
-  const hit = cache.get(key);
-  if (hit && Date.now() - hit.at < CACHE_MS) return { busy: hit.busy };
-
-  const ctrl = new AbortController();
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => {
-      ctrl.abort();
-      reject(new Error("timeout"));
-    }, timeoutMs);
-  });
-  try {
-    const work = (async () => {
-      const res = await fetchImpl(url, { signal: ctrl.signal });
-      if (!res.ok) throw new Error(`status ${res.status}`);
-      const len = Number(res.headers.get("content-length"));
-      if (Number.isFinite(len) && len > MAX_BYTES) throw new Error("too large");
-      let text: string;
-      if (res.body) {
-        const reader = res.body.getReader();
-        const chunks: Uint8Array[] = [];
-        let total = 0;
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          total += value.byteLength;
-          if (total > MAX_BYTES) {
-            ctrl.abort();
-            throw new Error("too large");
-          }
-          chunks.push(value);
-        }
-        text = Buffer.concat(chunks).toString("utf8");
-      } else {
-        text = await res.text();
-        if (Buffer.byteLength(text) > MAX_BYTES) throw new Error("too large");
-      }
-      return text;
-    })();
-    work.catch(() => {});
-    const text = await Promise.race([work, timeout]);
-    const busy = parseBusy(text, from, to, timeZone);
-    cache.set(key, { at: Date.now(), busy });
-    return { busy };
-  } catch {
-    return { error: "Couldn't read the calendar." };
-  } finally {
-    if (timer) clearTimeout(timer);
+  const now = deps.now ?? Date.now;
+  const t0 = now();
+  for (const [k, v] of cache) if (t0 - v.at >= CACHE_MS) cache.delete(k);
+  let text = cache.get(url)?.text;
+  if (text === undefined) {
+    const ctrl = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        ctrl.abort();
+        reject(new Error("timeout"));
+      }, timeoutMs);
+    });
+    try {
+      const work = fetchText(url, fetchImpl, deps.resolve ?? defaultResolver, ctrl.signal, ctrl);
+      work.catch(() => {});
+      text = await Promise.race([work, timeout]);
+    } catch {
+      return { error: "Couldn't read the calendar." };
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+    cache.set(url, { at: t0, text });
+    while (cache.size > MAX_ENTRIES) cache.delete(cache.keys().next().value as string);
   }
+  return { busy: parseBusy(text, from, to, timeZone) };
 }
