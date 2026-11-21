@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { presentModel } from './presentReport.js'
+import { presentModel, resultLabel } from './presentReport.js'
 
 const assessment = {
   student_name: 'Sam Example',
@@ -82,4 +82,18 @@ test('MC options without a letter prefix get one', () => {
   const m = presentModel(a, { ...report, question_results: [{ id: 1, student_answer: 'a', marks_awarded: 0, marks_possible: 1 }] })
   assert.equal(m.questions[0].studentAnswer, 'A. one')
   assert.equal(m.questions[0].correctAnswer, 'B. two')
+})
+
+test('resultLabel: full, partial, none', () => {
+  assert.deepEqual(resultLabel(2, 2), { label: 'Correct', tone: 'success' })
+  assert.deepEqual(resultLabel(1, 2), { label: 'Partly right', tone: 'gold' })
+  assert.deepEqual(resultLabel(0, 2), { label: 'Incorrect', tone: 'danger' })
+  assert.deepEqual(resultLabel(0, 0), { label: 'Incorrect', tone: 'danger' })
+  assert.deepEqual(resultLabel(0, 1), { label: 'Incorrect', tone: 'danger' })
+})
+
+test('question model carries its result', () => {
+  const m = presentModel(assessment, { ...report, question_results: [{ id: 2, student_answer: 'x', marks_awarded: 1, marks_possible: 2 }] })
+  assert.equal(m.questions[0].result.label, 'Incorrect')
+  assert.equal(m.questions[1].result.label, 'Partly right')
 })

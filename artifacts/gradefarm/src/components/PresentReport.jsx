@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, Check, X } from 'lucide-react'
 import MathText from './MathText'
@@ -22,21 +23,44 @@ export default function PresentReport({ assessment, report, theme, onExit }) {
   const [openQs, setOpenQs] = useState({})
 
   useEffect(() => {
+    const opener = document.activeElement
+    const root = document.documentElement
+    const before = root.style.overflow
+    root.style.overflow = 'hidden'
     rootRef.current?.focus()
-    const onKey = e => { if (e.key === 'Escape') { e.preventDefault(); onExit() } }
+    const onKey = e => {
+      if (e.defaultPrevented) return
+      if (e.key === 'Escape') { e.preventDefault(); onExit(); return }
+      if (e.key !== 'Tab') return
+      // Keep Tab inside the overlay.
+      const box = rootRef.current
+      if (!box) return
+      const items = [...box.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')].filter(el => !el.disabled)
+      if (!items.length) { e.preventDefault(); return }
+      const first = items[0]
+      const last = items[items.length - 1]
+      const active = document.activeElement
+      if (!box.contains(active) || active === box) { e.preventDefault(); (e.shiftKey ? last : first).focus() }
+      else if (e.shiftKey && active === first) { e.preventDefault(); last.focus() }
+      else if (!e.shiftKey && active === last) { e.preventDefault(); first.focus() }
+    }
     document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      root.style.overflow = before
+      if (opener && opener.isConnected) opener.focus?.()
+    }
   }, [onExit])
 
   const bandColors = { Outstanding: t.success, High: GOLD, Satisfactory: t.blue, Developing: 'color-mix(in srgb, var(--t-accent) 55%, var(--t-danger))', Beginning: t.danger }
   const bc = bandColors[m.band] || GOLD
   const pctColor = p => (p >= 75 ? t.success : p >= 50 ? t.goldText : t.danger)
   const card = { background: 'var(--t-bgCard)', border: '1px solid var(--t-border)', borderRadius: 12 }
-  const cardHdr = { padding: '18px 28px', borderBottom: `1px solid ${t.border}`, fontSize: 20, fontWeight: 700, color: t.text }
+  const cardHdr = { margin: 0, padding: '18px 28px', borderBottom: `1px solid ${t.border}`, fontSize: 20, fontWeight: 700, color: t.text }
 
   const topicList = (title, items, color) => (
     <div style={{ ...card, flex: 1, minWidth: 260 }}>
-      <div style={cardHdr}>{title}</div>
+      <h2 style={cardHdr}>{title}</h2>
       <div style={{ padding: '18px 28px', display: 'flex', flexDirection: 'column', gap: 12 }}>
         {items.length === 0
           ? <div style={{ fontSize: 18, color: t.textMuted }}>None</div>
@@ -50,10 +74,10 @@ export default function PresentReport({ assessment, report, theme, onExit }) {
     </div>
   )
 
-  return (
+  return createPortal(
     <div
       ref={rootRef} role="dialog" aria-modal="true" aria-label="Diagnostic results" tabIndex={-1}
-      style={{ position: 'fixed', inset: 0, zIndex: 1000, overflowY: 'auto', background: 'var(--t-bg)', color: t.text, fontFamily: FONT_B, outline: 'none' }}
+      style={{ position: 'fixed', inset: 0, zIndex: 9999, overflowY: 'auto', overscrollBehavior: 'contain', background: 'var(--t-bg)', color: t.text, fontFamily: FONT_B, outline: 'none' }}
     >
       <div style={{ maxWidth: 1000, margin: '0 auto', padding: '32px 24px 64px', display: 'flex', flexDirection: 'column', gap: 24 }}>
         <button onClick={onExit} style={{ position: 'fixed', top: 20, right: 24, zIndex: 1, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', borderRadius: 8, border: `1px solid ${t.border}`, background: 'var(--t-bgCard)', color: t.text, fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>
@@ -65,7 +89,7 @@ export default function PresentReport({ assessment, report, theme, onExit }) {
           <div style={{ padding: '28px 32px', display: 'flex', gap: 28, alignItems: 'center', flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: 260 }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: t.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 8 }}>Diagnostic results</div>
-              <div style={{ fontSize: 34, fontWeight: 800, color: t.text, lineHeight: 1.2 }}>{m.name}</div>
+              <h1 style={{ margin: 0, fontSize: 34, fontWeight: 800, color: t.text, lineHeight: 1.2 }}>{m.name}</h1>
               {m.subject && <div style={{ fontSize: 20, color: t.textMuted, marginTop: 6 }}>{m.subject}</div>}
             </div>
             <div style={{ textAlign: 'center' }}>
@@ -84,7 +108,7 @@ export default function PresentReport({ assessment, report, theme, onExit }) {
         {/* Topics */}
         {m.topics.length > 0 && (
           <div style={card}>
-            <div style={cardHdr}>By topic</div>
+            <h2 style={cardHdr}>By topic</h2>
             <div>
               {m.topics.map((tp, i) => {
                 const c = pctColor(tp.percentage)
@@ -138,7 +162,7 @@ export default function PresentReport({ assessment, report, theme, onExit }) {
         {/* Difficulty */}
         {m.difficulty.length > 0 && (
           <div style={card}>
-            <div style={cardHdr}>Score by difficulty</div>
+            <h2 style={cardHdr}>Score by difficulty</h2>
             <div style={{ padding: '24px 28px', display: 'flex', gap: 32, flexWrap: 'wrap' }}>
               {m.difficulty.map(d => (
                 <div key={d.label} style={{ flex: 1, minWidth: 160 }}>
@@ -153,11 +177,11 @@ export default function PresentReport({ assessment, report, theme, onExit }) {
         {/* Question by question */}
         {m.questions.length > 0 && (
           <div style={card}>
-            <div style={cardHdr}>Question by question</div>
+            <h2 style={cardHdr}>Question by question</h2>
             <div>
               {m.questions.map((q, i) => {
                 const open = !!openQs[q.id]
-                const col = q.correct ? t.success : t.danger
+                const col = { success: t.success, gold: t.goldText, danger: t.danger }[q.result.tone]
                 const panelId = `present-q-${i}`
                 const label = { fontSize: 14, fontWeight: 700, color: t.textFaint, marginBottom: 6 }
                 const answerBox = c => ({ fontSize: 19, color: t.text, lineHeight: 1.55, padding: '10px 14px', borderRadius: 8, background: `${c}10`, border: `1px solid ${c}30`, whiteSpace: 'pre-wrap', overflowX: 'auto' })
@@ -171,8 +195,8 @@ export default function PresentReport({ assessment, report, theme, onExit }) {
                         Question {i + 1}{q.marksPossible > 0 ? ` · ${q.marks}/${q.marksPossible} marks` : ''}
                       </span>
                       <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 17, fontWeight: 700, color: col, flexShrink: 0 }}>
-                        {q.correct ? <Check size={20} aria-hidden="true" /> : <X size={20} aria-hidden="true" />}
-                        {q.correct ? 'Correct' : 'Incorrect'}
+                        {q.result.tone === 'success' ? <Check size={20} aria-hidden="true" /> : q.result.tone === 'danger' ? <X size={20} aria-hidden="true" /> : null}
+                        {q.result.label}
                       </span>
                       <ChevronDown size={20} color={t.textMuted} aria-hidden="true" style={{ flexShrink: 0, transform: open ? 'rotate(180deg)' : 'none' }} />
                     </button>
@@ -200,6 +224,7 @@ export default function PresentReport({ assessment, report, theme, onExit }) {
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

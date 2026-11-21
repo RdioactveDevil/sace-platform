@@ -15,6 +15,13 @@ function optionText(options, answer) {
   return /^[A-Z]\.\s/.test(opt) ? opt : `${letter}. ${opt}`
 }
 
+// How a question's marks read: full marks, some marks, or none.
+export function resultLabel(marks, possible) {
+  if (possible > 0 && marks >= possible) return { label: 'Correct', tone: 'success' }
+  if (marks > 0) return { label: 'Partly right', tone: 'gold' }
+  return { label: 'Incorrect', tone: 'danger' }
+}
+
 export function presentModel(assessment, report) {
   const a = assessment || {}
   const r = report || {}
@@ -42,6 +49,7 @@ export function presentModel(assessment, report) {
       correct: !!qr && qr.marks_possible > 0 && qr.marks_awarded === qr.marks_possible,
       marks: qr?.marks_awarded ?? 0,
       marksPossible: qr?.marks_possible ?? 0,
+      result: resultLabel(qr?.marks_awarded ?? 0, qr?.marks_possible ?? 0),
     }
     if (mc) out.options = q.options
     return out
