@@ -15,7 +15,7 @@ import { getR2Config } from "../lib/r2";
 import { appUrl, sendEmail } from "../lib/email";
 import { sessionBookedEmail } from "../lib/tutor-emails";
 import { FEATURE_MISSING, requireTutorPlan, tutorHasFeature } from "../lib/tutor-plan";
-import { openSessionAllowed, shouldMarkActive } from "../lib/consultation-access";
+import { openSessionAllowed, shouldMarkActive, shouldMarkCompleted } from "../lib/consultation-access";
 
 export const RECORDING_BUCKET = "tutor-resources";
 
@@ -664,6 +664,7 @@ router.post("/sessions/:id/token", async (req: Request, res: Response) => {
 });
 
 // POST /sessions/:id/end — tutor ends the LiveKit room and marks session completed
+// (a consultation ended before its join window opens stays booked).
 router.post("/sessions/:id/end", async (req: Request, res: Response) => {
   const ctx = await requireAuth(req, res);
   if (!ctx) return;
@@ -671,7 +672,7 @@ router.post("/sessions/:id/end", async (req: Request, res: Response) => {
   const { id } = req.params;
   const { data: session, error } = await ctx.admin
     .from("tutoring_sessions")
-    .select("tutor_id, livekit_room_name, status, recording_egress_id, recording_status")
+    .select("tutor_id, livekit_room_name, status, recording_egress_id, recording_status, session_type, scheduled_at, duration_minutes")
     .eq("id", id)
     .single();
 
@@ -700,10 +701,12 @@ router.post("/sessions/:id/end", async (req: Request, res: Response) => {
     }
   }
 
-  await ctx.admin
-    .from("tutoring_sessions")
-    .update({ status: "completed" })
-    .eq("id", id);
+  if (shouldMarkCompleted(session.session_type, session.scheduled_at, session.duration_minutes, Date.now())) {
+    await ctx.admin
+      .from("tutoring_sessions")
+      .update({ status: "completed" })
+      .eq("id", id);
+  }
 
   res.json({ ok: true });
 });

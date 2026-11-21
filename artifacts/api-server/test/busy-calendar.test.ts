@@ -197,3 +197,19 @@ test("cache caps at 200 entries", async () => {
   await fetchBusy("https://c0.test/a.ics", W[0], W[1], TZ, f, 1000, OKR);
   assert.equal(calls, 202);
 });
+
+test("fetchBusy: a page that isn't a calendar is an error, not an empty calendar", async () => {
+  clearBusyCache();
+  const html = (async () => new Response("<!doctype html><html><body>Sign in</body></html>", { headers: { "content-type": "text/html" } })) as any;
+  const r = await fetchBusy("https://x.test/login", W[0], W[1], TZ, html, 1000, OKR);
+  assert.deepEqual(r, { error: "That address didn't return a calendar." });
+});
+
+test("one series that can't be expanded is skipped; the rest of the calendar is kept", () => {
+  const ics = wrap(
+    ev(["UID:s", "DTSTAMP:20270101T000000Z", "DTSTART:20270101T000000Z", "DTEND:20270101T000001Z", "RRULE:FREQ=SECONDLY"]) + "\r\n" +
+      ev(["UID:a", "DTSTAMP:20270101T000000Z", "DTSTART:20270301T100000Z", "DTEND:20270301T110000Z"]),
+  );
+  const r = parseBusy(ics, D("2027-03-01T00:00:00Z"), D("2027-03-02T00:00:00Z"), TZ);
+  assert.ok(r.some((i) => i.start === D("2027-03-01T10:00:00Z") && i.end === D("2027-03-01T11:00:00Z")));
+});

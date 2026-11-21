@@ -56,6 +56,21 @@ export function shouldMarkActive(sessionType: string, scheduledAt: string, _dura
   return Number.isFinite(start) && now >= start - GUEST_JOIN_EARLY_MS;
 }
 
+/**
+ * Whether the tutor ending a session (POST /sessions/:id/end) marks it
+ * completed. Lessons: always, as before. A consultation only once its join
+ * window has opened: a tutor who opens the room early and leaves must not
+ * close the booking (the guest still has the call).
+ */
+export function shouldMarkCompleted(sessionType: string, scheduledAt: string, durationMinutes: number, now: number): boolean {
+  return shouldMarkActive(sessionType, scheduledAt, durationMinutes, now);
+}
+
+/** A consultation's LiveKit room: unique even for two bookings in the same millisecond. */
+export function consultationRoomName(tutorId: string, now = Date.now()): string {
+  return `session-${tutorId.slice(0, 8)}-${now}-${randomBytes(6).toString("base64url").slice(0, 6)}`;
+}
+
 /** A guest's join token: 32 random bytes, base64url (43 characters). */
 export function newGuestToken(): string {
   return randomBytes(32).toString("base64url");
@@ -241,12 +256,30 @@ export function checkSettingsInput(body: unknown, current: SettingsRow): { updat
 
 // ── Booking ─────────────────────────────────────────────────────────────────
 
-/** Postgres errors from book_consultation / reschedule_consultation that mean "pick another time". */
-export function bookingError(err: { message?: string; code?: string } | null | undefined): "slot_taken" | "duplicate" | null {
+/** The unique index that allows one live consultation per tutor and prospect email. */
+const ONE_LIVE_CONSULTATION = "tutoring_sessions_one_live_consultation";
+
+/**
+ * Postgres errors from book_consultation / reschedule_consultation that mean
+ * "pick another time" or "this prospect already has a call". Any other unique
+ * clash (a room name, a guest token) is a plain failure the caller can retry.
+ */
+export function bookingError(
+  err: { message?: string; code?: string; details?: string } | null | undefined,
+): "slot_taken" | "duplicate" | null {
   if (!err) return null;
   if (err.message?.includes("slot_taken")) return "slot_taken";
-  if (err.code === "23505") return "duplicate";
+  if (err.code === "23505" && `${err.message ?? ""} ${err.details ?? ""}`.includes(ONE_LIVE_CONSULTATION)) return "duplicate";
   return null;
+}
+
+/**
+ * The parent email a booking is made with. Left out of the request: the one
+ * on the diagnostic. Sent empty or null: the person booking cleared it, so no
+ * parent (never the diagnostic's).
+ */
+export function bookingParentEmail(raw: unknown, diagnosticParent: string | null): { email: string | null } | { error: string } {
+  return normaliseProspectEmail(raw === undefined ? diagnosticParent : raw);
 }
 
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/;

@@ -113,6 +113,8 @@ export interface RunOptions {
   dryRun?: boolean;
   /** Stop after this many emails; the rest go out on the next run. */
   maxEmails?: number;
+  /** Run only the steps with these names (tests); all of them when omitted. */
+  steps?: string[];
 }
 
 export interface RunSummary {
@@ -988,6 +990,7 @@ type ConsultationRow = {
   id: string; tutor_id: string; scheduled_at: string; duration_minutes: number; created_at: string;
   guest_email: string | null; guest_name: string | null; guest_parent_email: string | null;
   guest_time_zone: string | null; guest_token: string | null; reminder_minutes: number[] | null;
+  ics_sequence: number | null;
 };
 
 /** The tutors' own display names (as prospects see them) and booking settings. */
@@ -1008,7 +1011,7 @@ async function runConsultationReminders(job: Job) {
   const nowMs = job.now.getTime();
   const { data, error } = await job.admin
     .from("tutoring_sessions")
-    .select("id, tutor_id, scheduled_at, duration_minutes, created_at, guest_email, guest_name, guest_parent_email, guest_time_zone, guest_token, reminder_minutes")
+    .select("id, tutor_id, scheduled_at, duration_minutes, created_at, guest_email, guest_name, guest_parent_email, guest_time_zone, guest_token, reminder_minutes, ics_sequence")
     .eq("session_type", "consultation")
     .eq("status", "scheduled")
     .gt("scheduled_at", job.now.toISOString())
@@ -1091,7 +1094,8 @@ async function runConsultationReminders(job: Job) {
       job.budget--;
       const result = await sendEmail(job.resend!, {
         to, subject, content,
-        idempotencyKey: `consultation_reminder:${c.id}:${minutes}:${recipient}`,
+        // A reschedule bumps ics_sequence and clears the claims: the new reminder needs a new key.
+        idempotencyKey: `consultation_reminder:${c.id}:${c.ics_sequence ?? 0}:${minutes}:${recipient}`,
         ...(isTutor ? {} : { replyTo: tutor.email }),
       });
       if (result.error) {
@@ -1132,15 +1136,19 @@ async function runBookYourCall(job: Job) {
   const tutors = await loadRecipients(job, tutorIds);
   const { names, settings } = await loadTutorBooking(job, tutorIds);
   const { data: live, error: liveErr } = await job.admin
-    .from("tutoring_sessions").select("tutor_id, guest_email")
-    .eq("session_type", "consultation").eq("status", "scheduled").in("tutor_id", tutorIds).not("guest_email", "is", null);
+    .from("tutoring_sessions").select("tutor_id, guest_email, diagnostic_id")
+    .eq("session_type", "consultation").eq("status", "scheduled").in("tutor_id", tutorIds);
   if (liveErr) throw new Error(`tutoring_sessions: ${liveErr.message}`);
-  const booked = new Set(((live ?? []) as { tutor_id: string; guest_email: string }[]).map((r) => `${r.tutor_id}:${r.guest_email.toLowerCase()}`));
+  // Booked: a live call with this tutor under the prospect's email, or one made from this
+  // diagnostic (a parent may have booked it with their own address).
+  const liveRows = (live ?? []) as { tutor_id: string; guest_email: string | null; diagnostic_id: string | null }[];
+  const booked = new Set(liveRows.filter((r) => r.guest_email).map((r) => `${r.tutor_id}:${r.guest_email!.toLowerCase()}`));
+  const bookedDiagnostics = new Set(liveRows.map((r) => r.diagnostic_id).filter(Boolean));
 
   for (const d of rows) {
     const tutor = tutors.get(d.tutor_id);
     if (!tutor) continue; // tutor deactivated
-    const hasLive = booked.has(`${d.tutor_id}:${d.prospect_email!.toLowerCase()}`);
+    const hasLive = bookedDiagnostics.has(d.id) || booked.has(`${d.tutor_id}:${d.prospect_email!.toLowerCase()}`);
     const tutorHasHours = hasHours((settings.get(d.tutor_id)?.weekly_hours ?? {}) as Parameters<typeof hasHours>[0]);
     if (!dueBookYourCall(d, hasLive, tutorHasHours, nowMs)) continue;
     if (job.budget <= 0) {
@@ -1390,6 +1398,7 @@ export async function runAutomatedEmails(admin: SupabaseClient, resend: Resend |
   ];
   const errors: string[] = [];
   for (const [name, step] of steps) {
+    if (opts.steps && !opts.steps.includes(name)) continue;
     try {
       await step(job);
     } catch (err) {

@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  TUTOR_TIME_ZONES, bookingError, checkReminders, checkSettingsInput, guestIdentity, guestJoinAllowed, guestTimeZone, newGuestToken,
-  openSessionAllowed, parseStart, publicSettings, removedReminders, settingsFromRow, shouldMarkActive, startIsOffered, type SettingsRow,
+  TUTOR_TIME_ZONES, bookingError, bookingParentEmail, checkReminders, consultationRoomName, checkSettingsInput, guestIdentity, guestJoinAllowed, guestTimeZone, newGuestToken,
+  openSessionAllowed, parseStart, publicSettings, removedReminders, settingsFromRow, shouldMarkActive, shouldMarkCompleted, startIsOffered, type SettingsRow,
 } from "../src/lib/consultation-access.ts";
 
 const MIN = 60_000;
@@ -186,7 +186,10 @@ test("settings input: invite email is normalised; empty or null goes back to the
 
 test("booking errors: slot_taken and unique violations are told apart", () => {
   assert.equal(bookingError({ message: "slot_taken", code: "P0001" }), "slot_taken");
-  assert.equal(bookingError({ message: "duplicate key value violates unique constraint", code: "23505" }), "duplicate");
+  assert.equal(
+    bookingError({ message: 'duplicate key value violates unique constraint "tutoring_sessions_one_live_consultation"', code: "23505" }),
+    "duplicate",
+  );
   assert.equal(bookingError({ message: "boom", code: "XX000" }), null);
   assert.equal(bookingError(null), null);
 });
@@ -232,4 +235,52 @@ test("a consultation is marked active only from 10 minutes before its start", ()
   assert.equal(shouldMarkActive("consultation", at, 45, start - 5 * MIN), true);
   assert.equal(shouldMarkActive("consultation", at, 45, start + 3 * 60 * MIN), true);
   assert.equal(shouldMarkActive("consultation", "not a date", 45, start), false);
+});
+
+test("ending a lesson always completes it, as before", () => {
+  const at = "2026-12-01T05:00:00.000Z";
+  assert.equal(shouldMarkCompleted("individual", at, 60, Date.parse(at) - 3 * 86_400_000), true);
+  assert.equal(shouldMarkCompleted("group", at, 60, Date.parse(at) + 30 * MIN), true);
+});
+
+test("ending a consultation before its join window leaves the booking scheduled", () => {
+  const at = "2026-12-01T05:00:00.000Z";
+  const start = Date.parse(at);
+  assert.equal(shouldMarkCompleted("consultation", at, 45, start - 86_400_000), false);
+  assert.equal(shouldMarkCompleted("consultation", at, 45, start - 11 * MIN), false);
+  assert.equal(shouldMarkCompleted("consultation", at, 45, start - 5 * MIN), true);
+  assert.equal(shouldMarkCompleted("consultation", at, 45, start + 40 * MIN), true);
+});
+
+test("only the one-live-consultation index means already booked; another unique clash is a plain failure", () => {
+  assert.equal(
+    bookingError({ message: 'duplicate key value violates unique constraint "tutoring_sessions_livekit_room_name_key"', code: "23505" }),
+    null,
+  );
+  assert.equal(
+    bookingError({ message: 'duplicate key value violates unique constraint "tutoring_sessions_guest_token_key"', code: "23505" }),
+    null,
+  );
+  assert.equal(
+    bookingError({ message: "duplicate key value", code: "23505", details: "tutoring_sessions_one_live_consultation" }),
+    "duplicate",
+  );
+});
+
+test("consultation room names are unique even within the same millisecond", () => {
+  const tutor = "abcdef12-3456-7890-abcd-ef1234567890";
+  const a = consultationRoomName(tutor, 1_700_000_000_000);
+  const b = consultationRoomName(tutor, 1_700_000_000_000);
+  assert.notEqual(a, b);
+  assert.match(a, /^session-abcdef12-1700000000000-[A-Za-z0-9_-]{6}$/);
+});
+
+test("a booking's parent email: left out uses the diagnostic's, cleared means no parent", () => {
+  assert.deepEqual(bookingParentEmail(undefined, "mum@example.com"), { email: "mum@example.com" });
+  assert.deepEqual(bookingParentEmail(undefined, null), { email: null });
+  assert.deepEqual(bookingParentEmail("", "mum@example.com"), { email: null });
+  assert.deepEqual(bookingParentEmail("   ", "mum@example.com"), { email: null });
+  assert.deepEqual(bookingParentEmail(null, "mum@example.com"), { email: null });
+  assert.deepEqual(bookingParentEmail(" Dad@Example.com ", "mum@example.com"), { email: "dad@example.com" });
+  assert.ok("error" in bookingParentEmail("not an email", "mum@example.com"));
 });

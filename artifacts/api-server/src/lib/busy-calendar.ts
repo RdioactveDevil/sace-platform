@@ -29,14 +29,16 @@ export function parseBusy(ics: string, from: number, to: number, timeZone: strin
     return [];
   }
   const out: Interval[] = [];
-  try {
-    for (const e of Object.values(data)) {
+  for (const e of Object.values(data)) {
+    // One event that can't be read (e.g. a series too dense to expand) is skipped, not the calendar.
+    try {
       if (!e || e.type !== "VEVENT" || !(e.start instanceof Date)) continue;
       if (String(e.transparency ?? "").toUpperCase() === "TRANSPARENT") continue;
       if (String(e.status ?? "").toUpperCase() === "CANCELLED") continue;
       const allDay = e.datetype === "date";
       const startMs = e.start.getTime();
       const endMs = e.end instanceof Date ? e.end.getTime() : NaN;
+      const mine: Interval[] = []; // kept only if the whole event reads
       let dur: number;
       if (allDay) {
         dur = 0;
@@ -62,7 +64,7 @@ export function parseBusy(ics: string, from: number, to: number, timeZone: strin
           b = ovEnd ? ovEnd.getTime() : a + dur;
         }
         if (!Number.isFinite(a) || !Number.isFinite(b) || b <= a) return;
-        if (b > from && a < to) out.push({ start: a, end: b });
+        if (b > from && a < to) mine.push({ start: a, end: b });
       };
 
       if (e.rrule) {
@@ -97,9 +99,10 @@ export function parseBusy(ics: string, from: number, to: number, timeZone: strin
       } else {
         place(e.start);
       }
+      out.push(...mine);
+    } catch {
+      continue;
     }
-  } catch {
-    return [];
   }
   return out.sort((x, y) => x.start - y.start || x.end - y.end);
 }
@@ -250,8 +253,16 @@ export async function fetchBusy(
     } finally {
       if (timer) clearTimeout(timer);
     }
+    if (!isCalendar(text)) return { error: NOT_A_CALENDAR };
     cache.set(url, { at: t0, text });
     while (cache.size > MAX_ENTRIES) cache.delete(cache.keys().next().value as string);
   }
   return { busy: parseBusy(text, from, to, timeZone) };
+}
+
+const NOT_A_CALENDAR = "That address didn't return a calendar.";
+
+/** An HTML sign-in page or the like isn't a calendar: say so rather than read it as "no busy times". */
+function isCalendar(text: string): boolean {
+  return /BEGIN:VCALENDAR/i.test(text.slice(0, 4096));
 }

@@ -21,7 +21,7 @@ import { Router, type Request, type Response } from "express";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { AccessToken } from "livekit-server-sdk";
 import {
-  bookingError, checkReminders, checkSettingsInput, guestIdentity, guestJoinAllowed, guestTimeZone, hasHours, newGuestToken,
+  bookingError, bookingParentEmail, checkReminders, consultationRoomName, checkSettingsInput, guestIdentity, guestJoinAllowed, guestTimeZone, hasHours, newGuestToken,
   parseStart, publicSettings, removedReminders, settingsFromRow, startIsOffered, GUEST_JOIN_EARLY_MS, GUEST_JOIN_LATE_MS,
   type SettingsRow,
 } from "../lib/consultation-access";
@@ -90,7 +90,6 @@ const fail = (res: Response, err: unknown) => {
 };
 
 const MAX_NAME = 100;
-const roomName = (tutorId: string) => `session-${tutorId.slice(0, 8)}-${Date.now()}`;
 
 /** Book via book_consultation (atomic, gap-aware). Returns the new session's id or why not. */
 async function book(
@@ -108,7 +107,7 @@ async function book(
     p_minutes: s.callMinutes,
     // Never null: a null gap would switch the overlap check off.
     p_gap: s.gapMinutes,
-    p_room: roomName(o.tutorId),
+    p_room: consultationRoomName(o.tutorId),
     p_title: `Consultation call: ${o.name || o.email}`,
     p_diagnostic_id: o.diagnosticId,
     p_guest_email: o.email,
@@ -234,7 +233,7 @@ router.post("/tutor/consultations", async (req: Request, res: Response) => {
     const email = normaliseProspectEmail(body.email === undefined ? d.prospect_email : body.email);
     if ("error" in email) return res.status(400).json({ error: email.error });
     if (!email.email) return res.status(400).json({ error: "Enter the prospect's email address." });
-    const parent = normaliseProspectEmail(body.parentEmail === undefined ? d.parent_email : body.parentEmail);
+    const parent = bookingParentEmail(body.parentEmail, d.parent_email);
     if ("error" in parent) return res.status(400).json({ error: "Enter a valid email address for the parent." });
 
     const settings = await loadSettings(ctx.admin, ctx.tutorId);
@@ -421,7 +420,7 @@ router.post("/consultation/:token/book", async (req: Request, res: Response) => 
     const email = normaliseProspectEmail(body.email);
     if ("error" in email) return res.status(400).json({ error: email.error });
     if (!email.email) return res.status(400).json({ error: "Enter your email address." });
-    const parent = normaliseProspectEmail(body.parentEmail === undefined ? d.parent_email : body.parentEmail);
+    const parent = bookingParentEmail(body.parentEmail, d.parent_email);
     if ("error" in parent) return res.status(400).json({ error: "Enter a valid email address for your parent, or leave it blank." });
     const name = (typeof body.name === "string" ? body.name.trim().slice(0, MAX_NAME) : "") || prospectName(d);
 
