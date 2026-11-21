@@ -177,7 +177,7 @@ function Dots() {
 
 // A link diagnostic, sent to someone who isn't the sender's student yet (often
 // before a consultation call): the sender is named in full, never "your tutor".
-function SubmittedScreen({ token, theme, preCallFormUrl, onRedirect, studentName, senderName }) {
+function SubmittedScreen({ token, theme, preCallFormUrl, questionnaireUrl, onRedirect, studentName, senderName }) {
   // A prospect can book a consultation call right here. Until we know whether
   // times are on offer, nothing redirects; if they aren't (or the call fails),
   // this is today's finish screen.
@@ -192,20 +192,28 @@ function SubmittedScreen({ token, theme, preCallFormUrl, onRedirect, studentName
   const offered = offer.state === 'offered'
 
   useEffect(() => {
-    if (preCallFormUrl && offer.state === 'none') {
+    if (preCallFormUrl && !questionnaireUrl && offer.state === 'none') {
       const timer = setTimeout(onRedirect, 6000)
       return () => clearTimeout(timer)
     }
-  }, [preCallFormUrl, onRedirect, offer.state])
+  }, [preCallFormUrl, questionnaireUrl, onRedirect, offer.state])
 
   const first = (studentName || '').trim().split(' ')[0]
-  const redirecting = !!preCallFormUrl && offer.state === 'none'
+  // A snapshot's built-in questionnaire wins over the legacy link, which only redirects when there is none.
+  const redirecting = !!preCallFormUrl && !questionnaireUrl && offer.state === 'none'
+  const askQuestionnaire = !!questionnaireUrl && offer.state === 'none'
   return (
     <Panel>
       <OkLine>{senderName ? `Sent to ${senderName}` : 'Sent'}</OkLine>
       <H1>Thanks{first ? `, ${first}` : ''}. That's done.</H1>
-      <P muted>{senderName ? `${senderName} will go through your answers with you on your call.` : 'Your answers will be gone through with you on your call.'}{offered || redirecting ? '' : ' You can close this page.'}</P>
+      <P muted>{senderName ? `${senderName} will go through your answers with you on your call.` : 'Your answers will be gone through with you on your call.'}{offered || redirecting || askQuestionnaire ? '' : ' You can close this page.'}</P>
       {offered && <BookingPicker token={token} data={offer.data} theme={theme} name={studentName} />}
+      {askQuestionnaire && (
+        <>
+          <P muted>Before your call, please fill in this short questionnaire.</P>
+          <a className="af-btn" href={questionnaireUrl} style={{ ...btnStyle('primary'), textDecoration: 'none', boxSizing: 'border-box' }}>Open the questionnaire</a>
+        </>
+      )}
       {redirecting && (
         <>
           <P muted>Next, a few questions to help {senderName || 'them'} prepare for your call. They open in a few seconds.</P>
@@ -534,6 +542,7 @@ export default function DiagnosticScreen({ theme = 'dark', onToggleTheme }) {
             token={token}
             theme={theme}
             preCallFormUrl={result?.preCallFormUrl || assessment?.pre_call_form_url}
+            questionnaireUrl={result?.questionnaireUrl || assessment?.questionnaire_url}
             onRedirect={handleRedirect}
             studentName={studentName}
             senderName={senderName}

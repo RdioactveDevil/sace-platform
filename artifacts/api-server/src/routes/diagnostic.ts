@@ -11,7 +11,7 @@ import { scopeOutline, subtopicFieldHint } from "../lib/diagnostic-outline";
 import { canResend, diagnosticStatus, normaliseProspectEmail, unavailableReason, type ProspectRow } from "../lib/prospect-status";
 import { prospectDiagnosticEmail, prospectLink, prospectSenderName } from "../lib/prospect-emails";
 import { getResend, sendEmail } from "../lib/email";
-import { DEFAULT_QUESTIONNAIRE, countRedFlags, questionnaireStatus, snapshotFrom, validateQuestionnaire, type Answers, type Questionnaire } from "../lib/questionnaire";
+import { DEFAULT_QUESTIONNAIRE, countRedFlags, questionnaireLinkFor, questionnaireStatus, snapshotFrom, validateQuestionnaire, type Answers, type Questionnaire } from "../lib/questionnaire";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -930,9 +930,9 @@ router.get("/diagnostic/:token", async (req: Request, res: Response) => {
 
     const { data, error } = await admin
       .from("diagnostic_assessments")
-      .select(`id, token, year_level, subjects, questions, student_name, score_max, pre_call_form_url, completed_at, questions_ready_at, report, tutor_id, ${PROSPECT_COLUMNS}`)
+      .select(`id, token, year_level, subjects, questions, student_name, score_max, pre_call_form_url, completed_at, questions_ready_at, report, tutor_id, questionnaire, ${PROSPECT_COLUMNS}`)
       .eq("token", token)
-      .single<Pick<DiagnosticAssessment, "id" | "token" | "year_level" | "subjects" | "questions" | "student_name" | "score_max" | "pre_call_form_url" | "completed_at" | "questions_ready_at" | "report" | "tutor_id"> & ProspectRow>();
+      .single<Pick<DiagnosticAssessment, "id" | "token" | "year_level" | "subjects" | "questions" | "student_name" | "score_max" | "pre_call_form_url" | "completed_at" | "questions_ready_at" | "report" | "tutor_id"> & ProspectRow & { questionnaire: Questionnaire | null }>();
 
     if (error || !data) return res.status(404).json({ error: "Assessment not found" });
     const unavailable = unavailableReason(data, new Date());
@@ -944,7 +944,7 @@ router.get("/diagnostic/:token", async (req: Request, res: Response) => {
       if (openErr) logger.warn({ err: openErr, id: data.id }, "diagnostic: couldn't record opened_at");
     }
 
-    const { student_id, questions_ready_at, report, tutor_id, prospect_email: _pe, created_at: _ca, sent_at: _sa, opened_at: _oa, started_at: _st, reminded_at: _ra, cancelled_at: _cx, ...rest } = data;
+    const { student_id, questions_ready_at, report, tutor_id, questionnaire, prospect_email: _pe, created_at: _ca, sent_at: _sa, opened_at: _oa, started_at: _st, reminded_at: _ra, cancelled_at: _cx, ...rest } = data;
     // The tutor's display name, so the page can say who it goes to.
     let tutor_name: string | null = null;
     if (tutor_id) {
@@ -964,6 +964,8 @@ router.get("/diagnostic/:token", async (req: Request, res: Response) => {
         tutor_name,
         // Who sent a link diagnostic, by full name (never "your tutor": a prospect isn't their student yet).
         sender_name: student_id ? null : tutor_name,
+        // The built-in questionnaire's link when a snapshot exists (roster diagnostics never have one).
+        questionnaire_url: student_id ? null : questionnaireLinkFor({ token: data.token, questionnaire, pre_call_form_url: null }),
       },
     });
   } catch (err) {
@@ -1048,6 +1050,7 @@ router.post("/diagnostic/:token/submit", async (req: Request, res: Response) => 
       band:     report.performance_band,
       report,
       preCallFormUrl: data.pre_call_form_url,
+      questionnaireUrl: questionnaireLinkFor({ token: data.token, questionnaire: (data as { questionnaire?: unknown }).questionnaire ?? null, pre_call_form_url: null }),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";

@@ -2174,6 +2174,20 @@ export function bookConsultationAsProspect(token, { start, email, parentEmail, n
   }, 'Could not book that time.')
 }
 
+/** A prospect's pre-call questionnaire: { intro, items, senderName, studentName, submitted, open }. A 404 means no such page. */
+export function loadQuestionnaire(token) {
+  return consultationFetch(`/api/questionnaire/${encodeURIComponent(token)}`, undefined, 'Could not load the questionnaire.')
+}
+
+/** Send the answers (once): { ok }. Errors carry `status` (400 a missing answer, 409 already sent, 410 closed). */
+export function submitQuestionnaire(token, answers) {
+  return consultationFetch(`/api/questionnaire/${encodeURIComponent(token)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ answers }),
+  }, "That didn't send. Try again.")
+}
+
 /** The call link's details: { title, start, minutes, tutorName, canJoinFrom, status }. */
 export function loadGuestCall(guestToken) {
   return consultationFetch(`/api/consultation/join/${encodeURIComponent(guestToken)}`, undefined, "This call link isn't valid.")

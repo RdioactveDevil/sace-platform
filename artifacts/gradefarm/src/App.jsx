@@ -65,6 +65,7 @@ const TutorPlanGate         = lazyWithReload(() => import('./components/TutorPla
 const WritingScreen         = lazyWithReload(() => import('./components/WritingScreen'))
 const DiagnosticScreen      = lazyWithReload(() => import('./components/DiagnosticScreen'))
 const BookCallScreen        = lazyWithReload(() => import('./components/BookCallScreen'))
+const QuestionnaireScreen    = lazyWithReload(() => import('./components/QuestionnaireScreen'))
 const GuestCallScreen       = lazyWithReload(() => import('./components/GuestCallScreen'))
 const InviteScreen          = lazyWithReload(() => import('./components/InviteScreen'))
 const PricingPage           = lazyWithReload(() => import('./components/PricingPage'))
@@ -1906,6 +1907,7 @@ function AppInner() {
 
       {/* Consultation call — public, no auth required: book a time, then the guest's call link */}
       <Route path="/book/:token" element={<BookCallScreen {...commonProps} />} />
+      <Route path="/questionnaire/:token" element={<QuestionnaireScreen {...commonProps} />} />
       <Route path="/call/:guestToken" element={<GuestCallScreen {...commonProps} />} />
 
       {/* Tutor invite — public; accepting needs the invited account signed in */}
