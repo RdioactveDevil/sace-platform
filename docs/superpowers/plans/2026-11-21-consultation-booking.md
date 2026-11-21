@@ -156,7 +156,7 @@
 
 - [ ] **Step 1: Failing tests:**
   - `formatCallTime("2027-11-02T06:00:00Z","Australia/Melbourne")` → `"Tuesday 2 November, 5:00 pm (Melbourne time)"`.
-  - Guest and parent versions never match `/your tutor/i`; they name the tutor in full; the parent version names the student ("Sam's consultation call with Adhyayan Verma").
+  - Guest and parent versions never match `/your tutor/i`; they name the tutor in full; the parent version names the student ("Sam's consultation call with Sam Tutor").
   - Guest booked email includes the join URL as the CTA and, when given, a paragraph with the questionnaire URL; without it, no questionnaire paragraph.
   - Tutor version links the report and says who and when in the tutor's zone.
   - Reminder subject for `lead` 1440 says "tomorrow", for 60 says "in 1 hour", for other values "in N hours/days".

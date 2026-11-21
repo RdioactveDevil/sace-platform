@@ -10,7 +10,7 @@ import {
 } from "../src/lib/consultation-emails";
 
 const base = {
-  tutorName: "Adhyayan Verma",
+  tutorName: "Sam Tutor",
   studentName: "Sam",
   start: "2027-11-02T06:00:00Z",
   timeZone: "Australia/Melbourne",
@@ -40,15 +40,15 @@ test("guest and parent emails never say 'your tutor' and name the tutor in full"
   emails.push(bookYourCallEmail({ tutorName: base.tutorName, subject: "VCE Methods", bookUrl: "https://b" }));
   for (const e of emails) {
     assert.doesNotMatch(text(e), /your tutor/i);
-    assert.match(text(e), /Adhyayan Verma/);
+    assert.match(text(e), /Sam Tutor/);
   }
 });
 
 test("parent version names the student; falls back when empty", () => {
   const e = consultationBookedEmail({ ...base, to: "parent" });
-  assert.match(text(e), /Sam's consultation call with Adhyayan Verma/);
+  assert.match(text(e), /Sam's consultation call with Sam Tutor/);
   const f = consultationBookedEmail({ ...base, to: "parent", studentName: "" });
-  assert.match(text(f), /Your child's consultation call with Adhyayan Verma/);
+  assert.match(text(f), /Your child's consultation call with Sam Tutor/);
 });
 
 test("guest booked email: join CTA and optional questionnaire paragraph", () => {
@@ -80,7 +80,20 @@ test("reminder subject leads", () => {
 });
 
 test("bookYourCallEmail CTA is bookUrl and footer says it's the only reminder", () => {
-  const e = bookYourCallEmail({ tutorName: "Adhyayan Verma", subject: "VCE Methods", bookUrl: "https://b/x" });
+  const e = bookYourCallEmail({ tutorName: "Sam Tutor", subject: "VCE Methods", bookUrl: "https://b/x" });
   assert.equal(e.content.cta?.url, "https://b/x");
   assert.match(e.content.footer, /only reminder/);
+});
+
+test("parent booked email asks them to pass the questionnaire to the student, not fill it in", () => {
+  const p = consultationBookedEmail({ ...base, to: "parent", questionnaireUrl: "https://q/x" });
+  const para = p.content.paragraphs.find((x) => x.includes("https://q/x"))!;
+  assert.ok(para);
+  assert.doesNotMatch(para, /you filled in/i);
+  assert.match(para, /Sam has a short questionnaire to fill in before the call/);
+  assert.match(para, /pass this link on/);
+  const f = consultationBookedEmail({ ...base, to: "parent", studentName: "", questionnaireUrl: "https://q/x" });
+  assert.match(f.content.paragraphs.find((x) => x.includes("https://q/x"))!, /Your child has a short questionnaire/);
+  const g = consultationBookedEmail({ ...base, to: "guest", questionnaireUrl: "https://q/x" });
+  assert.ok(g.content.paragraphs.includes("If you have a few minutes beforehand, Sam Tutor would appreciate it if you filled in this short questionnaire: https://q/x"));
 });

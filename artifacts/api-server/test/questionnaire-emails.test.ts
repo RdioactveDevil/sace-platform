@@ -9,7 +9,7 @@ const text = (e: { subject: string; content: { heading: string; paragraphs: stri
   [e.subject, e.content.heading, ...e.content.paragraphs, e.content.footer, e.content.cta?.label ?? "", ...(e.content.details ?? []).flat()].join("\n");
 
 const base = {
-  tutorName: "Adhyayan Verma", studentName: "Sam Lee", start: "2027-03-10T05:00:00Z",
+  tutorName: "Sam Tutor", studentName: "Sam Lee", start: "2027-03-10T05:00:00Z",
   timeZone: "Australia/Adelaide", url: "https://x/questionnaire/tok",
 };
 
@@ -19,7 +19,7 @@ test("reminder emails never say 'your tutor'; the parent version names the stude
   assert.doesNotMatch(text(g), /your tutor/i);
   assert.doesNotMatch(text(p), /your tutor/i);
   assert.ok(text(p).includes("Sam Lee"));
-  assert.ok(text(g).includes("Adhyayan Verma"));
+  assert.ok(text(g).includes("Sam Tutor"));
   assert.doesNotMatch(text(g), /tomorrow/i);
   assert.match(text(g), /is on \w+day \d+ \w+, /);
   assert.equal(g.content.cta?.url, base.url);
@@ -28,7 +28,7 @@ test("reminder emails never say 'your tutor'; the parent version names the stude
 
 test("the tutor notice lists flagged answers and links the report", () => {
   const e = questionnaireDoneEmail({
-    tutorName: "Adhyayan Verma", studentName: "Sam Lee", reportUrl: "https://x/tutor?tab=diagnostic",
+    tutorName: "Sam Tutor", studentName: "Sam Lee", reportUrl: "https://x/tutor?tab=diagnostic",
     flagged: [{ question: "How dedicated are you?", answer: "NOT dedicated" }],
   });
   assert.ok(text(e).includes("How dedicated are you?"));

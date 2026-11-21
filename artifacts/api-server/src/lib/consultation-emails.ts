@@ -83,7 +83,12 @@ export function consultationBookedEmail(o: Booked): Email {
     "When it's time, use the button below to join. You can do it from a phone or a computer, and you don't need an account.",
   ];
   if (o.questionnaireUrl) {
-    paragraphs.push(`If you have a few minutes beforehand, ${o.tutorName} would appreciate it if you filled in this short questionnaire: ${o.questionnaireUrl}`);
+    const who = o.studentName?.trim() || "Your child";
+    paragraphs.push(
+      o.to === "parent"
+        ? `${who} has a short questionnaire to fill in before the call. Please pass this link on to ${o.studentName?.trim() ? "them" : "your child"}: ${o.questionnaireUrl}`
+        : `If you have a few minutes beforehand, ${o.tutorName} would appreciate it if you filled in this short questionnaire: ${o.questionnaireUrl}`,
+    );
   }
   return {
     subject: `Your consultation call with ${o.tutorName}: ${when}`,

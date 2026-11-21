@@ -92,7 +92,7 @@ git commit -m "Prospect diagnostics: email and lifecycle columns, status rules"
   - `prospectFinishedEmail(o: { tutorName: string; prospectName: string; subject: string; summary: { percentage: number; band: string; strong: string[]; work_on: string[] }; link: string })`
 
 - [ ] **Step 1: Write the failing tests**
-  - `prospectDiagnosticEmail({ senderName: "Adhyayan Verma", subject: "VCE Mathematical Methods Units 1/2", link: "https://x/d/t" })`: first paragraph equals the Global Constraints copy exactly with those values; `cta.url` is the link; subject contains `"Adhyayan Verma"` and the subject name.
+  - `prospectDiagnosticEmail({ senderName: "Sam Tutor", subject: "VCE Mathematical Methods Units 1/2", link: "https://x/d/t" })`: first paragraph equals the Global Constraints copy exactly with those values; `cta.url` is the link; subject contains `"Sam Tutor"` and the subject name.
   - Neither prospect email (subject, paragraphs, footer, heading) matches `/your tutor|tutoring with/i`.
   - Reminder: one reminder wording; footer contains `"This is the only reminder"`.
   - `prospectFinishedEmail`: subject `"<prospectName> finished their <subject> diagnostic: <pct>%"`; details include Score; footer explains they're getting it because they sent the diagnostic.
