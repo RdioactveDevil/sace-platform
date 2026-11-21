@@ -1,9 +1,9 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { THEMES } from '../lib/theme'
 import { confirmDialog } from '../lib/dialog'
 import { fetchQuestionnaire, saveQuestionnaire } from '../lib/db'
-import { answerText, isFlagged, questionCount, cloneQuestionnaire, BASIC_QUESTIONNAIRE } from '../lib/questionnaireEdit'
+import { answerText, isFlagged, questionCount, cloneQuestionnaire, validateDraft } from '../lib/questionnaireEdit'
 import QuestionnaireEditor from './QuestionnaireEditor'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
@@ -25,6 +25,7 @@ export function QuestionnaireTab({ theme }) {
   const s = styles(t, theme)
   const [draft, setDraft] = useState(null)
   const [isDefault, setIsDefault] = useState(false)
+  const [basic, setBasic] = useState(null) // the server's starting set
   const [loadError, setLoadError] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -33,7 +34,7 @@ export function QuestionnaireTab({ theme }) {
   useEffect(() => {
     let cancelled = false
     fetchQuestionnaire()
-      .then(r => { if (!cancelled) { setDraft(cloneQuestionnaire(r.questionnaire)); setIsDefault(!!r.isDefault) } })
+      .then(r => { if (!cancelled) { setDraft(cloneQuestionnaire(r.questionnaire)); setIsDefault(!!r.isDefault); setBasic(r.basic || null) } })
       .catch(err => { if (!cancelled) setLoadError(err.message || "Couldn't load your questionnaire.") })
     return () => { cancelled = true }
   }, [])
@@ -41,7 +42,10 @@ export function QuestionnaireTab({ theme }) {
   const edit = v => { setDraft(v); setSavedNote('') }
 
   const save = async () => {
-    setError(''); setSavedNote(''); setSaving(true)
+    setError(''); setSavedNote('')
+    const problem = validateDraft(draft)
+    if (problem) { setError(problem); return }
+    setSaving(true)
     try {
       const saved = await saveQuestionnaire(draft)
       setDraft(cloneQuestionnaire(saved))
@@ -55,7 +59,7 @@ export function QuestionnaireTab({ theme }) {
 
   const reset = async () => {
     const ok = await confirmDialog('Replace the questions below with the basic set? Nothing changes until you press Save.', { confirm: 'Use the basic set', cancel: 'Keep mine', danger: true })
-    if (ok) { edit(cloneQuestionnaire(BASIC_QUESTIONNAIRE)); setError('') }
+    if (ok && basic) { edit(cloneQuestionnaire(basic)); setError('') }
   }
 
   return (
@@ -67,7 +71,7 @@ export function QuestionnaireTab({ theme }) {
             What a prospect fills in after booking a call.{isDefault ? " You haven't changed it yet, so the basic set is in use." : ''}
           </div>
         </div>
-        {draft && <button type="button" onClick={reset} style={{ ...s.ghostBtn, padding: '6px 12px', fontSize: 12 }}>Reset to the basic set</button>}
+        {draft && basic && <button type="button" onClick={reset} style={{ ...s.ghostBtn, padding: '6px 12px', fontSize: 12 }}>Reset to the basic set</button>}
       </div>
       <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
         {loadError && <div role="alert" style={s.alert}>{loadError}</div>}
@@ -92,20 +96,30 @@ function TailorModal({ initial, theme, onCancel, onDone }) {
   const s = styles(t, theme)
   const [draft, setDraft] = useState(() => cloneQuestionnaire(initial))
   const titleId = useId()
+  const problem = validateDraft(draft)
+  const dirty = JSON.stringify(draft) !== JSON.stringify(cloneQuestionnaire(initial))
+  const cancel = async () => {
+    if (dirty && !(await confirmDialog('Discard your changes for this student?', { confirm: 'Discard', cancel: 'Keep editing', danger: true }))) return
+    onCancel()
+  }
+  const cancelRef = useRef(cancel)
+  cancelRef.current = cancel
   useEffect(() => {
-    const onKey = e => { if (e.key === 'Escape') onCancel() }
+    // A confirm dialog on top handles Escape itself (and stops it); never close under it.
+    const onKey = e => { if (e.key === 'Escape' && !e.defaultPrevented) cancelRef.current() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onCancel])
+  }, [])
   return createPortal(
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 9999, padding: 16, overflowY: 'auto' }}>
       <div role="dialog" aria-modal="true" aria-labelledby={titleId} style={{ background: t.bgCard, border: dark ? '1px solid var(--t-border)' : `1px solid ${t.border}`, borderRadius: 12, padding: 32, width: '100%', maxWidth: 720, fontFamily: FONT_B, margin: 'auto', backdropFilter: 'blur(16px)' }}>
         <h2 id={titleId} style={{ margin: '0 0 6px', fontSize: 17, fontWeight: 800, letterSpacing: '-0.01em', color: t.text }}>Edit for this student</h2>
         <p style={{ margin: '0 0 20px', fontSize: 13, color: t.textMuted }}>Changes here apply to this student's questionnaire only. Your own questionnaire stays as it is.</p>
         <QuestionnaireEditor value={draft} onChange={setDraft} theme={theme} />
+        {problem && <div role="alert" style={{ ...s.alert, marginTop: 16 }}>{problem}</div>}
         <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 24, flexWrap: 'wrap' }}>
-          <button type="button" onClick={onCancel} style={s.ghostBtn}>Cancel</button>
-          <button type="button" onClick={() => onDone(draft)} className="btn-gold-shimmer" style={s.primaryBtn(false)}>Use for this student</button>
+          <button type="button" onClick={cancel} style={s.ghostBtn}>Cancel</button>
+          <button type="button" onClick={() => onDone(draft)} disabled={!!problem} className={problem ? '' : 'btn-gold-shimmer'} style={s.primaryBtn(!!problem)}>Use for this student</button>
         </div>
       </div>
     </div>,

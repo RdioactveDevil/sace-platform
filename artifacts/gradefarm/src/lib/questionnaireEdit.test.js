@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { newItem, newOption, moveItem, changeType, answerText, isFlagged, newId, questionCount, cloneQuestionnaire, BASIC_QUESTIONNAIRE } from './questionnaireEdit.js'
+import { newItem, newOption, moveItem, changeType, answerText, isFlagged, newId, questionCount, cloneQuestionnaire, validateDraft } from './questionnaireEdit.js'
 
 const q = {
   id: 'q', type: 'one', label: 'Pick', other: true,
@@ -91,10 +91,34 @@ test('questionCount skips section headings', () => {
 })
 
 test('cloneQuestionnaire is a deep copy', () => {
-  const copy = cloneQuestionnaire({ intro: 'hi', items: [{ id: 'a', type: 'one', label: 'x', options: [{ id: 'o', label: 'y' }] }] })
+  const orig = { intro: 'hi', items: [{ id: 'a', type: 'one', label: 'x', options: [{ id: 'o', label: 'y' }] }] }
+  const copy = cloneQuestionnaire(orig)
   copy.items[0].options[0].label = 'changed'
-  assert.equal(BASIC_QUESTIONNAIRE.items.length, 5)
-  const again = cloneQuestionnaire(BASIC_QUESTIONNAIRE)
-  again.items[0].label = 'changed'
-  assert.equal(BASIC_QUESTIONNAIRE.items[0].label, 'What school do you attend?')
+  assert.equal(orig.items[0].options[0].label, 'y')
+})
+
+const ok = { intro: '', items: [{ id: 'a', type: 'short', label: 'Q' }] }
+
+test('validateDraft accepts a good questionnaire', () => {
+  assert.equal(validateDraft(ok), null)
+  assert.equal(validateDraft({ intro: '', items: [{ type: 'section', label: 'S' }, ...ok.items, { type: 'one', label: 'P', options: [{ label: 'x' }] }] }), null)
+})
+
+test('validateDraft names the first problem', () => {
+  assert.match(validateDraft({ intro: '', items: [] }), /at least one question/)
+  assert.match(validateDraft({ intro: '', items: [{ type: 'section', label: 'S' }] }), /at least one question/)
+  assert.match(validateDraft({ intro: '', items: [{ type: 'short', label: '  ' }] }), /Question 1 needs some text/)
+  assert.match(validateDraft({ intro: '', items: [...ok.items, { type: 'section', label: '' }] }), /section heading needs some text/)
+  assert.match(validateDraft({ intro: '', items: [{ type: 'one', label: 'P', options: [{ label: 'x' }, { label: '' }] }] }), /blank choice/)
+  assert.match(validateDraft({ intro: '', items: [{ type: 'many', label: 'P', options: [] }] }), /at least one choice/)
+})
+
+test('validateDraft enforces the limits', () => {
+  assert.match(validateDraft({ intro: 'x'.repeat(2001), items: ok.items }), /introduction/)
+  assert.match(validateDraft({ intro: '', items: [{ type: 'short', label: 'x'.repeat(301) }] }), /too long/)
+  assert.match(validateDraft({ intro: '', items: [{ type: 'short', label: 'Q', help: 'x'.repeat(501) }] }), /hint/)
+  assert.match(validateDraft({ intro: '', items: Array.from({ length: 61 }, () => ok.items[0]) }), /at most 60/)
+  const many = n => ({ type: 'one', label: 'P', options: Array.from({ length: n }, () => ({ label: 'x' })) })
+  assert.match(validateDraft({ intro: '', items: [many(21)] }), /at most 20 choices/)
+  assert.match(validateDraft({ intro: '', items: [{ type: 'one', label: 'P', options: [{ label: 'x'.repeat(201) }] }] }), /choice on question 1 is too long/)
 })

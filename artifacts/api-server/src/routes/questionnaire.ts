@@ -13,6 +13,7 @@ import { Router, type Request, type Response } from "express";
 import { logger } from "../lib/logger";
 import { prospectSenderName } from "../lib/prospect-emails";
 import {
+  DEFAULT_QUESTIONNAIRE,
   publicQuestionnaire,
   questionnaireOpen,
   snapshotFrom,
@@ -28,7 +29,8 @@ router.get("/tutor/questionnaire", async (req: Request, res: Response) => {
   try {
     const ctx = await requireTutor(req, res);
     if (!ctx) return;
-    return res.json(await masterQuestionnaire(ctx.admin, ctx.tutorId));
+    // `basic`: the starting set, for the editor's "Reset to the basic set" (the server owns it).
+    return res.json({ ...(await masterQuestionnaire(ctx.admin, ctx.tutorId)), basic: DEFAULT_QUESTIONNAIRE });
   } catch (err) {
     logger.error({ err }, "questionnaire: couldn't load the master");
     return res.status(500).json({ error: err instanceof Error ? err.message : "Internal error" });

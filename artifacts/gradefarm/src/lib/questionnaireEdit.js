@@ -90,19 +90,35 @@ export function questionCount(q) {
   return (q?.items || []).filter(i => i.type !== 'section').length
 }
 
-/**
- * A new tutor's questionnaire until they edit it. Mirrors DEFAULT_QUESTIONNAIRE in
- * api-server/src/lib/questionnaire.ts (keep the two in step); "Reset to the basic set" loads it.
- */
-export const BASIC_QUESTIONNAIRE = {
-  intro: 'Thanks for booking a call. A few quick questions so we can make the most of our time together.',
-  items: [
-    { id: 'school', type: 'short', label: 'What school do you attend?', required: true },
-    { id: 'results', type: 'short', label: 'What are your current results in this subject?' },
-    { id: 'why', type: 'long', label: 'Why are you looking for a tutor?', required: true },
-    { id: 'goal', type: 'short', label: 'What is your goal for this subject?' },
-    { id: 'other', type: 'long', label: 'Is there anything else we should know before the call?' },
-  ],
+const LIMITS = { items: 60, label: 300, help: 500, options: 20, optionLabel: 200, intro: 2000 }
+
+/** The first problem the server would reject, as a message; null when the draft is fine. */
+export function validateDraft(q) {
+  const items = q?.items || []
+  if (String(q?.intro ?? '').length > LIMITS.intro) return `The introduction can be at most ${LIMITS.intro} characters.`
+  if (items.length > LIMITS.items) return `A questionnaire can have at most ${LIMITS.items} items.`
+  let n = 0
+  for (const it of items) {
+    const isSection = it.type === 'section'
+    if (!isSection) n++
+    const where = isSection ? 'A section heading' : `Question ${n}`
+    const label = String(it.label ?? '').trim()
+    if (!label) return `${where} needs some text.`
+    if (label.length > LIMITS.label) return `${where} is too long (up to ${LIMITS.label} characters).`
+    if (String(it.help ?? '').trim().length > LIMITS.help) return `The hint on question ${n} is too long (up to ${LIMITS.help} characters).`
+    if (hasOptions(it.type)) {
+      const opts = it.options || []
+      if (opts.length === 0) return `${where} needs at least one choice.`
+      if (opts.length > LIMITS.options) return `${where} can have at most ${LIMITS.options} choices.`
+      for (const o of opts) {
+        const ol = String(o.label ?? '').trim()
+        if (!ol) return `${where} has a blank choice. Fill it in or remove it.`
+        if (ol.length > LIMITS.optionLabel) return `A choice on question ${n} is too long (up to ${LIMITS.optionLabel} characters).`
+      }
+    }
+  }
+  if (n === 0) return 'Add at least one question.'
+  return null
 }
 
 /** A deep copy, so editing it never touches the original. */
