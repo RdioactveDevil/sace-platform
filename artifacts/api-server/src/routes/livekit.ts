@@ -95,6 +95,8 @@ async function handleRoomStarted(admin: SupabaseClient, roomName: string): Promi
     .select("id, tutor_id, status, scheduled_at, recording_status")
     .eq("livekit_room_name", roomName)
     .eq("record_session", true)
+    // Consultation calls are never recorded (record_session is false on them anyway).
+    .neq("session_type", "consultation")
     .is("recording_status", null)
     .returns<OccurrenceRow[]>();
 

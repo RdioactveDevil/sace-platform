@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  TUTOR_TIME_ZONES, bookingError, checkReminders, checkSettingsInput, guestJoinAllowed, guestTimeZone, newGuestToken,
-  openSessionAllowed, parseStart, publicSettings, removedReminders, settingsFromRow, startIsOffered, type SettingsRow,
+  TUTOR_TIME_ZONES, bookingError, checkReminders, checkSettingsInput, guestIdentity, guestJoinAllowed, guestTimeZone, newGuestToken,
+  openSessionAllowed, parseStart, publicSettings, removedReminders, settingsFromRow, shouldMarkActive, startIsOffered, type SettingsRow,
 } from "../src/lib/consultation-access.ts";
 
 const MIN = 60_000;
@@ -208,4 +208,28 @@ test("a start is offered only if it is one of the open slots", () => {
 test("reminders removed from a booking", () => {
   assert.deepEqual(removedReminders([1440, 60], [60, 30]), [1440]);
   assert.deepEqual(removedReminders(null, [60]), []);
+});
+
+test("each guest join gets its own identity, so a student and parent can both be in the call", () => {
+  const id = "11111111-2222-3333-4444-555555555555";
+  const a = guestIdentity(id);
+  const b = guestIdentity(id);
+  assert.notEqual(a, b);
+  for (const x of [a, b]) assert.match(x, /^guest-11111111-2222-3333-4444-555555555555-[A-Za-z0-9_-]{8}$/);
+});
+
+test("a lesson is marked active whenever someone opens it, as before", () => {
+  const at = "2026-12-01T05:00:00.000Z";
+  assert.equal(shouldMarkActive("individual", at, 60, Date.parse(at) - 3 * 86_400_000), true);
+  assert.equal(shouldMarkActive("group", at, 60, Date.parse(at)), true);
+});
+
+test("a consultation is marked active only from 10 minutes before its start", () => {
+  const at = "2026-12-01T05:00:00.000Z";
+  const start = Date.parse(at);
+  assert.equal(shouldMarkActive("consultation", at, 45, start - 30 * MIN), false);
+  assert.equal(shouldMarkActive("consultation", at, 45, start - 11 * MIN), false);
+  assert.equal(shouldMarkActive("consultation", at, 45, start - 5 * MIN), true);
+  assert.equal(shouldMarkActive("consultation", at, 45, start + 3 * 60 * MIN), true);
+  assert.equal(shouldMarkActive("consultation", "not a date", 45, start), false);
 });

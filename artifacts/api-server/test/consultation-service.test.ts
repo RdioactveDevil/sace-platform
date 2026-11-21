@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Resend } from "resend";
-import { sendConsultationEmails, type CallRow } from "../src/lib/consultation-service.ts";
+import { notifyAfterWrite, sendConsultationEmails, type CallRow } from "../src/lib/consultation-service.ts";
 
 const call: CallRow = {
   id: "11111111-2222-3333-4444-555555555555",
@@ -81,4 +81,58 @@ test("a cancellation sends METHOD:CANCEL invites", async () => {
     assert.equal(p.attachments[0].contentType, "text/calendar; method=CANCEL");
     assert.match(ics(p), /METHOD:CANCEL/);
   }
+});
+
+// ── After the booking is written, nothing may fail the request ──────────────
+
+function steps(over: Partial<Parameters<typeof notifyAfterWrite>[0]> = {}) {
+  const logged: string[] = [];
+  const sent: Array<{ kind: string; call: CallRow; questionnaireUrl?: string | null }> = [];
+  const o: Parameters<typeof notifyAfterWrite>[0] = {
+    kind: "booked",
+    sessionId: call.id,
+    loadCall: async () => call,
+    loadTutor: async () => tutor,
+    loadQuestionnaire: async () => "https://forms.example/q",
+    send: async (x) => { sent.push(x); },
+    log: (_err, msg) => { logged.push(msg); },
+    ...over,
+  };
+  return { o, logged, sent };
+}
+
+test("after a write, the emails go out with the reloaded call, tutor and questionnaire", async () => {
+  const { o, logged, sent } = steps();
+  assert.equal(await notifyAfterWrite(o), true);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].questionnaireUrl, "https://forms.example/q");
+  assert.deepEqual(logged, []);
+});
+
+test("after a write, a failed reload, tutor lookup or send is logged, never thrown", async () => {
+  const boom = async () => { throw new Error("db down"); };
+  for (const over of [
+    { loadCall: boom },
+    { loadCall: async () => null },
+    { loadTutor: boom },
+    { send: boom },
+  ] as Array<Partial<Parameters<typeof notifyAfterWrite>[0]>>) {
+    const { o, logged } = steps(over);
+    assert.equal(await notifyAfterWrite(o), false);
+    assert.equal(logged.length, 1);
+  }
+});
+
+test("after a write, a failed questionnaire lookup still sends, without the link", async () => {
+  const { o, logged, sent } = steps({ loadQuestionnaire: async () => { throw new Error("x"); } });
+  assert.equal(await notifyAfterWrite(o), true);
+  assert.equal(sent[0].questionnaireUrl, null);
+  assert.equal(logged.length, 1);
+});
+
+test("cancellations don't look up the questionnaire", async () => {
+  let asked = false;
+  const { o } = steps({ kind: "cancelled", loadQuestionnaire: async () => { asked = true; return null; } });
+  await notifyAfterWrite(o);
+  assert.equal(asked, false);
 });

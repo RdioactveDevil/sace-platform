@@ -15,7 +15,7 @@ import { getR2Config } from "../lib/r2";
 import { appUrl, sendEmail } from "../lib/email";
 import { sessionBookedEmail } from "../lib/tutor-emails";
 import { FEATURE_MISSING, requireTutorPlan, tutorHasFeature } from "../lib/tutor-plan";
-import { openSessionAllowed } from "../lib/consultation-access";
+import { openSessionAllowed, shouldMarkActive } from "../lib/consultation-access";
 
 export const RECORDING_BUCKET = "tutor-resources";
 
@@ -318,6 +318,12 @@ router.post("/sessions", async (req: Request, res: Response) => {
     notes?: string;
     record_session?: boolean;
   };
+
+  // Consultations are booked through routes/consultations.ts (guest, invites, never recorded).
+  if (session_type !== "individual" && session_type !== "group") {
+    res.status(400).json({ error: "session_type must be individual or group" });
+    return;
+  }
 
   if (record_session && !(await tutorHasFeature(ctx.admin, ctx.userId, "recordings"))) {
     res.status(403).json({ error: FEATURE_MISSING.recordings, code: "tutor_plan_feature" });
@@ -645,7 +651,8 @@ router.post("/sessions/:id/token", async (req: Request, res: Response) => {
     roomCreate: isTutor,
   });
 
-  if (session.status === "scheduled") {
+  // A consultation opened early (e.g. from the tutor's email) stays booked until its window opens.
+  if (session.status === "scheduled" && shouldMarkActive(session.session_type, session.scheduled_at, session.duration_minutes, Date.now())) {
     await ctx.admin
       .from("tutoring_sessions")
       .update({ status: "active" })
@@ -721,6 +728,7 @@ interface RecordableSession {
   scheduled_at: string | null;
   recording_status: string | null;
   recording_egress_id: string | null;
+  session_type: string;
 }
 
 // POST /rooms/:roomName/recording { action: "start" | "stop" } — the tutor
@@ -741,7 +749,7 @@ router.post("/rooms/:roomName/recording", async (req: Request, res: Response) =>
 
   const { data: rows, error } = await ctx.admin
     .from("tutoring_sessions")
-    .select("id, tutor_id, status, scheduled_at, recording_status, recording_egress_id")
+    .select("id, tutor_id, status, scheduled_at, recording_status, recording_egress_id, session_type")
     .eq("livekit_room_name", roomName)
     .neq("status", "cancelled")
     .returns<RecordableSession[]>();
@@ -752,6 +760,10 @@ router.post("/rooms/:roomName/recording", async (req: Request, res: Response) =>
   const own = (rows ?? []).filter((s) => s.tutor_id === ctx.userId);
   if (!own.length) {
     res.status(403).json({ error: "Only the lesson's tutor can record it." });
+    return;
+  }
+  if (action === "start" && own.some((s) => s.session_type === "consultation")) {
+    res.status(409).json({ error: "Consultation calls aren't recorded." });
     return;
   }
 

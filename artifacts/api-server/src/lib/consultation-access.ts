@@ -35,6 +35,27 @@ export function guestJoinAllowed(
   return now >= start - GUEST_JOIN_EARLY_MS && now <= start + GUEST_JOIN_LATE_MS;
 }
 
+/**
+ * The LiveKit identity for one guest join. Unique per join: the student and a
+ * parent share the link, and LiveKit disconnects an earlier participant when
+ * a second one joins with the same identity.
+ */
+export function guestIdentity(sessionId: string): string {
+  return `guest-${sessionId}-${randomBytes(6).toString("base64url")}`;
+}
+
+/**
+ * Whether opening a session (POST /sessions/:id/token) marks it active.
+ * Lessons: always, as before. A consultation only from when its join window
+ * opens: the tutor opening it early must leave the booking live (it stays
+ * reschedulable, cancellable and blocks a second booking).
+ */
+export function shouldMarkActive(sessionType: string, scheduledAt: string, _durationMinutes: number, now: number): boolean {
+  if (sessionType !== "consultation") return true;
+  const start = Date.parse(scheduledAt);
+  return Number.isFinite(start) && now >= start - GUEST_JOIN_EARLY_MS;
+}
+
 /** A guest's join token: 32 random bytes, base64url (43 characters). */
 export function newGuestToken(): string {
   return randomBytes(32).toString("base64url");

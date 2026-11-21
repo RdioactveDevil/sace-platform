@@ -290,3 +290,47 @@ export async function sendConsultationEmails(o: {
     if (result.error) logger.warn({ sessionId: call.id, who, kind: o.kind, err: result.error }, "consultations: email not sent");
   }
 }
+
+/**
+ * Email everyone once a booking, move or cancellation has been written. The
+ * write stands whatever happens here: each step's failure is logged and
+ * swallowed, so the route still answers with success. Returns whether the
+ * emails were handed to `send`.
+ */
+export async function notifyAfterWrite(o: {
+  kind: "booked" | "changed" | "cancelled";
+  sessionId: string;
+  previousStart?: string;
+  loadCall: () => Promise<CallRow | null>;
+  loadTutor: () => Promise<TutorContact>;
+  loadQuestionnaire: (diagnosticId: string | null) => Promise<string | null>;
+  send?: typeof sendConsultationEmails;
+  log?: (err: unknown, msg: string) => void;
+}): Promise<boolean> {
+  const log = o.log ?? ((err: unknown, msg: string) => logger.error({ err, sessionId: o.sessionId, kind: o.kind }, msg));
+  let call: CallRow | null;
+  let tutor: TutorContact;
+  try {
+    call = await o.loadCall();
+    if (!call) throw new Error("call not found after writing it");
+    tutor = await o.loadTutor();
+  } catch (err) {
+    log(err, "consultations: written, but couldn't load what the emails need; none sent");
+    return false;
+  }
+  let questionnaire: string | null = null;
+  if (o.kind !== "cancelled") {
+    try {
+      questionnaire = await o.loadQuestionnaire(call.diagnostic_id);
+    } catch (err) {
+      log(err, "consultations: couldn't read the questionnaire link; sending without it");
+    }
+  }
+  try {
+    await (o.send ?? sendConsultationEmails)({ kind: o.kind, call, tutor, previousStart: o.previousStart, questionnaireUrl: questionnaire });
+  } catch (err) {
+    log(err, "consultations: written, but the emails failed");
+    return false;
+  }
+  return true;
+}

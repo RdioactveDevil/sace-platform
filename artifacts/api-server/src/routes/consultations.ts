@@ -21,13 +21,13 @@ import { Router, type Request, type Response } from "express";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { AccessToken } from "livekit-server-sdk";
 import {
-  bookingError, checkReminders, checkSettingsInput, guestJoinAllowed, guestTimeZone, hasHours, newGuestToken,
+  bookingError, checkReminders, checkSettingsInput, guestIdentity, guestJoinAllowed, guestTimeZone, hasHours, newGuestToken,
   parseStart, publicSettings, removedReminders, settingsFromRow, startIsOffered, GUEST_JOIN_EARLY_MS, GUEST_JOIN_LATE_MS,
   type SettingsRow,
 } from "../lib/consultation-access";
 import {
-  CALL_COLUMNS, guestJoinUrl, liveBooking, loadSettings, openTimes, questionnaireUrl, readCalendar, sendConsultationEmails,
-  tutorContact, type CallRow, type TutorContact,
+  CALL_COLUMNS, guestJoinUrl, liveBooking, loadSettings, notifyAfterWrite, openTimes, questionnaireUrl, readCalendar,
+  tutorContact, type CallRow,
 } from "../lib/consultation-service";
 import { logger } from "../lib/logger";
 import { normaliseProspectEmail } from "../lib/prospect-status";
@@ -130,14 +130,27 @@ async function loadCall(admin: AdminClient, id: string): Promise<CallRow | null>
   return data;
 }
 
-/** Email everyone about a call; never fails the request. */
-async function notify(admin: AdminClient, kind: "booked" | "changed" | "cancelled", call: CallRow, tutor: TutorContact, previousStart?: string) {
-  try {
-    const questionnaire = kind === "cancelled" ? null : await questionnaireUrl(admin, call.diagnostic_id);
-    await sendConsultationEmails({ kind, call, tutor, previousStart, questionnaireUrl: questionnaire });
-  } catch (err) {
-    logger.error({ err, sessionId: call.id, kind }, "consultations: emails failed");
-  }
+/**
+ * Email everyone about a call that has just been written. Never throws:
+ * reloading the call, finding the tutor's details or sending can fail without
+ * undoing the booking or failing the request (notifyAfterWrite logs it).
+ */
+function notify(
+  admin: AdminClient,
+  kind: "booked" | "changed" | "cancelled",
+  sessionId: string,
+  tutor: { tutorId: string; settings?: SettingsRow; signInEmail?: string | null },
+  o: { call?: CallRow; previousStart?: string } = {},
+): Promise<boolean> {
+  return notifyAfterWrite({
+    kind,
+    sessionId,
+    previousStart: o.previousStart,
+    loadCall: async () => o.call ?? (await loadCall(admin, sessionId)),
+    loadTutor: async () =>
+      tutorContact(admin, tutor.tutorId, tutor.settings ?? (await loadSettings(admin, tutor.tutorId)), tutor.signInEmail),
+    loadQuestionnaire: (diagnosticId) => questionnaireUrl(admin, diagnosticId),
+  });
 }
 
 // ── Tutor: settings ─────────────────────────────────────────────────────────
@@ -250,8 +263,7 @@ router.post("/tutor/consultations", async (req: Request, res: Response) => {
         error: booked.taken === "slot_taken" ? "That time overlaps another session." : "This prospect already has a call booked.",
       });
     }
-    const call = await loadCall(ctx.admin, booked.id);
-    if (call) await notify(ctx.admin, "booked", call, await tutorContact(ctx.admin, ctx.tutorId, settings, ctx.email));
+    await notify(ctx.admin, "booked", booked.id, { tutorId: ctx.tutorId, settings, signInEmail: ctx.email });
     return res.json({ sessionId: booked.id });
   } catch (err) {
     return fail(res, err);
@@ -306,8 +318,7 @@ router.patch("/tutor/consultations/:id", async (req: Request, res: Response) => 
       });
       if (bookingError(error) === "slot_taken") return res.status(409).json({ error: "That time overlaps another session." });
       if (error) throw new Error(error.message);
-      const moved = await loadCall(ctx.admin, call.id);
-      if (moved) await notify(ctx.admin, "changed", moved, await tutorContact(ctx.admin, ctx.tutorId, settings, ctx.email), call.scheduled_at);
+      await notify(ctx.admin, "changed", call.id, { tutorId: ctx.tutorId, settings, signInEmail: ctx.email }, { previousStart: call.scheduled_at });
       return res.json({ ok: true });
     }
 
@@ -343,8 +354,7 @@ router.post("/tutor/consultations/:id/cancel", async (req: Request, res: Respons
     if (error) throw new Error(error.message);
     const row = (cancelled as CallRow[] | null)?.[0];
     if (!row) return res.status(409).json({ error: "Only a call that hasn't started can be cancelled." });
-    const settings = await loadSettings(ctx.admin, ctx.tutorId);
-    await notify(ctx.admin, "cancelled", row, await tutorContact(ctx.admin, ctx.tutorId, settings, ctx.email));
+    await notify(ctx.admin, "cancelled", row.id, { tutorId: ctx.tutorId, signInEmail: ctx.email }, { call: row });
     return res.json({ ok: true });
   } catch (err) {
     return fail(res, err);
@@ -450,8 +460,8 @@ router.post("/consultation/:token/book", async (req: Request, res: Response) => 
       return res.status(409).json({ error: "That time was just taken. Please pick another.", slots: await openTimes(admin, settings) });
     }
 
-    const call = await loadCall(admin, booked.id);
-    if (call) await notify(admin, "booked", call, await tutorContact(admin, d.tutor_id, settings));
+    // The reply is built from what was sent and the token generated here, not from a reload.
+    await notify(admin, "booked", booked.id, { tutorId: d.tutor_id, settings });
     return res.json({
       start: new Date(start).toISOString(),
       joinUrl: guestJoinUrl(booked.token),
@@ -515,7 +525,7 @@ router.post("/consultation/join/:guestToken", async (req: Request, res: Response
     const { apiKey, apiSecret, wsUrl } = getLiveKitConfig();
     if (!apiKey || !apiSecret) return res.status(503).json({ error: "Video calling isn't set up yet." });
     const at = new AccessToken(apiKey, apiSecret, {
-      identity: `guest-${call.id}`,
+      identity: guestIdentity(call.id),
       name: call.guest_name?.trim() || "Guest",
       ttl: "3h",
     });
