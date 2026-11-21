@@ -9,6 +9,7 @@ import { appUrl, getResend, parentConsentUrl, sendEmail } from "../lib/email";
 import { parentConsentEmail, needsParentConsent } from "../lib/parent-consent";
 import { contactEmailForLogin, isFamilyLogin } from "../lib/family";
 import { EMAIL_RE, parseDetails, parseSettings } from "../lib/admin-people";
+import { emailBlocks } from "../lib/email-blocks";
 import { logger } from "../lib/logger";
 
 // Admin → People: everything about one person, changed by an admin. Their
@@ -37,6 +38,19 @@ async function loadPerson(admin: SupabaseClient, id: string) {
   ]);
   if (error) throw new Error(error.message);
   return { profile, user: authUser?.user ?? null };
+}
+
+/**
+ * Addresses we email about this person: theirs (their parent's, for an added
+ * child), and the parent emails on their account and their tutors' rosters.
+ */
+async function personEmails(admin: SupabaseClient, profile: Profile, loginEmail: string | null): Promise<string[]> {
+  const [contact, { data: roster }] = await Promise.all([
+    loginEmail && isFamilyLogin(loginEmail) ? contactEmailForLogin(admin, loginEmail) : Promise.resolve(loginEmail),
+    admin.from("tutor_students").select("parent_email").eq("student_id", profile.id).not("parent_email", "is", null),
+  ]);
+  const rosterEmails = ((roster ?? []) as { parent_email: string }[]).map((r) => r.parent_email);
+  return [contact, profile.parent_email, ...rosterEmails].filter((e): e is string => !!e).map((e) => e.toLowerCase());
 }
 
 /** Their plan, from our rows and Stripe: null when they have none. */
@@ -84,6 +98,7 @@ router.get("/admin/people/:id", async (req: Request, res: Response) => {
     if (!profile) return fail(res, 404, "No account with that ID.");
     const loginEmail = user?.email ?? null;
     const family = isFamilyLogin(loginEmail);
+    const blocks = await emailBlocks(ctx.admin, await personEmails(ctx.admin, profile, loginEmail));
     res.json({
       profile,
       signIn: {
@@ -96,6 +111,8 @@ router.get("/admin/people/:id", async (req: Request, res: Response) => {
         createdAt: user?.created_at ?? null,
       },
       parentConsentNeeded: needsParentConsent(profile.dob, profile.year_level),
+      // Addresses that bounced or reported us as spam, so nothing is sent to them.
+      emailBlocks: blocks,
       billing: await billingSummary(ctx.admin, profile.id),
     });
   } catch (err) {
@@ -199,6 +216,28 @@ router.put("/admin/people/:id/parent", async (req: Request, res: Response) => {
   } catch (err) {
     logger.error({ err }, "admin-people: parent update failed");
     fail(res, 500, "Couldn't save the parent or guardian.");
+  }
+});
+
+// DELETE /admin/people/:id/email-block — { email }: send to this address again.
+// Only for one of this person's addresses. Resend keeps its own list: the
+// address has to come off that too (Resend → Suppressions) or it still won't arrive.
+router.delete("/admin/people/:id/email-block", async (req: Request, res: Response) => {
+  const ctx = await requireAdmin(req, res);
+  if (!ctx) return;
+  const email = String((req.body ?? {}).email ?? "").trim().toLowerCase();
+  if (!email) return fail(res, 400, "Which email?");
+  try {
+    const { profile, user } = await loadPerson(ctx.admin, pid(req));
+    if (!profile) return fail(res, 404, "No account with that ID.");
+    if (!(await personEmails(ctx.admin, profile, user?.email ?? null)).includes(email)) return fail(res, 400, "That isn't one of this person's emails.");
+    const { error } = await ctx.admin.from("email_blocks").delete().eq("email", email);
+    if (error) throw new Error(error.message);
+    logger.info({ admin: ctx.userId, person: profile.id }, "admin-people: email block cleared");
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error({ err }, "admin-people: clearing an email block failed");
+    fail(res, 500, "Couldn't clear it.");
   }
 });
 

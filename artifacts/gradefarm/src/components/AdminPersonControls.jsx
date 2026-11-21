@@ -4,7 +4,7 @@ import { FONT_B } from '../lib/adminUi'
 import { AU_STATES } from '../lib/subjectFilter'
 import {
   getPerson, savePersonDetails, savePersonParent, sendPersonPasswordReset, signOutPerson,
-  savePersonSettings, changePersonBilling,
+  savePersonSettings, changePersonBilling, clearPersonEmailBlock,
 } from '../lib/adminDb'
 
 // Admin → People → a person: their details, parent or guardian, sign-in and
@@ -187,6 +187,12 @@ export function PersonParent({ person, reload, onChanged }) {
 
 // ── Sign-in and settings ─────────────────────────────────────────────────────
 
+const BLOCK_REASON = {
+  complained: 'They reported one of our emails as spam',
+  bounced: 'An email to them bounced',
+  suppressed: 'Our email provider is refusing to send to them',
+}
+
 export function PersonSignIn({ person, reload, onChanged, isSelf }) {
   const { busy, msg, run } = useAction(reload, onChanged)
   const wait = loadingOrError(person)
@@ -207,6 +213,20 @@ export function PersonSignIn({ person, reload, onChanged, isSelf }) {
         {s.family ? "Signs in through their parent's account." : <>Signs in as <strong>{s.email}</strong>{s.emailConfirmedAt ? '' : ' (email not confirmed yet)'}.</>}
         {' '}{s.lastSignInAt ? `Last signed in ${fmtDate(s.lastSignInAt)}.` : 'Has never signed in.'}
       </div>
+      {(person.emailBlocks || []).map(b => (
+        <div key={b.email} role="note" style={{ fontSize: 12.5, lineHeight: 1.5, marginBottom: 10, padding: '8px 10px', borderRadius: 9, border: '1px solid var(--t-danger)', color: 'var(--t-textSub)' }}>
+          <strong style={{ color: 'var(--t-danger)' }}>{b.email} gets no emails.</strong>{' '}
+          {BLOCK_REASON[b.reason] || BLOCK_REASON.suppressed}
+          {b.subject ? ` (“${b.subject}”, ${fmtDate(b.occurred_at)})` : ` (${fmtDate(b.occurred_at)})`}
+          {b.detail && b.reason === 'bounced' ? `: ${b.detail}` : '.'}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6, flexWrap: 'wrap' }}>
+            <Btn disabled={!!busy} onClick={async () => {
+              if (!(await confirmDialog(`Email ${b.email} again? First check they want our emails, and remove the address from Resend's suppression list (Resend → Suppressions), or it still won't arrive.`, { confirm: 'Email them again' }))) return
+              run(`unblock:${b.email}`, () => clearPersonEmailBlock(p.id, b.email), `${b.email} will get emails again.`)
+            }}>{busy === `unblock:${b.email}` ? 'Clearing…' : 'Email them again'}</Btn>
+          </div>
+        </div>
+      ))}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
         <Btn disabled={!!busy || s.family || !s.email} title={s.family ? 'Their parent changes this password from their own account' : ''}
           onClick={() => run('reset', () => sendPersonPasswordReset(p.id), r => `A password reset link went to ${r.sentTo}.`)}>

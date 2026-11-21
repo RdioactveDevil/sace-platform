@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { Resend } from "resend";
 import { getServiceClient } from "./auth";
 import { contactEmailForLogin, isFamilyLogin } from "./family";
+import { blockedMessage, emailBlocks } from "./email-blocks";
 import { BODY, button, CARD, FONT, footer, footerText, LINE, MUTED, NAVY, page, wordmarkRow } from "./email-layout";
 
 /** Sender for every email the API sends. Must be on a domain verified in Resend. */
@@ -211,7 +212,13 @@ let nextSendAt = 0;
  * takes the next free slot before it waits, so emails sent together (a class
  * assignment, a series booking) queue up instead of all going at once.
  */
-export async function sendEmail(resend: Resend, email: OutgoingEmail): Promise<{ id: string | null; error: string | null }> {
+/**
+ * `blocked`: not sent because the address bounced or reported us as spam
+ * (lib/email-blocks.ts). Retrying won't help.
+ */
+export type SendResult = { id: string | null; error: string | null; blocked?: boolean };
+
+export async function sendEmail(resend: Resend, email: OutgoingEmail): Promise<SendResult> {
   const now = Date.now();
   const slot = Math.max(now, nextSendAt);
   nextSendAt = slot + MIN_SEND_INTERVAL_MS;
@@ -224,6 +231,12 @@ export async function sendEmail(resend: Resend, email: OutgoingEmail): Promise<{
     if (!parent) return { id: null, error: "No parent email for this family account" };
     to = parent;
   }
+
+  // Resend would quietly drop it (and still answer with an id), so say so here.
+  let admin: ReturnType<typeof getServiceClient> | null = null;
+  try { admin = getServiceClient(); } catch { /* not configured: send without the check */ }
+  const [block] = admin ? await emailBlocks(admin, [to]) : [];
+  if (block) return { id: null, error: blockedMessage(to, block.reason), blocked: true };
 
   const { html, text } = isPrebuilt(email.content) ? email.content : renderEmail(email.content);
   const headers: Record<string, string> = {};

@@ -7,6 +7,7 @@ import {
   verifyParentUnsubscribeToken, verifyUnsubscribeToken,
 } from "../lib/email";
 import { runAutomatedEmails } from "../lib/automated-emails";
+import { deliveryProblem, recordDeliveryProblem, verifyResendWebhook } from "../lib/email-blocks";
 import { runRecurringAssignments, type IssueSummary } from "../lib/recurring-assignments";
 import { logger } from "../lib/logger";
 
@@ -70,6 +71,39 @@ async function handleCron(req: Request, res: Response) {
 
 router.get("/cron/emails", handleCron);
 router.post("/cron/emails", handleCron);
+
+// ── Resend webhook: bounces and spam reports ────────────────────────────────
+// Resend → Webhooks → add https://www.gradefarm.com.au/api/email/resend-webhook
+// with the email.bounced, email.complained and email.suppressed events, and
+// put its signing secret in RESEND_WEBHOOK_SECRET. A hard bounce or spam
+// report blocks the address (lib/email-blocks.ts). A non-2xx answer makes
+// Resend retry, so only a bad signature or our own failure gets one.
+
+const header = (req: Request, name: string) => {
+  const v = req.headers[name];
+  return Array.isArray(v) ? v[0] : v;
+};
+
+router.post("/email/resend-webhook", async (req: Request, res: Response) => {
+  const secret = process.env.RESEND_WEBHOOK_SECRET;
+  if (!secret) return void res.status(503).json({ error: "RESEND_WEBHOOK_SECRET is not configured" });
+  const raw = (req as Request & { rawBody?: Buffer }).rawBody;
+  const signed = !!raw && verifyResendWebhook(raw, {
+    id: header(req, "svix-id"), timestamp: header(req, "svix-timestamp"), signature: header(req, "svix-signature"),
+  }, secret);
+  if (!signed) return void res.status(401).json({ error: "Bad signature" });
+
+  const problem = deliveryProblem(req.body);
+  if (!problem) return void res.json({ ok: true, ignored: true });
+  try {
+    await recordDeliveryProblem(getServiceClient(), problem);
+    logger.info({ reason: problem.reason, to: problem.emails.map(maskEmail) }, "emails: address blocked");
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error({ err }, "emails: couldn't record a bounce or spam report");
+    res.status(500).json({ error: "Couldn't record it" });
+  }
+});
 
 // ── Unsubscribe ─────────────────────────────────────────────────────────────
 // GET shows a confirm button rather than unsubscribing straight away, because

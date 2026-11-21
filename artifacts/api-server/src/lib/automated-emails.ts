@@ -22,7 +22,9 @@
  *
  * The job is safe to run at any cadence: each email is claimed in email_log
  * (claim_email RPC) before it is sent, so it goes out at most once. Reminders
- * respect profiles.emails_unsubscribed_at.
+ * respect profiles.emails_unsubscribed_at. An address that bounced or reported
+ * us as spam isn't sent to (lib/email-blocks.ts): those count as `blocked`
+ * and aren't retried.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Resend } from "resend";
@@ -98,6 +100,8 @@ export interface RunSummary {
   dryRun: boolean;
   sent: Partial<Record<EmailKind, number>>;
   failed: Partial<Record<EmailKind, number>>;
+  /** Not sent: the address bounced or reported us as spam. */
+  blocked: Partial<Record<EmailKind, number>>;
   /** Dry run only: the emails a real run would send now. */
   planned?: Array<{ kind: EmailKind; to: string; subject: string }>;
   budgetExhausted: boolean;
@@ -207,7 +211,9 @@ async function loadDone(job: Job, kind: EmailKind, refIds: string[]): Promise<Se
   const staleBefore = job.now.getTime() - 10 * MINUTE;
   for (const r of (data ?? []) as Array<{ ref_id: string; recipient_id: string; status: string; attempts: number; updated_at: string }>) {
     const inFlight = r.status === "pending" && new Date(r.updated_at).getTime() >= staleBefore;
-    if (r.status === "sent" || r.attempts >= 3 || inFlight) done.add(`${r.ref_id}:${r.recipient_id}`);
+    // Only a failed send is tried again; sent, blocked, bounced or reported ones are done.
+    const retryable = r.status === "failed" || r.status === "pending";
+    if (!retryable || r.attempts >= 3 || inFlight) done.add(`${r.ref_id}:${r.recipient_id}`);
   }
   return done;
 }
@@ -259,7 +265,8 @@ async function deliver(
     .from("email_log")
     .update(
       result.error
-        ? { status: "failed", error: result.error.slice(0, 500), updated_at: new Date().toISOString() }
+        // 'blocked' isn't retried: claim_email only takes back 'failed' rows.
+        ? { status: result.blocked ? "blocked" : "failed", error: result.error.slice(0, 500), updated_at: new Date().toISOString() }
         : { status: "sent", provider_id: result.id, updated_at: new Date().toISOString() },
     )
     .eq("kind", kind)
@@ -267,7 +274,9 @@ async function deliver(
     .in("ref_id", claimed);
   if (logErr) logger.error({ err: logErr, kind }, "emails: could not record send result");
 
-  if (result.error) {
+  if (result.blocked) {
+    bump(job.summary.blocked, kind);
+  } else if (result.error) {
     bump(job.summary.failed, kind);
     logger.warn({ kind, recipient: recipient.id, error: result.error }, "emails: send failed");
   } else {
@@ -948,7 +957,9 @@ async function runParentReports(job: Job) {
     const result = await sendEmail(job.resend!, {
       to: row.parent_email, subject, content, idempotencyKey: `parent_report:${row.tutor_id}:${row.student_id}:${week}`,
     });
-    if (result.error) {
+    if (result.blocked) {
+      bump(job.summary.blocked, "parent_report");
+    } else if (result.error) {
       await job.admin.from("tutor_students").update({ parent_report_week: row.parent_report_week })
         .eq("tutor_id", row.tutor_id).eq("student_id", row.student_id).eq("parent_report_week", week);
       bump(job.summary.failed, "parent_report");
@@ -1033,7 +1044,9 @@ async function runAccountParentReports(job: Job) {
     const result = await sendEmail(job.resend!, {
       to, subject, content, idempotencyKey: `parent_report:account:${row.id}:${week}`,
     });
-    if (result.error) {
+    if (result.blocked) {
+      bump(job.summary.blocked, "parent_report");
+    } else if (result.error) {
       await job.admin.from("profiles").update({ parent_report_week: row.parent_report_week })
         .eq("id", row.id).eq("parent_report_week", week);
       bump(job.summary.failed, "parent_report");
@@ -1049,7 +1062,7 @@ async function runAccountParentReports(job: Job) {
 export async function runAutomatedEmails(admin: SupabaseClient, resend: Resend | null, opts: RunOptions = {}): Promise<RunSummary> {
   const dryRun = !!opts.dryRun;
   if (!dryRun && !resend) throw new Error("RESEND_API_KEY is not configured");
-  const summary: RunSummary = { dryRun, sent: {}, failed: {}, budgetExhausted: false, ...(dryRun ? { planned: [] } : {}) };
+  const summary: RunSummary = { dryRun, sent: {}, failed: {}, blocked: {}, budgetExhausted: false, ...(dryRun ? { planned: [] } : {}) };
   const job: Job = {
     admin,
     resend,
