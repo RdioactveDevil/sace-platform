@@ -149,7 +149,7 @@ export async function liveBooking(
 export const guestJoinUrl = (guestToken: string) => `${appUrl()}/call/${encodeURIComponent(guestToken)}`;
 
 /** The tutor's own way in: the session in their Lessons tab, signed in. */
-const tutorJoinUrl = (sessionId: string) => `${appUrl()}/session/${encodeURIComponent(sessionId)}`;
+export const tutorJoinUrl = (sessionId: string) => `${appUrl()}/session/${encodeURIComponent(sessionId)}`;
 
 /** The address in EMAIL_FROM ("Name <a@b>" or "a@b"). */
 function fromAddress(): string {

@@ -16,6 +16,12 @@
  *                             diagnostic hasn't started it 2 days later
  *                             (recorded on the diagnostic: no account, so no
  *                             email_log row; lib/prospect-status.ts)
+ *   • consultation_reminder – a consultation call's guest, their parent and the
+ *                             tutor, at the tutor's reminder times (claimed in
+ *                             consultation_reminders_sent: guests have no account)
+ *   • book_your_call        – once, a day after a prospect finishes a link
+ *                             diagnostic, if they haven't booked a call and the
+ *                             tutor takes bookings (booking_reminded_at)
  *   • diagnostic_done       – the student's tutors (the one who set it and any
  *                             others on their roster), when they finish one
  *   • parent_report         – Sunday evening, a student's week to the parent
@@ -42,6 +48,10 @@ import { studentSummary } from "./student-diagnostic";
 import { rosterTutorIds } from "./student-tutors";
 import { doneRecipients, dueForProspectReminder, PROSPECT_TTL_MS, type ProspectRow } from "./prospect-status";
 import { prospectFinishedEmail, prospectLink, prospectReminderEmail, prospectSenderName } from "./prospect-emails";
+import { dueBookYourCall, dueConsultationReminders, BOOK_YOUR_CALL_AFTER_MS, BOOK_YOUR_CALL_UNTIL_MS } from "./consultation-reminders";
+import { bookYourCallEmail, consultationReminderEmail } from "./consultation-emails";
+import { hasHours, type SettingsRow } from "./consultation-access";
+import { guestJoinUrl, tutorJoinUrl } from "./consultation-service";
 import { loadParentReport, parentReportEmail } from "./parent-reports";
 import { planIsLive, tutorBillingRow, tutorPlanOptions, type TutorBillingRow } from "./tutor-plan";
 
@@ -58,6 +68,8 @@ export type EmailKind =
   | "diagnostic_reminder"
   | "diagnostic_done"
   | "prospect_reminder"
+  | "consultation_reminder"
+  | "book_your_call"
   | "parent_report";
 
 const MINUTE = 60_000;
@@ -403,6 +415,7 @@ async function runSessionReminders(job: Job) {
     .from("tutoring_sessions")
     .select("id, tutor_id, scheduled_at, duration_minutes, title, session_type, series_id, livekit_room_name, created_at")
     .eq("status", "scheduled")
+    .neq("session_type", "consultation") // consultations have their own reminders (runConsultationReminders)
     .gt("scheduled_at", job.now.toISOString())
     .lte("scheduled_at", new Date(nowMs + 24 * HOUR).toISOString())
     .order("scheduled_at", { ascending: true })
@@ -969,6 +982,195 @@ async function runProspectReminders(job: Job) {
   }
 }
 
+// ── Consultation calls ──────────────────────────────────────────────────────
+
+type ConsultationRow = {
+  id: string; tutor_id: string; scheduled_at: string; duration_minutes: number; created_at: string;
+  guest_email: string | null; guest_name: string | null; guest_parent_email: string | null;
+  guest_time_zone: string | null; guest_token: string | null; reminder_minutes: number[] | null;
+};
+
+/** The tutors' own display names (as prospects see them) and booking settings. */
+async function loadTutorBooking(job: Job, tutorIds: string[]) {
+  const { data: profiles, error } = await job.admin.from("profiles").select("id, display_name").in("id", tutorIds);
+  if (error) throw new Error(`profiles: ${error.message}`);
+  const { data: settings, error: setErr } = await job.admin
+    .from("tutor_booking_settings").select("tutor_id, weekly_hours, time_zone").in("tutor_id", tutorIds);
+  if (setErr) throw new Error(`tutor_booking_settings: ${setErr.message}`);
+  return {
+    names: new Map(((profiles ?? []) as { id: string; display_name: string | null }[]).map((p) => [p.id, prospectSenderName(p.display_name)])),
+    settings: new Map(((settings ?? []) as Pick<SettingsRow, "tutor_id" | "weekly_hours" | "time_zone">[]).map((r) => [r.tutor_id, r])),
+  };
+}
+
+/** The guest, their parent and the tutor, at the tutor's chosen lead times before a call. */
+async function runConsultationReminders(job: Job) {
+  const nowMs = job.now.getTime();
+  const { data, error } = await job.admin
+    .from("tutoring_sessions")
+    .select("id, tutor_id, scheduled_at, duration_minutes, created_at, guest_email, guest_name, guest_parent_email, guest_time_zone, guest_token, reminder_minutes")
+    .eq("session_type", "consultation")
+    .eq("status", "scheduled")
+    .gt("scheduled_at", job.now.toISOString())
+    .lte("scheduled_at", new Date(nowMs + 8 * DAY).toISOString())
+    .order("scheduled_at", { ascending: true })
+    .limit(500);
+  if (error) throw new Error(`tutoring_sessions: ${error.message}`);
+  const calls = (data ?? []) as ConsultationRow[];
+  if (calls.length === 0) return;
+
+  const { data: sentRows, error: sentErr } = await job.admin
+    .from("consultation_reminders_sent").select("session_id, minutes, recipient").in("session_id", calls.map((c) => c.id));
+  if (sentErr) throw new Error(`consultation_reminders_sent: ${sentErr.message}`);
+  const sentBySession = new Map<string, Set<string>>();
+  for (const r of (sentRows ?? []) as Array<{ session_id: string; minutes: number; recipient: string }>) {
+    const set = sentBySession.get(r.session_id) ?? new Set<string>();
+    set.add(`${r.minutes}:${r.recipient}`);
+    sentBySession.set(r.session_id, set);
+  }
+
+  const tutorIds = [...new Set(calls.map((c) => c.tutor_id))];
+  const tutors = await loadRecipients(job, tutorIds);
+  const { names, settings } = await loadTutorBooking(job, tutorIds);
+
+  for (const c of calls) {
+    const tutor = tutors.get(c.tutor_id);
+    if (!tutor || !c.guest_email) continue; // tutor deactivated
+    const who: Array<"guest" | "parent" | "tutor"> = ["guest"];
+    if (c.guest_parent_email) who.push("parent");
+    if (!tutor.unsubscribed) who.push("tutor");
+    const due = dueConsultationReminders(
+      { scheduled_at: c.scheduled_at, created_at: c.created_at, reminder_minutes: c.reminder_minutes ?? [] },
+      sentBySession.get(c.id) ?? new Set(), who, nowMs,
+    );
+    // Only the latest due lead per recipient: a missed earlier one isn't sent late on top.
+    const latest = new Map<string, number>();
+    for (const d of due) latest.set(d.recipient, Math.min(latest.get(d.recipient) ?? Infinity, d.minutes));
+    const tutorName = names.get(c.tutor_id) ?? prospectSenderName(null);
+    const tutorZone = settings.get(c.tutor_id)?.time_zone || TIME_ZONE;
+    for (const { minutes, recipient } of due) {
+      if (latest.get(recipient) !== minutes) continue;
+      const to = recipient === "guest" ? c.guest_email : recipient === "parent" ? c.guest_parent_email : tutor.email;
+      if (!to) continue;
+      if (job.budget <= 0) {
+        job.summary.budgetExhausted = true;
+        return;
+      }
+      const isTutor = recipient === "tutor";
+      const joinUrl = isTutor ? tutorJoinUrl(c.id) : c.guest_token ? guestJoinUrl(c.guest_token) : null;
+      if (!joinUrl) continue;
+      const { subject, content } = consultationReminderEmail({
+        to: recipient as "guest" | "parent" | "tutor",
+        tutorName,
+        studentName: c.guest_name?.trim() || "",
+        start: c.scheduled_at,
+        timeZone: isTutor ? tutorZone : c.guest_time_zone || tutorZone,
+        minutes: c.duration_minutes,
+        joinUrl,
+        lead: minutes,
+      });
+      if (job.dryRun) {
+        job.summary.planned!.push({ kind: "consultation_reminder", to, subject });
+        job.budget--;
+        continue;
+      }
+      // Claim it: the primary key makes a second run's insert fail.
+      const { error: claimErr } = await job.admin
+        .from("consultation_reminders_sent").insert({ session_id: c.id, minutes, recipient });
+      if (claimErr) {
+        if (claimErr.code === "23505") continue;
+        throw new Error(`consultation_reminders_sent: ${claimErr.message}`);
+      }
+      job.budget--;
+      const result = await sendEmail(job.resend!, {
+        to, subject, content,
+        idempotencyKey: `consultation_reminder:${c.id}:${minutes}:${recipient}`,
+        ...(isTutor ? {} : { replyTo: tutor.email }),
+      });
+      if (result.error) {
+        if (!result.blocked) {
+          await job.admin.from("consultation_reminders_sent").delete()
+            .eq("session_id", c.id).eq("minutes", minutes).eq("recipient", recipient);
+        }
+        bump(result.blocked ? job.summary.blocked : job.summary.failed, "consultation_reminder");
+        logger.warn({ sessionId: c.id, recipient, error: result.error }, "emails: consultation reminder failed");
+      } else {
+        bump(job.summary.sent, "consultation_reminder");
+      }
+    }
+  }
+}
+
+/** Once, a day after a prospect finished a link diagnostic: pick a time for a call. */
+async function runBookYourCall(job: Job) {
+  if (!daytime(job)) return;
+  const nowMs = job.now.getTime();
+  const { data, error } = await job.admin
+    .from("diagnostic_assessments")
+    .select("id, token, tutor_id, subjects, status, student_id, prospect_email, completed_at, booking_reminded_at")
+    .is("student_id", null)
+    .not("prospect_email", "is", null)
+    .eq("status", "completed")
+    .is("booking_reminded_at", null)
+    .is("cancelled_at", null)
+    .lte("completed_at", new Date(nowMs - BOOK_YOUR_CALL_AFTER_MS).toISOString())
+    .gt("completed_at", new Date(nowMs - BOOK_YOUR_CALL_UNTIL_MS).toISOString())
+    .limit(500);
+  if (error) throw new Error(`diagnostic_assessments: ${error.message}`);
+  type Row = { id: string; token: string; tutor_id: string; subjects: { name?: string }[] | null; status: string; student_id: string | null; prospect_email: string | null; completed_at: string | null; booking_reminded_at: string | null };
+  const rows = (data ?? []) as Row[];
+  if (rows.length === 0) return;
+
+  const tutorIds = [...new Set(rows.map((d) => d.tutor_id))];
+  const tutors = await loadRecipients(job, tutorIds);
+  const { names, settings } = await loadTutorBooking(job, tutorIds);
+  const { data: live, error: liveErr } = await job.admin
+    .from("tutoring_sessions").select("tutor_id, guest_email")
+    .eq("session_type", "consultation").eq("status", "scheduled").in("tutor_id", tutorIds).not("guest_email", "is", null);
+  if (liveErr) throw new Error(`tutoring_sessions: ${liveErr.message}`);
+  const booked = new Set(((live ?? []) as { tutor_id: string; guest_email: string }[]).map((r) => `${r.tutor_id}:${r.guest_email.toLowerCase()}`));
+
+  for (const d of rows) {
+    const tutor = tutors.get(d.tutor_id);
+    if (!tutor) continue; // tutor deactivated
+    const hasLive = booked.has(`${d.tutor_id}:${d.prospect_email!.toLowerCase()}`);
+    const tutorHasHours = hasHours((settings.get(d.tutor_id)?.weekly_hours ?? {}) as Parameters<typeof hasHours>[0]);
+    if (!dueBookYourCall(d, hasLive, tutorHasHours, nowMs)) continue;
+    if (job.budget <= 0) {
+      job.summary.budgetExhausted = true;
+      return;
+    }
+    const { subject, content } = bookYourCallEmail({
+      tutorName: names.get(d.tutor_id) ?? prospectSenderName(null),
+      subject: d.subjects?.[0]?.name || "your subject",
+      bookUrl: `${appUrl()}/book/${encodeURIComponent(d.token)}`,
+    });
+    if (job.dryRun) {
+      job.summary.planned!.push({ kind: "book_your_call", to: d.prospect_email!, subject });
+      job.budget--;
+      continue;
+    }
+    const remindedAt = new Date().toISOString();
+    const { data: claimed, error: claimErr } = await job.admin
+      .from("diagnostic_assessments").update({ booking_reminded_at: remindedAt })
+      .eq("id", d.id).is("booking_reminded_at", null).select("id");
+    if (claimErr) throw new Error(`diagnostic_assessments: ${claimErr.message}`);
+    if (!claimed?.length) continue;
+    job.budget--;
+    const result = await sendEmail(job.resend!, {
+      to: d.prospect_email!, subject, content, replyTo: tutor.email,
+      idempotencyKey: `book_your_call:${d.id}`,
+    });
+    if (result.error) {
+      if (!result.blocked) await job.admin.from("diagnostic_assessments").update({ booking_reminded_at: null }).eq("id", d.id).eq("booking_reminded_at", remindedAt);
+      bump(result.blocked ? job.summary.blocked : job.summary.failed, "book_your_call");
+      logger.warn({ diagnosticId: d.id, error: result.error }, "emails: book-your-call failed");
+    } else {
+      bump(job.summary.sent, "book_your_call");
+    }
+  }
+}
+
 // ── Parent progress reports ─────────────────────────────────────────────────
 
 export function localWeekday(date: Date): string {
@@ -1172,6 +1374,8 @@ export async function runAutomatedEmails(admin: SupabaseClient, resend: Resend |
     ["diagnostic results", runDiagnosticDone],
     ["diagnostic reminders", runDiagnosticReminders],
     ["prospect reminders", runProspectReminders],
+    ["consultation reminders", runConsultationReminders],
+    ["book your call", runBookYourCall],
     ["invite reminders", runInviteReminders],
     ["parent reports", runParentReports],
     ["account parent reports", runAccountParentReports],
