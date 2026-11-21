@@ -13,6 +13,7 @@ import { Router, type Request, type Response } from "express";
 import { logger } from "../lib/logger";
 import { prospectSenderName } from "../lib/prospect-emails";
 import {
+  publicQuestionnaire,
   questionnaireOpen,
   snapshotFrom,
   validateAnswers,
@@ -95,9 +96,10 @@ router.get("/questionnaire/:token", async (req: Request, res: Response) => {
     if (!found) return res.status(404).json({ error: "Not found" });
     const { admin, row, open } = found;
     const { data: tutor } = await admin.from("profiles").select("display_name").eq("id", row.tutor_id).maybeSingle<{ display_name: string | null }>();
+    const pub = publicQuestionnaire(row.questionnaire);
     return res.json({
-      intro: row.questionnaire.intro,
-      items: row.questionnaire.items,
+      intro: pub.intro,
+      items: pub.items,
       senderName: prospectSenderName(tutor?.display_name),
       studentName: (row.submitted_by_name || row.student_name || "").trim() || null,
       submitted: !!row.questionnaire_submitted_at,

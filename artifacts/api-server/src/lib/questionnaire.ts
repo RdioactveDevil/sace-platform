@@ -258,6 +258,17 @@ export function snapshotFrom(q: Questionnaire): Questionnaire {
   return JSON.parse(JSON.stringify(q)) as Questionnaire;
 }
 
+/** What a prospect may see: the snapshot without red flags (those are for the tutor only). */
+export function publicQuestionnaire(q: Questionnaire): Questionnaire {
+  return {
+    intro: q.intro,
+    items: q.items.map((item) => {
+      if (!item.options) return { ...item };
+      return { ...item, options: item.options.map(({ id, label }) => ({ id, label })) };
+    }),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Validating answers
 // ---------------------------------------------------------------------------

@@ -7,6 +7,7 @@ import {
   flaggedAnswers,
   questionnaireLinkFor,
   questionnaireOpen,
+  publicQuestionnaire,
   questionnaireStatus,
   snapshotFrom,
   validateAnswers,
@@ -264,4 +265,21 @@ test("dueQuestionnaireReminder: from a day before the start until the start", ()
   assert.equal(due({ now: start - 5 * H, submittedAt: "2027-03-09T00:00:00Z" }), false);
   assert.equal(due({ now: start - 5 * H, remindedAt: "2027-03-09T00:00:00Z" }), false);
   assert.equal(due({ now: start - 5 * H, call: null }), false);
+});
+
+test("publicQuestionnaire drops red flags and keeps everything else", () => {
+  const q: Questionnaire = {
+    intro: "Hi",
+    items: [
+      { id: "s", type: "section", label: "Sec" },
+      { id: "a", type: "one", label: "Q", help: "h", required: true, other: true, options: [{ id: "o1", label: "Yes", flag: true }, { id: "o2", label: "No" }] },
+      { id: "b", type: "short", label: "T" },
+    ],
+  };
+  const pub = publicQuestionnaire(q);
+  assert.ok(!JSON.stringify(pub).includes("flag"));
+  assert.deepEqual(pub.items[1], { id: "a", type: "one", label: "Q", help: "h", required: true, other: true, options: [{ id: "o1", label: "Yes" }, { id: "o2", label: "No" }] });
+  assert.equal(pub.intro, "Hi");
+  assert.equal(pub.items.length, 3);
+  assert.equal(q.items[1].options![0].flag, true, "the input is not changed");
 });
