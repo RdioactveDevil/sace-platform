@@ -2059,11 +2059,21 @@ export async function generateDiagnosticQuestions({ yearLevel, subjects }) {
 }
 
 /** Save a diagnostic assessment and get the unique student link. */
-export async function createDiagnosticAssessment({ yearLevel, subjects, questions, studentName, preCallFormUrl }) {
+export async function createDiagnosticAssessment({ yearLevel, subjects, questions, studentName, preCallFormUrl, prospectEmail }) {
   return tutorFetch('/api/tutor/diagnostic/create', {
     method: 'POST',
-    body: JSON.stringify({ yearLevel, subjects, questions, studentName, preCallFormUrl }),
+    body: JSON.stringify({ yearLevel, subjects, questions, studentName, preCallFormUrl, prospectEmail }),
   })
+}
+
+/** Email a sent diagnostic to the prospect again (restarts its 30 days and its reminder). */
+export async function resendDiagnostic(assessmentId) {
+  return tutorFetch(`/api/tutor/diagnostic/${encodeURIComponent(assessmentId)}/resend`, { method: 'POST' })
+}
+
+/** Cancel a sent diagnostic: its link stops working. */
+export async function cancelDiagnostic(assessmentId) {
+  return tutorFetch(`/api/tutor/diagnostic/${encodeURIComponent(assessmentId)}/cancel`, { method: 'POST' })
 }
 
 /** List all diagnostics created by this tutor. */

@@ -45,6 +45,8 @@ import {
   downloadWritingReportPdf,
   generateDiagnosticQuestions,
   createDiagnosticAssessment,
+  resendDiagnostic,
+  cancelDiagnostic,
   fetchDiagnosticAssessments,
   fetchDiagnosticReport,
   fetchTutorResources,
@@ -53,6 +55,7 @@ import {
 } from '../lib/db'
 import { fetchLiveCurricula, loadCurriculumMacroGroups } from '../lib/curriculaDb'
 import { dbDiagnosticSubject } from '../lib/diagnosticSubjects'
+import { statusChip } from '../lib/diagnosticStatus'
 import { ASSIGNMENT_DIFFICULTIES, assignmentGoalLabel } from '../lib/engine'
 import { WEEKDAYS, defaultDueDays, describeDue, describeRepeat, localYmd } from '../lib/recurring'
 import SegmentedToggle from './SegmentedToggle'
@@ -1640,6 +1643,8 @@ function getSubjectsForYearLevel(yearLevel, subjectList = ALL_DIAGNOSTIC_SUBJECT
   return subjectList.filter(s => s.yearGroups.includes('primary'))
 }
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
 function DiagnosticTab({ profile, theme }) {
   const t = THEMES[theme]
 
@@ -1668,6 +1673,7 @@ function DiagnosticTab({ profile, theme }) {
   const [selectedSubtopicIds, setSelectedSubtopicIds] = useState([]) // database subjects; none = whole subject
   const [writingType, setWritingType] = useState('paragraph')
   const [studentName, setStudentName] = useState('')
+  const [prospectEmail, setProspectEmail] = useState('')
   const [preCallFormUrl, setPreCallFormUrl] = useState('')
 
   // ── Generated data ──
@@ -1677,6 +1683,9 @@ function DiagnosticTab({ profile, theme }) {
   const [saving, setSaving]           = useState(false)
   const [saveError, setSaveError]     = useState('')
   const [createdLink, setCreatedLink] = useState('')
+  const [createdSend, setCreatedSend] = useState(null) // { id, email, emailed, emailError } when an email was given
+  const [rowBusy, setRowBusy] = useState('')            // diagnostic id being resent / cancelled
+  const [rowError, setRowError] = useState('')
   const [copied, setCopied]           = useState(false)
 
   // ── Past diagnostics list ──
@@ -1719,6 +1728,7 @@ function DiagnosticTab({ profile, theme }) {
     if (!yearLevel) { setGenError('Please select a year level.'); return }
     if (!selectedSubjectId) { setGenError('Please select a subject.'); return }
     if (!selectedSubject.fromDb && selectedTopics.length === 0) { setGenError('Please select at least one topic.'); return }
+    if (prospectEmail.trim() && !EMAIL_RE.test(prospectEmail.trim())) { setGenError("Enter a valid email address for the student, or leave it blank."); return }
     const subjectConfig = buildSubjectConfig()
 
 
@@ -1744,14 +1754,42 @@ function DiagnosticTab({ profile, theme }) {
         questions,
         studentName: studentName.trim() || null,
         preCallFormUrl: preCallFormUrl.trim() || null,
+        prospectEmail: prospectEmail.trim() || null,
       })
       setCreatedLink(json.link)
+      setCreatedSend(prospectEmail.trim() ? { id: json.id, email: prospectEmail.trim().toLowerCase(), emailed: !!json.emailed, emailError: json.emailError || '' } : null)
       setStep('created')
       await loadList()
     } catch (err) {
       setSaveError(err.message || 'Failed to save assessment.')
     }
     setSaving(false)
+  }
+
+  // Resend or cancel a diagnostic emailed to a prospect, then refresh the list.
+  const runRowAction = async (id, fn) => {
+    setRowError('')
+    setRowBusy(id)
+    try {
+      await fn()
+      await loadList()
+      return true
+    } catch (err) {
+      setRowError(err.message || 'That didn\'t work. Please try again.')
+      return false
+    } finally {
+      setRowBusy('')
+    }
+  }
+  const handleResend = (d) => runRowAction(d.id, () => resendDiagnostic(d.id))
+  const handleCancel = async (d) => {
+    const ok = await confirmDialog(`Cancel this diagnostic? The link stops working${d.prospect_email ? ` for ${d.prospect_email}` : ''}, and you can't undo this.`, { confirm: 'Cancel diagnostic', cancel: 'Keep it', danger: true })
+    if (ok) runRowAction(d.id, () => cancelDiagnostic(d.id))
+  }
+  const handleCreatedResend = async () => {
+    if (!createdSend) return
+    const ok = await runRowAction(createdSend.id, () => resendDiagnostic(createdSend.id))
+    if (ok) setCreatedSend(s => ({ ...s, emailed: true, emailError: '' }))
   }
 
   const handleCopy = async (link) => {
@@ -1784,7 +1822,9 @@ function DiagnosticTab({ profile, theme }) {
     setSelectedSubtopicIds([])
     setWritingType('paragraph')
     setStudentName('')
+    setProspectEmail('')
     setPreCallFormUrl('')
+    setCreatedSend(null)
     setQuestions([])
     setCreatedLink('')
     setGenError('')
@@ -1808,7 +1848,7 @@ function DiagnosticTab({ profile, theme }) {
       <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
         {[
           { key: 'form',    label: 'New diagnostic' },
-          { key: 'list',    label: `Past diagnostics (${diagnostics.length})` },
+          { key: 'list',    label: `Sent diagnostics (${diagnostics.length})` },
         ].map(btn => (
           <button
             key={btn.key}
@@ -1906,12 +1946,19 @@ function DiagnosticTab({ profile, theme }) {
                 </div>
               )}
 
-              {/* Optional student name */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              {/* Who it's for: name and, to email it to them, the student's own email */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
                 <div>
-                  <label style={labelStyle}>Student name <span style={{ fontWeight: 400, textTransform: 'none', color: t.textFaint }}>(optional)</span></label>
+                  <label style={labelStyle}>Student's name <span style={{ fontWeight: 400, textTransform: 'none', color: t.textFaint }}>(optional)</span></label>
                   <input className="td-input-gold" value={studentName} onChange={e => setStudentName(e.target.value)} placeholder="e.g. Sarah Jones" style={inputStyle} />
                 </div>
+                <div>
+                  <label style={labelStyle}>Student's email <span style={{ fontWeight: 400, textTransform: 'none', color: t.textFaint }}>(optional)</span></label>
+                  <input className="td-input-gold" type="email" value={prospectEmail} onChange={e => setProspectEmail(e.target.value)} placeholder="e.g. sarah@example.com" style={inputStyle} />
+                  <div style={{ fontSize: 11, color: t.textFaint, marginTop: 4 }}>We'll email them the link. Use the student's own email.</div>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
                 <div>
                   <label style={labelStyle}>Pre-lesson questionnaire link <span style={{ fontWeight: 400, textTransform: 'none', color: t.textFaint }}>(optional)</span></label>
                   <input className="td-input-gold" value={preCallFormUrl} onChange={e => setPreCallFormUrl(e.target.value)} placeholder="https://forms.google.com/…" style={inputStyle} />
@@ -2052,9 +2099,21 @@ function DiagnosticTab({ profile, theme }) {
               <div style={{ width: 44, height: 44, borderRadius: 12, background: t.successBg, border: `1px solid ${t.success}4d`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><CircleCheck size={24} color={t.success} aria-hidden="true" /></div>
               <div>
                 <div style={{ fontSize: 17, fontWeight: 800, color: t.text }}>Test created</div>
-                <div style={{ fontSize: 13, color: t.textMuted }}>Share this link with the student or parent</div>
+                <div style={{ fontSize: 13, color: t.textMuted }}>
+                  {createdSend?.emailed ? `Sent to ${createdSend.email}. You can also copy the link below.` : 'Share this link with the student'}
+                </div>
               </div>
             </div>
+
+            {createdSend && !createdSend.emailed && (
+              <div role="alert" style={{ fontSize: 13, color: t.danger, padding: '10px 14px', borderRadius: 8, background: t.dangerBg, border: `1px solid ${t.danger}40`, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <span style={{ flex: 1, minWidth: 200 }}>The test is saved, but the email to {createdSend.email} wasn't sent. {createdSend.emailError}</span>
+                <button onClick={handleCreatedResend} disabled={rowBusy === createdSend.id} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${t.danger}`, background: 'transparent', color: t.danger, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>
+                  {rowBusy === createdSend.id ? 'Sending…' : 'Resend'}
+                </button>
+              </div>
+            )}
+            {createdSend && rowError && <div style={{ fontSize: 12, color: t.danger }}>{rowError}</div>}
 
             <div style={{ background: t.bg, border: `1px solid ${t.border}`, borderRadius: 10, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: 'var(--t-goldText)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'monospace' }}>{createdLink}</div>
@@ -2069,10 +2128,11 @@ function DiagnosticTab({ profile, theme }) {
             <div style={{ background: 'var(--t-bgSubtle)', border: '1px solid var(--t-border)', borderRadius: 10, padding: '14px 16px' }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--t-goldText)', marginBottom: 6 }}>What happens next?</div>
               <ol style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 5 }}>
-                <li style={{ fontSize: 13, color: t.textMuted }}>Send the link to the student or parent</li>
+                {!createdSend?.emailed && <li style={{ fontSize: 13, color: t.textMuted }}>Send the link to the student</li>}
+                {createdSend?.emailed && <li style={{ fontSize: 13, color: t.textMuted }}>If they haven't started in 2 days, they get one reminder</li>}
                 <li style={{ fontSize: 13, color: t.textMuted }}>The student opens the link and completes the test at their own pace</li>
                 <li style={{ fontSize: 13, color: t.textMuted }}>AI marks the assessment automatically on submission</li>
-                <li style={{ fontSize: 13, color: t.textMuted }}>The full report appears here in your tutor portal</li>
+                <li style={{ fontSize: 13, color: t.textMuted }}>The full report appears here in your tutor portal, and we email you when it's in</li>
                 {preCallFormUrl && <li style={{ fontSize: 13, color: t.textMuted }}>After submission, the student is redirected to your pre-call questionnaire</li>}
               </ol>
             </div>
@@ -2093,9 +2153,10 @@ function DiagnosticTab({ profile, theme }) {
       {step === 'list' && (
         <div style={card}>
           <div style={{ ...sectionHdr }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Past diagnostics</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Sent diagnostics</div>
             <button onClick={loadList} style={{ padding: '5px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>Refresh</button>
           </div>
+          {rowError && <div role="alert" style={{ margin: '12px 20px 0', fontSize: 13, color: t.danger, padding: '10px 14px', borderRadius: 8, background: t.dangerBg, border: `1px solid ${t.danger}40` }}>{rowError}</div>}
           {listLoading ? (
             <div style={{ padding: 32, textAlign: 'center', color: t.textMuted, fontSize: 13 }}>Loading…</div>
           ) : diagnostics.length === 0 ? (
@@ -2105,24 +2166,43 @@ function DiagnosticTab({ profile, theme }) {
               {diagnostics.map(d => {
                 const completed = d.status === 'completed'
                 const subjectNames = (d.subjects || []).map(s => s.name).join(', ')
+                // A prospect's (link) diagnostic shows where it's up to; a roster student's keeps Pending / Completed.
+                const chip = d.student_id
+                  ? { label: completed ? 'Completed' : 'Pending', tone: completed ? 'success' : 'gold' }
+                  : statusChip(d.status_label)
+                const chipColor = { success: t.success, gold: t.goldText, danger: t.danger, muted: t.textMuted }[chip.tone]
+                const chipBorder = { success: `${t.success}59`, gold: 'var(--t-border)', danger: `${t.danger}59`, muted: 'var(--t-border)' }[chip.tone]
+                const chipBg = { success: t.successBg, gold: 'var(--t-bgSubtle)', danger: t.dangerBg, muted: 'var(--t-bgSubtle)' }[chip.tone]
+                const busy = rowBusy === d.id
                 return (
                   <div key={d.id} style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
                         <span style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{d.year_level} · {subjectNames}</span>
-                        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 12, border: `1px solid ${completed ? `${t.success}59` : 'var(--t-border)'}`, background: completed ? t.successBg : 'var(--t-bgSubtle)', color: completed ? t.success : t.goldText, fontWeight: 700 }}>
-                          {completed ? 'Completed' : 'Pending'}
+                        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 12, border: `1px solid ${chipBorder}`, background: chipBg, color: chipColor, fontWeight: 700 }}>
+                          {chip.label}
                         </span>
                       </div>
                       <div style={{ fontSize: 11, color: t.textMuted }}>
                         {d.submitted_by_name || d.student_name || 'No name yet'}
+                        {d.prospect_email ? ` · ${d.prospect_email}` : ''}
                         {d.set_by ? ` · Set by ${d.set_by}` : ''}
                         {completed && d.score_total != null ? ` · Score: ${d.score_total}/${d.score_max}` : ''}
-                        {` · Created ${fmtDate(d.created_at)}`}
+                        {d.sent_at ? ` · Sent ${fmtDate(d.sent_at)}` : ` · Created ${fmtDate(d.created_at)}`}
                         {completed && d.completed_at ? ` · Submitted ${fmtDate(d.completed_at)}` : ''}
                       </div>
                     </div>
-                    <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                    <div style={{ display: 'flex', gap: 8, flexShrink: 0, flexWrap: 'wrap' }}>
+                      {d.can_resend && (
+                        <button onClick={() => handleResend(d)} disabled={busy} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.text, fontSize: 12, fontWeight: 700, cursor: busy ? 'default' : 'pointer', fontFamily: FONT_B }}>
+                          {busy ? '…' : 'Resend'}
+                        </button>
+                      )}
+                      {d.can_cancel && (
+                        <button onClick={() => handleCancel(d)} disabled={busy} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, cursor: busy ? 'default' : 'pointer', fontFamily: FONT_B }}>
+                          Cancel
+                        </button>
+                      )}
                       <button onClick={() => handleCopy(d.link)} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>
                         Copy Link
                       </button>
