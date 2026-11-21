@@ -1,5 +1,7 @@
 # Booking the consultation call
 
+Status: approved design pending user sign-off (after builder check).
+
 Project 3a of the prospect-consultation work. Flow: diagnostic (projects 1–2,
 done) → **book the call (this)** → pre-call questionnaire (3b: each tutor's own
 editable form, linked from the booking confirmation) → call → report and
@@ -40,6 +42,16 @@ reminders as they choose, and the call held in the app.
    Lessons tab as for any session.
 8. Prospect-facing times are shown in the prospect's own time zone (browser),
    and emails state the time zone.
+9. **Optional parent email** (user's decision). The tutor can add a parent's
+   email when sending the diagnostic, and the student can add or change it
+   when booking. A parent with an email gets a copy of the confirmation (with
+   the invite), every reminder, and any reschedule or cancellation. It is
+   never required.
+10. **Replies reach the tutor** (user's decision). Every email about a
+   consultation (to the prospect or parent) has Reply-To set to the tutor's
+   sign-in email, so "I can't make it" reaches them. This shows the tutor's
+   email to the prospect; the user accepted that. Prospects cannot reschedule
+   or cancel themselves; the tutor does it from the app.
 
 ## Settings (per tutor, with defaults)
 
@@ -106,7 +118,10 @@ from the tutor's schedule.
   sent, so changing a booking's reminders or time doesn't resend or skip.
   Rescheduling deletes that session's rows.
 - `diagnostic_assessments` gains `booking_reminded_at timestamptz` (the one
-  "book your call" email).
+  "book your call" email) and `parent_email text` (optional; set by the tutor
+  when sending, or at booking).
+- `tutoring_sessions` also gains `guest_parent_email text` (copied from the
+  diagnostic or entered at booking).
 - At most one live booking per prospect per tutor (builder-check call): a
   prospect sent several diagnostics (say one per subject) gets one call.
   Partial unique index on `tutoring_sessions (tutor_id, lower(guest_email))
@@ -193,7 +208,11 @@ calendar, so the next read sees them.
   the booking was made after that reminder's time had passed.
 - "Book your call" (prospect): once, a day after finishing, if no live
   booking and the tutor has hours set; daytime only.
-- `sendEmail` gains optional attachments (Resend supports them) for the .ics.
+- `sendEmail` gains optional attachments (Resend supports them) for the .ics,
+  and an optional `replyTo` (the tutor's sign-in email on consultation
+  emails).
+- Parent copies: the same emails, addressed to the parent, naming the student
+  ("<Student>'s consultation call with <Full name>").
 
 ### Calendar invite (.ics, pure, tested)
 
@@ -212,6 +231,7 @@ confirmDialog)
   Calendar secret address with how-to and last-read status.
 - **Lessons tab** lists consultations with the other sessions, labelled
   "Consultation", with Reschedule / Cancel / reminders edit.
+- **Diagnostic tab create form** gains "Parent's email (optional)".
 - **Diagnostic tab rows** for prospects gain "Book call" (or the booked time
   with Reschedule / Cancel) and a "Booked" status after "Finished".
 
@@ -226,7 +246,8 @@ af-btn/af-inp classes in DiagnosticScreen.jsx)
   are unchanged.
 - After finishing a link diagnostic: "Book your consultation call" with days
   as rows and times as buttons (their time zone, stated), email field
-  prefilled, Confirm → "Booked for <day, time>. We've emailed you the
+  prefilled, "Parent's email (optional)" (prefilled if the tutor gave one),
+  Confirm → "Booked for <day, time>. We've emailed you the
   details." If the tutor has no hours set: today's finish screen.
 - `/book/:diagnosticToken` (from the reminder email): the same picker on its
   own page; shows the existing booking if already booked.
@@ -235,6 +256,9 @@ af-btn/af-inp classes in DiagnosticScreen.jsx)
 ## Left to the builder
 
 - Choice of iCal parsing library (must expand RRULE/EXDATE/RECURRENCE-ID).
+- The invite's ORGANIZER: ideally a prospect's calendar "Decline" reaches the
+  tutor, but Gmail auto-adding the invite to the tutor's calendar comes first.
+  Check Gmail's behaviour before choosing.
 - The per-tutor lock mechanism for booking (advisory lock or a unique
   constraint on (tutor_id, scheduled_at) plus overlap check).
 - Exact copy within the wording rules above.
