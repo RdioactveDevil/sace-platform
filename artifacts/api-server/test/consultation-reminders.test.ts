@@ -9,37 +9,56 @@ const iso = (ms: number) => new Date(ms).toISOString();
 const booked3DaysAhead = { scheduled_at: iso(start), created_at: iso(start - 72 * HOUR), reminder_minutes: [1440, 60] };
 const all: Array<"guest" | "parent" | "tutor"> = ["guest", "parent", "tutor"];
 
+const none = { send: [], skip: [] };
+const key = (r: Array<{ minutes: number; recipient: string }>) => r.map((x) => `${x.minutes}:${x.recipient}`);
+
 test("nothing is due more than 24h before the call", () => {
-  assert.deepEqual(dueConsultationReminders(booked3DaysAhead, new Set(), all, start - 25 * HOUR), []);
+  assert.deepEqual(dueConsultationReminders(booked3DaysAhead, new Set(), all, start - 25 * HOUR), none);
 });
 
-test("the 24h reminder is due for every recipient inside its window", () => {
-  const due = dueConsultationReminders(booked3DaysAhead, new Set(), all, start - 23 * HOUR - 50 * MIN);
-  assert.deepEqual(due, all.map((recipient) => ({ minutes: 1440, recipient })));
+test("the 24h reminder is sent to every recipient inside its window", () => {
+  const plan = dueConsultationReminders(booked3DaysAhead, new Set(), all, start - 23 * HOUR - 50 * MIN);
+  assert.deepEqual(plan, { send: all.map((recipient) => ({ minutes: 1440, recipient })), skip: [] });
 });
 
-test("the 1h reminder is due 55 minutes before", () => {
-  const due = dueConsultationReminders(booked3DaysAhead, new Set(["1440:guest", "1440:parent", "1440:tutor"]), all, start - 55 * MIN);
-  assert.deepEqual(due.map((d) => d.minutes), [60, 60, 60]);
+test("an hour out with nothing sent: send 60, skip the stale 1440", () => {
+  const plan = dueConsultationReminders(booked3DaysAhead, new Set(), ["guest"], start - 55 * MIN);
+  assert.deepEqual(plan, { send: [{ minutes: 60, recipient: "guest" }], skip: [{ minutes: 1440, recipient: "guest" }] });
 });
 
-test("nothing is due once the call has started", () => {
-  assert.deepEqual(dueConsultationReminders(booked3DaysAhead, new Set(), all, start), []);
-  assert.deepEqual(dueConsultationReminders(booked3DaysAhead, new Set(), all, start + MIN), []);
+test("the 1h reminder is sent 55 minutes before once 1440 is done", () => {
+  const plan = dueConsultationReminders(booked3DaysAhead, new Set(["1440:guest", "1440:parent", "1440:tutor"]), all, start - 55 * MIN);
+  assert.deepEqual(key(plan.send), ["60:guest", "60:parent", "60:tutor"]);
+  assert.deepEqual(plan.skip, []);
+});
+
+test("nothing happens once the call has started", () => {
+  assert.deepEqual(dueConsultationReminders(booked3DaysAhead, new Set(), all, start), none);
+  assert.deepEqual(dueConsultationReminders(booked3DaysAhead, new Set(), all, start + MIN), none);
+});
+
+test("moved to 2h from now with no claims: skip the stale 1440, 60 isn't due yet", () => {
+  const plan = dueConsultationReminders(booked3DaysAhead, new Set(), ["guest"], start - 2 * HOUR);
+  assert.deepEqual(plan, { send: [], skip: [{ minutes: 1440, recipient: "guest" }] });
+});
+
+test("after such a move, 60 is sent 59 minutes out", () => {
+  const plan = dueConsultationReminders(booked3DaysAhead, new Set(["1440:guest"]), ["guest"], start - 59 * MIN);
+  assert.deepEqual(plan, { send: [{ minutes: 60, recipient: "guest" }], skip: [] });
 });
 
 test("a booking made after a reminder's time skips that reminder", () => {
   const late = { ...booked3DaysAhead, created_at: iso(start - 30 * MIN) };
-  assert.deepEqual(dueConsultationReminders(late, new Set(), all, start - 20 * MIN), []);
+  assert.deepEqual(dueConsultationReminders(late, new Set(), ["guest"], start - 20 * MIN).send, []);
   // Booked 3h ahead: the 24h one is skipped, the 1h one still goes.
   const threeHours = { ...booked3DaysAhead, created_at: iso(start - 3 * HOUR) };
-  const due = dueConsultationReminders(threeHours, new Set(), ["guest"], start - 50 * MIN);
-  assert.deepEqual(due, [{ minutes: 60, recipient: "guest" }]);
+  const plan = dueConsultationReminders(threeHours, new Set(), ["guest"], start - 50 * MIN);
+  assert.deepEqual(plan, { send: [{ minutes: 60, recipient: "guest" }], skip: [{ minutes: 1440, recipient: "guest" }] });
 });
 
 test("already-sent keys are excluded", () => {
-  const due = dueConsultationReminders(booked3DaysAhead, new Set(["1440:guest", "1440:tutor"]), all, start - 23 * HOUR);
-  assert.deepEqual(due, [{ minutes: 1440, recipient: "parent" }]);
+  const plan = dueConsultationReminders(booked3DaysAhead, new Set(["1440:guest", "1440:tutor"]), all, start - 23 * HOUR - 50 * MIN);
+  assert.deepEqual(plan, { send: [{ minutes: 1440, recipient: "parent" }], skip: [] });
 });
 
 const diag = {

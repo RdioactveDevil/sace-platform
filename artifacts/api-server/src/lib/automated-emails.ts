@@ -1039,17 +1039,24 @@ async function runConsultationReminders(job: Job) {
     const who: Array<"guest" | "parent" | "tutor"> = ["guest"];
     if (c.guest_parent_email) who.push("parent");
     if (!tutor.unsubscribed) who.push("tutor");
-    const due = dueConsultationReminders(
+    const plan = dueConsultationReminders(
       { scheduled_at: c.scheduled_at, created_at: c.created_at, reminder_minutes: c.reminder_minutes ?? [] },
       sentBySession.get(c.id) ?? new Set(), who, nowMs,
     );
-    // Only the latest due lead per recipient: a missed earlier one isn't sent late on top.
-    const latest = new Map<string, number>();
-    for (const d of due) latest.set(d.recipient, Math.min(latest.get(d.recipient) ?? Infinity, d.minutes));
+    // Stale or superseded leads are recorded as done without sending, so they never fire later.
+    if (!job.dryRun) {
+      for (const { minutes, recipient } of plan.skip) {
+        const { error: skipErr } = await job.admin
+          .from("consultation_reminders_sent").insert({ session_id: c.id, minutes, recipient });
+        if (skipErr && skipErr.code !== "23505") throw new Error(`consultation_reminders_sent: ${skipErr.message}`);
+      }
+    }
+    if (plan.send.length > 0 && !c.guest_token) {
+      logger.warn({ sessionId: c.id }, "emails: consultation has no guest token; reminders skipped");
+    }
     const tutorName = names.get(c.tutor_id) ?? prospectSenderName(null);
     const tutorZone = settings.get(c.tutor_id)?.time_zone || TIME_ZONE;
-    for (const { minutes, recipient } of due) {
-      if (latest.get(recipient) !== minutes) continue;
+    for (const { minutes, recipient } of plan.send) {
       const to = recipient === "guest" ? c.guest_email : recipient === "parent" ? c.guest_parent_email : tutor.email;
       if (!to) continue;
       if (job.budget <= 0) {
