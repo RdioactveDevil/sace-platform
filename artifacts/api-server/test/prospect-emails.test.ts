@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { renderEmail } from "../src/lib/email";
-import { prospectDiagnosticEmail, prospectFinishedEmail, prospectReminderEmail } from "../src/lib/prospect-emails";
+import { prospectDiagnosticEmail, prospectFinishedEmail, prospectLink, prospectReminderEmail, prospectSenderName } from "../src/lib/prospect-emails";
 
 const o = { senderName: "Adhyayan Verma", subject: "VCE Mathematical Methods Units 1/2", link: "https://x/diagnostic/t" };
 const allText = (e: { subject: string; content: { heading: string; paragraphs: string[]; footer: string; cta?: { label: string } } }) =>
@@ -42,4 +42,20 @@ test("the tutor hears when a prospect finishes", () => {
 test("names are escaped in the rendered email", () => {
   const { html } = renderEmail(prospectDiagnosticEmail({ ...o, senderName: "<b>Sam</b>" }).content);
   assert.ok(html.includes("&lt;b&gt;Sam&lt;/b&gt;") && !html.includes("<b>Sam</b>"));
+});
+
+test("an emailed link always points at the app's own address, whatever the request says", () => {
+  const saved = process.env.APP_URL;
+  process.env.APP_URL = "https://www.gradefarm.com.au/";
+  try {
+    assert.equal(prospectLink("abc 123"), "https://www.gradefarm.com.au/diagnostic/abc%20123");
+  } finally {
+    if (saved === undefined) delete process.env.APP_URL; else process.env.APP_URL = saved;
+  }
+});
+
+test("the sender is named by their display name, or gradefarm. — never a placeholder", () => {
+  assert.equal(prospectSenderName("  Adhyayan Verma "), "Adhyayan Verma");
+  assert.equal(prospectSenderName(""), "gradefarm.");
+  assert.equal(prospectSenderName(null), "gradefarm.");
 });

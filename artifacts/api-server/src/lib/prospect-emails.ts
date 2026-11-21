@@ -5,11 +5,24 @@
  * account, so there's no unsubscribe link; they get the email, at most one
  * reminder, and nothing more unless the tutor resends it.
  */
-import type { EmailContent } from "./email";
+import { appUrl, type EmailContent } from "./email";
 
 type Email = { subject: string; content: EmailContent };
 
 const first = (name: string) => name.trim().split(/\s+/)[0] || name;
+
+/**
+ * The test link in a prospect's email. Always the app's own address (never
+ * taken from the request), so an email from us can't point anywhere else.
+ */
+export function prospectLink(token: string): string {
+  return `${appUrl()}/diagnostic/${encodeURIComponent(token)}`;
+}
+
+/** How a prospect's emails name the sender: their display name, else the app. */
+export function prospectSenderName(displayName: string | null | undefined): string {
+  return displayName?.trim() || "gradefarm.";
+}
 
 /** Sent when the tutor creates (or resends) the diagnostic. */
 export function prospectDiagnosticEmail(o: { senderName: string; subject: string; link: string }): Email {

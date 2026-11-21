@@ -9,7 +9,7 @@ import { requireTutorPlan } from "../lib/tutor-plan";
 import { diagnosticScope, studentSummary, type ScopeTopic } from "../lib/student-diagnostic";
 import { scopeOutline, subtopicFieldHint } from "../lib/diagnostic-outline";
 import { canResend, diagnosticStatus, normaliseProspectEmail, unavailableReason, type ProspectRow } from "../lib/prospect-status";
-import { prospectDiagnosticEmail } from "../lib/prospect-emails";
+import { prospectDiagnosticEmail, prospectLink, prospectSenderName } from "../lib/prospect-emails";
 import { getResend, sendEmail } from "../lib/email";
 
 const router = Router();
@@ -635,6 +635,7 @@ router.post("/tutor/diagnostic/generate", async (req: Request, res: Response) =>
 
 const PROSPECT_COLUMNS = "status, student_id, prospect_email, created_at, sent_at, opened_at, started_at, reminded_at, cancelled_at";
 
+// The link shown to the tutor to copy (from the page they're on). Emailed links use prospectLink().
 const linkFor = (req: Request, token: string) =>
   `${req.headers.origin || req.headers.referer?.replace(/\/$/, "") || "https://app.gradefarm.com.au"}/diagnostic/${token}`;
 
@@ -645,12 +646,13 @@ const linkFor = (req: Request, token: string) =>
 async function emailProspect(
   admin: AdminClient,
   d: { id: string; token: string; prospect_email: string; subjects: SubjectConfig[] | null },
-  senderName: string,
-  link: string,
+  displayName: string | null,
 ): Promise<{ error?: string }> {
   const resend = getResend();
   if (!resend) return { error: "Email isn't set up on this server." };
-  const { subject, content } = prospectDiagnosticEmail({ senderName, subject: d.subjects?.[0]?.name || "your subject", link });
+  const { subject, content } = prospectDiagnosticEmail({
+    senderName: prospectSenderName(displayName), subject: d.subjects?.[0]?.name || "your subject", link: prospectLink(d.token),
+  });
   const sentAt = new Date().toISOString();
   const result = await sendEmail(resend, { to: d.prospect_email, subject, content, idempotencyKey: `prospect-diagnostic:${d.id}:${sentAt}` });
   if (result.error) return { error: result.blocked ? "That address can't receive our emails (it bounced or reported spam before)." : "The email couldn't be sent. Try Resend." };
@@ -707,7 +709,7 @@ router.post("/tutor/diagnostic/create", async (req: Request, res: Response) => {
     if (!checked.email) return res.json({ id: data.id, token: data.token, link, emailed: false });
 
     // The diagnostic is saved either way; a failed send leaves it to Resend.
-    const sent = await emailProspect(admin, { id: data.id, token: data.token, prospect_email: checked.email, subjects }, ctx.displayName || "gradefarm.", link);
+    const sent = await emailProspect(admin, { id: data.id, token: data.token, prospect_email: checked.email, subjects }, ctx.displayName);
     return res.json({ id: data.id, token: data.token, link, emailed: !sent.error, ...(sent.error ? { emailError: sent.error } : {}) });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";
@@ -802,7 +804,7 @@ router.post("/tutor/diagnostic/:id/resend", async (req: Request, res: Response) 
     const d = await ownLinkDiagnostic(ctx.admin, ctx.tutorId, String(req.params.id));
     if (!d) return res.status(404).json({ error: "Diagnostic not found" });
     if (!d.prospect_email || !canResend(d, new Date())) return res.status(409).json({ error: "This diagnostic can't be resent." });
-    const sent = await emailProspect(ctx.admin, { ...d, prospect_email: d.prospect_email }, ctx.displayName || "gradefarm.", linkFor(req, d.token));
+    const sent = await emailProspect(ctx.admin, { ...d, prospect_email: d.prospect_email }, ctx.displayName);
     if (sent.error) return res.status(502).json({ error: sent.error });
     return res.json({ ok: true });
   } catch (err) {

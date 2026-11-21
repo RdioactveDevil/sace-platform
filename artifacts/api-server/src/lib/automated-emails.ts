@@ -41,7 +41,7 @@ import { subjectLabel } from "./included-subject";
 import { studentSummary } from "./student-diagnostic";
 import { rosterTutorIds } from "./student-tutors";
 import { doneRecipients, dueForProspectReminder, PROSPECT_TTL_MS, type ProspectRow } from "./prospect-status";
-import { prospectFinishedEmail, prospectReminderEmail } from "./prospect-emails";
+import { prospectFinishedEmail, prospectLink, prospectReminderEmail, prospectSenderName } from "./prospect-emails";
 import { loadParentReport, parentReportEmail } from "./parent-reports";
 import { planIsLive, tutorBillingRow, tutorPlanOptions, type TutorBillingRow } from "./tutor-plan";
 
@@ -927,7 +927,12 @@ async function runProspectReminders(job: Job) {
   const rows = ((data ?? []) as ProspectReminderRow[]).filter((d) => dueForProspectReminder(d, job.now));
   if (rows.length === 0) return;
 
-  const tutors = await loadRecipients(job, rows.map((d) => d.tutor_id));
+  const tutorIds = [...new Set(rows.map((d) => d.tutor_id))];
+  const tutors = await loadRecipients(job, tutorIds);
+  // The sender's own display name (loadRecipients' name falls back to a greeting word).
+  const { data: profiles, error: profErr } = await job.admin.from("profiles").select("id, display_name").in("id", tutorIds);
+  if (profErr) throw new Error(`profiles: ${profErr.message}`);
+  const displayNames = new Map(((profiles ?? []) as { id: string; display_name: string | null }[]).map((p) => [p.id, p.display_name]));
   for (const d of rows) {
     const tutor = tutors.get(d.tutor_id);
     if (!tutor) continue; // tutor deactivated
@@ -936,9 +941,9 @@ async function runProspectReminders(job: Job) {
       return;
     }
     const { subject, content } = prospectReminderEmail({
-      senderName: tutor.name.trim() || "gradefarm.",
+      senderName: prospectSenderName(displayNames.get(d.tutor_id)),
       subject: d.subjects?.[0]?.name || "your subject",
-      link: `${appUrl()}/diagnostic/${encodeURIComponent(d.token)}`,
+      link: prospectLink(d.token),
     });
     if (job.dryRun) {
       job.summary.planned!.push({ kind: "prospect_reminder", to: d.prospect_email!, subject });
