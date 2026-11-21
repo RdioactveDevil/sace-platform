@@ -367,6 +367,11 @@ export function countRedFlags(q: Questionnaire, a: Answers): number {
 // Open / status
 // ---------------------------------------------------------------------------
 
+/** The call with the latest start (the "live" one when a diagnostic has several). */
+export function latestByStart<T extends { scheduled_at: string }>(calls: T[]): T {
+  return calls.reduce((a, b) => (Date.parse(b.scheduled_at) > Date.parse(a.scheduled_at) ? b : a));
+}
+
 /**
  * Open while the diagnostic isn't cancelled and either it has no non-cancelled
  * consultation, or now is before the end (scheduled_at + duration) of the
@@ -380,7 +385,7 @@ export function questionnaireOpen(o: {
   if (o.cancelledAt) return false;
   const live = o.calls.filter((c) => c.status !== "cancelled");
   if (live.length === 0) return true;
-  const latest = live.reduce((a, b) => (Date.parse(b.scheduled_at) > Date.parse(a.scheduled_at) ? b : a));
+  const latest = latestByStart(live);
   return o.now < Date.parse(latest.scheduled_at) + latest.duration_minutes * 60_000;
 }
 

@@ -58,7 +58,7 @@ import { dueBookYourCall, dueConsultationReminders, BOOK_YOUR_CALL_AFTER_MS, BOO
 import { bookYourCallEmail, consultationReminderEmail } from "./consultation-emails";
 import { hasHours, type SettingsRow } from "./consultation-access";
 import { guestJoinUrl, tutorJoinUrl } from "./consultation-service";
-import { dueQuestionnaireReminder, flaggedAnswers, questionnaireLinkFor, type Answers, type Questionnaire } from "./questionnaire";
+import { dueQuestionnaireReminder, flaggedAnswers, latestByStart, questionnaireLinkFor, type Answers, type Questionnaire } from "./questionnaire";
 import { questionnaireDoneEmail, questionnaireReminderEmail } from "./questionnaire-emails";
 import { loadParentReport, parentReportEmail } from "./parent-reports";
 import { planIsLive, tutorBillingRow, tutorPlanOptions, type TutorBillingRow } from "./tutor-plan";
@@ -1207,24 +1207,34 @@ type QuestionnaireDiagnostic = {
 /** Once, a day before the live call: the guest and their parent get the questionnaire link. */
 async function runQuestionnaireReminders(job: Job) {
   const nowMs = job.now.getTime();
-  const { data: callData, error: callErr } = await job.admin
+  // Diagnostics with a call starting in the next 24 hours are the candidates…
+  const { data: soonData, error: soonErr } = await job.admin
     .from("tutoring_sessions")
-    .select("id, diagnostic_id, tutor_id, scheduled_at, created_at, guest_email, guest_name, guest_parent_email, guest_time_zone")
+    .select("diagnostic_id")
     .eq("session_type", "consultation")
     .eq("status", "scheduled")
     .not("diagnostic_id", "is", null)
     .gt("scheduled_at", job.now.toISOString())
     .lte("scheduled_at", new Date(nowMs + DAY).toISOString())
+    .order("scheduled_at", { ascending: true })
     .limit(500);
+  if (soonErr) throw new Error(`tutoring_sessions: ${soonErr.message}`);
+  const candidateIds = [...new Set(((soonData ?? []) as Array<{ diagnostic_id: string }>).map((c) => c.diagnostic_id))];
+  if (candidateIds.length === 0) return;
+  // …but the live call is the latest scheduled one, wherever it starts.
+  const { data: callData, error: callErr } = await job.admin
+    .from("tutoring_sessions")
+    .select("id, diagnostic_id, tutor_id, scheduled_at, created_at, guest_email, guest_name, guest_parent_email, guest_time_zone")
+    .eq("session_type", "consultation")
+    .eq("status", "scheduled")
+    .in("diagnostic_id", candidateIds)
+    .order("scheduled_at", { ascending: true })
+    .limit(2000);
   if (callErr) throw new Error(`tutoring_sessions: ${callErr.message}`);
   type Call = { id: string; diagnostic_id: string; tutor_id: string; scheduled_at: string; created_at: string; guest_email: string | null; guest_name: string | null; guest_parent_email: string | null; guest_time_zone: string | null };
-  // The live call is the latest scheduled one.
-  const latest = new Map<string, Call>();
-  for (const c of (callData ?? []) as Call[]) {
-    const have = latest.get(c.diagnostic_id);
-    if (!have || c.created_at > have.created_at) latest.set(c.diagnostic_id, c);
-  }
-  if (latest.size === 0) return;
+  const byDiagnostic = new Map<string, Call[]>();
+  for (const c of (callData ?? []) as Call[]) byDiagnostic.set(c.diagnostic_id, [...(byDiagnostic.get(c.diagnostic_id) ?? []), c]);
+  const latest = new Map([...byDiagnostic].map(([id, calls]) => [id, latestByStart(calls)]));
 
   const { data, error } = await job.admin
     .from("diagnostic_assessments")
@@ -1290,7 +1300,10 @@ async function runQuestionnaireReminders(job: Job) {
       }
     }
     // Let the next run try again (the idempotency keys stop a repeat of whoever got it).
-    if (retry) await job.admin.from("diagnostic_assessments").update({ questionnaire_reminded_at: null }).eq("id", d.id).eq("questionnaire_reminded_at", remindedAt);
+    if (retry) {
+      const { error: releaseErr } = await job.admin.from("diagnostic_assessments").update({ questionnaire_reminded_at: null }).eq("id", d.id).eq("questionnaire_reminded_at", remindedAt);
+      if (releaseErr) logger.warn({ diagnosticId: d.id, error: releaseErr.message }, "emails: could not release questionnaire reminder claim");
+    }
   }
 }
 

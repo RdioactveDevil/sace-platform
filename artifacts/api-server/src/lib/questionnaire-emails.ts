@@ -32,7 +32,7 @@ export function questionnaireReminderEmail(o: {
       heading: "A short questionnaire before the call",
       paragraphs: [
         ...(parent ? ["Hi,"] : []),
-        `${call} is tomorrow, at ${when}.`,
+        `${call} is on ${when}.`,
         parent
           ? `${o.tutorName} would like ${student || "your child"} to fill in a short questionnaire before then, so the call can be spent on what matters most. It takes a few minutes.`
           : `${o.tutorName} would like you to fill in a short questionnaire before then, so the call can be spent on what matters most. It takes a few minutes.`,

@@ -20,6 +20,8 @@ test("reminder emails never say 'your tutor'; the parent version names the stude
   assert.doesNotMatch(text(p), /your tutor/i);
   assert.ok(text(p).includes("Sam Lee"));
   assert.ok(text(g).includes("Adhyayan Verma"));
+  assert.doesNotMatch(text(g), /tomorrow/i);
+  assert.match(text(g), /is on \w+day \d+ \w+, /);
   assert.equal(g.content.cta?.url, base.url);
   assert.equal(p.content.cta?.url, base.url);
 });
@@ -137,4 +139,21 @@ test("the tutor is told once when answers arrive, with flagged answers; unsubscr
   const r2 = fakeResend();
   await runAutomatedEmails(fakeSupabase(u), r2.resend, { now, steps: ["questionnaire answers"] });
   assert.equal(r2.sent.length, 0);
+});
+
+test("the live call is the latest by start: an earlier call in the window doesn't trigger a reminder", async () => {
+  const start = Date.parse("2027-03-10T05:00:00Z");
+  const d = db(start);
+  const later = start + 3 * DAY;
+  d.tables.tutoring_sessions.push({
+    ...d.tables.tutoring_sessions[0], id: "call-2", scheduled_at: iso(later), created_at: iso(start - 2 * DAY),
+  });
+  const { resend, sent } = fakeResend();
+  const admin = fakeSupabase(d);
+  const s1 = await runAutomatedEmails(admin, resend, { now: new Date(start - 20 * HOUR), steps: ["questionnaire reminders"] });
+  assert.equal(s1.sent.questionnaire_reminder, undefined);
+  assert.equal(sent.length, 0);
+  const s2 = await runAutomatedEmails(admin, resend, { now: new Date(later - 20 * HOUR), steps: ["questionnaire reminders"] });
+  assert.equal(s2.sent.questionnaire_reminder, 2);
+  assert.match(sent[0].subject, /call with Sam Tutor/);
 });
