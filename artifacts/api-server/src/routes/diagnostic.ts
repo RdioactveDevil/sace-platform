@@ -9,7 +9,7 @@ import { requireTutorPlan } from "../lib/tutor-plan";
 import { diagnosticScope, studentSummary, type ScopeTopic } from "../lib/student-diagnostic";
 import { scopeOutline, subtopicFieldHint } from "../lib/diagnostic-outline";
 import { signupState } from "../lib/prospect-signup";
-import { canResend, diagnosticStatus, normaliseProspectEmail, unavailableReason, type ProspectRow } from "../lib/prospect-status";
+import { DIAGNOSTIC_LIST_COLUMNS, PROSPECT_COLUMNS, canResend, diagnosticStatus, forViewer, normaliseProspectEmail, unavailableReason, type ProspectRow } from "../lib/prospect-status";
 import { prospectDiagnosticEmail, prospectLink, prospectSenderName } from "../lib/prospect-emails";
 import { getResend, sendEmail } from "../lib/email";
 import { DEFAULT_QUESTIONNAIRE, countRedFlags, questionnaireLinkFor, questionnaireStatus, snapshotFrom, validateQuestionnaire, type Answers, type Questionnaire } from "../lib/questionnaire";
@@ -645,7 +645,6 @@ router.post("/tutor/diagnostic/generate", async (req: Request, res: Response) =>
   }
 });
 
-const PROSPECT_COLUMNS = "status, student_id, prospect_email, created_at, sent_at, opened_at, started_at, reminded_at, cancelled_at";
 
 // The link shown to the tutor to copy (from the page they're on). Emailed links use prospectLink().
 const linkFor = (req: Request, token: string) =>
@@ -771,7 +770,7 @@ router.get("/tutor/diagnostic/list", async (req: Request, res: Response) => {
     if (!ctx) return;
     const { admin, tutorId } = ctx;
 
-    const columns = `id, token, tutor_id, year_level, subjects, student_name, submitted_by_name, score_total, score_max, completed_at, pre_call_form_url, parent_email, questionnaire, questionnaire_answers, questionnaire_submitted_at, ${PROSPECT_COLUMNS}`;
+    const columns = DIAGNOSTIC_LIST_COLUMNS;
     const studentIds = await rosterStudentIds(admin, tutorId);
     // Rosters can be long: look the students' diagnostics up in batches.
     const results = await Promise.all([
@@ -781,7 +780,7 @@ router.get("/tutor/diagnostic/list", async (req: Request, res: Response) => {
     const failed = results.find((r) => r.error);
     if (failed?.error) throw new Error(failed.error.message);
 
-    type Row = Pick<DiagnosticAssessment, "id" | "token" | "tutor_id" | "student_name" | "submitted_by_name"> & ProspectRow & {
+    type Row = Pick<DiagnosticAssessment, "id" | "token" | "tutor_id" | "student_name" | "submitted_by_name" | "curriculum_id"> & ProspectRow & {
       questionnaire: Questionnaire | null;
       questionnaire_answers: Answers | null;
       questionnaire_submitted_at: string | null;
@@ -843,7 +842,7 @@ router.get("/tutor/diagnostic/list", async (req: Request, res: Response) => {
       const booking = bookingFor(row);
       // Roster students' diagnostics never carry a questionnaire.
       const q = row.student_id ? null : row.questionnaire;
-      return {
+      return forViewer({
       ...row,
       booking,
       signup: signupFor(row),
@@ -856,7 +855,7 @@ router.get("/tutor/diagnostic/list", async (req: Request, res: Response) => {
       // Only the tutor who sent it can resend or cancel it.
       can_resend: row.tutor_id === tutorId && canResend(row, now),
       can_cancel: row.tutor_id === tutorId && !row.student_id && ["sent", "opened", "in_progress", "link"].includes(diagnosticStatus(row, now)),
-      };
+      }, tutorId);
     });
 
     return res.json({ assessments: rows });
@@ -938,7 +937,7 @@ router.get("/tutor/diagnostic/:id/report", async (req: Request, res: Response) =
 
     // The questions come back too (with answers and solution notes), so the
     // report can show each question in full beside the student's answer.
-    return res.json({ assessment: data, report: data.report });
+    return res.json({ assessment: forViewer(data, tutorId), report: data.report });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";
     return res.status(500).json({ error: message });

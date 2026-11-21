@@ -2383,7 +2383,7 @@ function DiagnosticTab({ profile, theme }) {
                 </div>
 
                 {/* Pre-call questionnaire answers */}
-                {a.questionnaire && a.questionnaire_answers && (
+                {a.tutor_id === profile.id && a.questionnaire && a.questionnaire_answers && (
                   <div style={card}>
                     <div style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}` }}>
                       <div style={{ fontSize: 14, fontWeight: 700, color: t.text }}>Pre-call questionnaire</div>

@@ -99,3 +99,22 @@ test("book-your-call isn't sent when a call is booked for that diagnostic under 
   assert.equal(s.sent.book_your_call, undefined);
   assert.equal(sent.length, 0);
 });
+
+test("an adopted prospect diagnostic's done email goes only to the tutor who set it", async () => {
+  process.env.EMAIL_UNSUBSCRIBE_SECRET ??= "test-secret";
+  const db = baseDb();
+  const now = Date.parse("2027-03-10T00:00:00Z");
+  const other = "tutor-2";
+  db.tables.profiles.push({ id: other, display_name: "Other Tutor", deactivated_at: null, emails_unsubscribed_at: null });
+  db.users[other] = { email: "other@example.com" };
+  db.tables.profiles[0].emails_unsubscribed_at = null;
+  db.tables.tutor_students = [{ tutor_id: TUTOR, student_id: "stu" }, { tutor_id: other, student_id: "stu" }];
+  db.tables.profiles.push({ id: "stu", display_name: "Jamie", deactivated_at: null, emails_unsubscribed_at: null });
+  db.tables.diagnostic_assessments.push({
+    ...completedDiagnostic(now), student_id: "stu", completed_at: iso(now - HOUR),
+    report: { total_score: 10, max_score: 20, percentage: 50, performance_band: "Developing", sections: [] },
+  });
+  const { resend, sent } = fakeResend();
+  await runAutomatedEmails(fakeSupabase(db), resend, { now: new Date(now), steps: ["diagnostic results"] });
+  assert.deepEqual(sent.map((s) => s.to[0]), ["tutor@example.com"]);
+});

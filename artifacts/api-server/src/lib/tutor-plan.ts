@@ -218,10 +218,9 @@ export function planMetadata(tutorId: string, plan: TutorPlanOption): Record<str
   };
 }
 
-/** An invite counts towards the student limit until it's accepted (it joins the roster) or expires. */
-
 /**
- * Students on the roster plus invites still waiting, optionally leaving out
+ * Students on the roster plus invites still waiting (an invite counts until it's accepted
+ * and joins the roster, or expires), optionally leaving out
  * one invite (by address, and child for an invite to a parent, who can have
  * invites for several children).
  */

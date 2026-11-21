@@ -63,3 +63,16 @@ test('needsOwnDiagnostic: only when a ticked subject is not the carried one', ()
   assert.equal(needsOwnDiagnostic(['c2'], null), true)
   assert.equal(needsOwnDiagnostic([], 'c1'), false)
 })
+
+// A row shaped exactly like GET /tutor/diagnostic/list returns (shared with the server's column test).
+import { readFileSync } from 'node:fs'
+test('a real list row pre-ticks its subject and carries the diagnostic', () => {
+  const row = JSON.parse(readFileSync(new URL('./fixtures/diagnosticListRow.json', import.meta.url), 'utf8'))
+  const opts = { canInclude: true, includableIds: ['cur-chem'] }
+  const d = signUpDefaults(row, opts)
+  assert.deepEqual(d.curriculumIds, ['cur-chem'])
+  assert.equal(d.email, 'jamie@example.com')
+  assert.equal(d.parentEmail, 'parent@example.com')
+  assert.equal(d.childName, 'Jamie')
+  assert.equal(carryState({ sourceId: row.curriculum_id, ticked: d.curriculumIds, ...opts }), 'carries')
+})

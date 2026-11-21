@@ -81,3 +81,26 @@ export function normaliseProspectEmail(raw: unknown): { email: string | null } |
 export function doneRecipients(setterId: string, studentId: string | null, rosterTutorIds: string[] | undefined): string[] {
   return studentId ? [...new Set([setterId, ...(rosterTutorIds ?? [])])] : [setterId];
 }
+
+/** Columns that tell where a diagnostic is up to (shared by the list and the sign-up flow). */
+export const PROSPECT_COLUMNS = "status, student_id, prospect_email, created_at, sent_at, opened_at, started_at, reminded_at, cancelled_at";
+
+/** What GET /tutor/diagnostic/list selects. The client reads curriculum_id to pre-tick the sign-up subject. */
+export const DIAGNOSTIC_LIST_COLUMNS = `id, token, tutor_id, year_level, subjects, curriculum_id, student_name, submitted_by_name, score_total, score_max, completed_at, pre_call_form_url, parent_email, questionnaire, questionnaire_answers, questionnaire_submitted_at, ${PROSPECT_COLUMNS}`;
+
+const PRIVATE_FIELDS = [
+  "questionnaire", "questionnaire_answers", "questionnaire_submitted_at", "questionnaire_reminded_at",
+  "prospect_email", "parent_email", "questionnaire_status", "red_flags",
+] as const;
+
+/**
+ * A diagnostic as another tutor may see it. The questionnaire and the
+ * prospect's and parent's addresses belong to the tutor who set it, even after
+ * the prospect joins and other tutors have the student on their roster.
+ */
+export function forViewer<T extends { tutor_id: string }>(row: T, viewerId: string): T {
+  if (row.tutor_id === viewerId) return row;
+  const out: Record<string, unknown> = { ...row };
+  for (const k of PRIVATE_FIELDS) if (k in out) out[k] = null;
+  return out as T;
+}

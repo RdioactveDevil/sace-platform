@@ -41,7 +41,6 @@ import { liveCurriculum } from "./billing";
 
 const router = Router();
 
-/** An invite link stops working this long after it was last sent. */
 /** A tutor can re-send the same invite at most this often. */
 const RESEND_INTERVAL_MS = 2 * 60 * 1000;
 
@@ -74,6 +73,7 @@ function fail(res: Response, err: unknown) {
   return res.status(500).json({ error: err instanceof Error ? err.message : "Internal error" });
 }
 
+/** An invite link stops working INVITE_TTL_MS after it was last sent. */
 function isExpired(invite: InviteRow): boolean {
   return Date.now() - new Date(invite.sent_at ?? invite.created_at).getTime() > INVITE_TTL_MS;
 }

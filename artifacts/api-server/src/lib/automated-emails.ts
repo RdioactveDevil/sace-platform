@@ -886,8 +886,14 @@ async function runDiagnosticDone(job: Job) {
   const studentIds = rows.map((d) => d.student_id).filter((x): x is string => !!x);
   const roster = studentIds.length ? await rosterTutorIds(job.admin, studentIds) : new Map<string, string[]>();
   const done = await loadDone(job, "diagnostic_done", rows.map((d) => d.id));
+  // A diagnostic that began as a prospect's (an emailed link, or one an invite carried
+  // across) stays private to the tutor who set it, even once the prospect is on a roster.
+  const { data: carried, error: carriedErr } = await job.admin
+    .from("tutor_invites").select("source_diagnostic_id").in("source_diagnostic_id", rows.map((d) => d.id));
+  if (carriedErr) throw new Error(`tutor_invites: ${carriedErr.message}`);
+  const fromInvite = new Set(((carried ?? []) as { source_diagnostic_id: string }[]).map((i) => i.source_diagnostic_id));
   const pending = rows.flatMap((d) =>
-    doneRecipients(d.tutor_id, d.student_id, d.student_id ? roster.get(d.student_id) : undefined)
+    doneRecipients(d.tutor_id, d.student_id, d.student_id && !d.prospect_email && !fromInvite.has(d.id) ? roster.get(d.student_id) : undefined)
       .filter((tutorId) => !done.has(`${d.id}:${tutorId}`))
       .map((tutorId) => ({ d, tutorId })),
   );
