@@ -17,6 +17,7 @@
  * client; the guest token travels only inside the join link (emailed, and
  * shown to the person who just booked).
  */
+import { questionnaireLinkFor } from "../lib/questionnaire";
 import { Router, type Request, type Response } from "express";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { AccessToken } from "livekit-server-sdk";
@@ -188,10 +189,10 @@ router.put("/tutor/booking-settings", async (req: Request, res: Response) => {
 // ── Tutor: booking ──────────────────────────────────────────────────────────
 
 type ProspectDiagnostic = {
-  id: string; tutor_id: string; student_id: string | null; status: string; cancelled_at: string | null;
+  id: string; token: string; questionnaire: unknown | null; tutor_id: string; student_id: string | null; status: string; cancelled_at: string | null;
   prospect_email: string | null; parent_email: string | null; submitted_by_name: string | null; student_name: string | null;
 };
-const DIAGNOSTIC_COLUMNS = "id, tutor_id, student_id, status, cancelled_at, prospect_email, parent_email, submitted_by_name, student_name";
+const DIAGNOSTIC_COLUMNS = "id, token, questionnaire, tutor_id, student_id, status, cancelled_at, prospect_email, parent_email, submitted_by_name, student_name";
 
 /** A prospect's (link) diagnostic this tutor sent; null if not theirs. */
 async function ownProspectDiagnostic(admin: AdminClient, tutorId: string, id: unknown): Promise<ProspectDiagnostic | null> {
@@ -392,7 +393,7 @@ router.get("/consultation/:token/slots", async (req: Request, res: Response) => 
       senderName: prospectSenderName(profile.data?.display_name),
       email: d.prospect_email,
       parentEmail: d.parent_email,
-      questionnaireUrl: d.pre_call_form_url?.trim() || null,
+      questionnaireUrl: questionnaireLinkFor(d),
     };
     const existing = await liveBooking(admin, d.tutor_id, d.id, { trusted: d.prospect_email ? [d.prospect_email] : [] });
     if (existing?.call.guest_token) {
@@ -464,7 +465,7 @@ router.post("/consultation/:token/book", async (req: Request, res: Response) => 
     return res.json({
       start: new Date(start).toISOString(),
       joinUrl: guestJoinUrl(booked.token),
-      questionnaireUrl: d.pre_call_form_url?.trim() || null,
+      questionnaireUrl: questionnaireLinkFor(d),
     });
   } catch (err) {
     return fail(res, err);

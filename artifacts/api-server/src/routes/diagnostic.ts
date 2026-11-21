@@ -11,6 +11,7 @@ import { scopeOutline, subtopicFieldHint } from "../lib/diagnostic-outline";
 import { canResend, diagnosticStatus, normaliseProspectEmail, unavailableReason, type ProspectRow } from "../lib/prospect-status";
 import { prospectDiagnosticEmail, prospectLink, prospectSenderName } from "../lib/prospect-emails";
 import { getResend, sendEmail } from "../lib/email";
+import { DEFAULT_QUESTIONNAIRE, countRedFlags, questionnaireStatus, snapshotFrom, validateQuestionnaire, type Answers, type Questionnaire } from "../lib/questionnaire";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -124,7 +125,7 @@ interface DiagnosticReport {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function getAdminClient(): AdminClient {
+export function getAdminClient(): AdminClient {
   const serviceKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!serviceKey) throw new Error("No SUPABASE_SERVICE_KEY configured");
   return createClient(SUPABASE_URL, serviceKey, {
@@ -203,7 +204,7 @@ function extractJson(text: string): unknown {
   return null;
 }
 
-async function requireTutor(req: Request, res: Response): Promise<{ admin: AdminClient; tutorId: string; tutorName: string; displayName: string | null } | null> {
+export async function requireTutor(req: Request, res: Response): Promise<{ admin: AdminClient; tutorId: string; tutorName: string; displayName: string | null } | null> {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith("Bearer ")) {
     res.status(401).json({ error: "Unauthorized" });
@@ -604,6 +605,16 @@ Be specific. Reference actual topics and marks. Limit to 4–5 items per array.`
   };
 }
 
+/** A tutor's master questionnaire (their saved one, else the default). */
+export async function masterQuestionnaire(admin: AdminClient, tutorId: string): Promise<{ questionnaire: Questionnaire; isDefault: boolean }> {
+  const { data, error } = await admin
+    .from("tutor_questionnaires").select("intro, items").eq("tutor_id", tutorId)
+    .maybeSingle<{ intro: string; items: Questionnaire["items"] }>();
+  if (error) throw new Error(error.message);
+  if (!data) return { questionnaire: DEFAULT_QUESTIONNAIRE, isDefault: true };
+  return { questionnaire: { intro: data.intro, items: data.items }, isDefault: false };
+}
+
 // ── Routes ────────────────────────────────────────────────────────────────────
 
 /** POST /tutor/diagnostic/generate — Preview AI-generated questions (no save) */
@@ -668,7 +679,7 @@ router.post("/tutor/diagnostic/create", async (req: Request, res: Response) => {
     if (!ctx) return;
     const { admin, tutorId } = ctx;
 
-    const { yearLevel, subjects, questions, studentName, preCallFormUrl, prospectEmail, parentEmail } = req.body as {
+    const { yearLevel, subjects, questions, studentName, preCallFormUrl, prospectEmail, parentEmail, questionnaire } = req.body as {
       yearLevel: string;
       subjects: SubjectConfig[];
       questions: DiagnosticQuestion[];
@@ -676,6 +687,7 @@ router.post("/tutor/diagnostic/create", async (req: Request, res: Response) => {
       preCallFormUrl?: string;
       prospectEmail?: string;
       parentEmail?: string;
+      questionnaire?: unknown;
     };
 
     if (!yearLevel?.trim()) return res.status(400).json({ error: "yearLevel is required" });
@@ -685,6 +697,17 @@ router.post("/tutor/diagnostic/create", async (req: Request, res: Response) => {
     // Optional: a parent gets copies of the consultation call's emails.
     const parent = normaliseProspectEmail(parentEmail);
     if ("error" in parent) return res.status(400).json({ error: "Enter a valid email address for the parent." });
+
+    // Every diagnostic made here is a link diagnostic (no student_id), so it gets a questionnaire
+    // snapshot: the one sent with it, else the tutor's master. Never re-snapshotted later.
+    let snapshot: Questionnaire | null = null;
+    if (questionnaire !== undefined && questionnaire !== null) {
+      const v = validateQuestionnaire(questionnaire);
+      if ("error" in v) return res.status(400).json({ error: v.error });
+      snapshot = snapshotFrom(v.questionnaire);
+    } else {
+      snapshot = snapshotFrom((await masterQuestionnaire(admin, tutorId)).questionnaire);
+    }
 
     // A curriculum subject keeps its scope (only subtopics of that curriculum), so it can follow the student later.
     const curriculumId = Array.isArray(subjects) ? subjects[0]?.curriculumId : undefined;
@@ -699,6 +722,7 @@ router.post("/tutor/diagnostic/create", async (req: Request, res: Response) => {
         questions:         questions,
         student_name:      studentName?.trim() || null,
         pre_call_form_url: preCallFormUrl?.trim() || null,
+        questionnaire:     snapshot,
         status:            "pending",
         score_max:         questions.reduce((s, q) => s + q.marks, 0),
         ...(curriculumId && scope ? { curriculum_id: curriculumId, subtopic_ids: scope.subtopicIds } : {}),
@@ -746,7 +770,7 @@ router.get("/tutor/diagnostic/list", async (req: Request, res: Response) => {
     if (!ctx) return;
     const { admin, tutorId } = ctx;
 
-    const columns = `id, token, tutor_id, year_level, subjects, student_name, submitted_by_name, score_total, score_max, completed_at, pre_call_form_url, parent_email, ${PROSPECT_COLUMNS}`;
+    const columns = `id, token, tutor_id, year_level, subjects, student_name, submitted_by_name, score_total, score_max, completed_at, pre_call_form_url, parent_email, questionnaire, questionnaire_answers, questionnaire_submitted_at, ${PROSPECT_COLUMNS}`;
     const studentIds = await rosterStudentIds(admin, tutorId);
     // Rosters can be long: look the students' diagnostics up in batches.
     const results = await Promise.all([
@@ -756,7 +780,11 @@ router.get("/tutor/diagnostic/list", async (req: Request, res: Response) => {
     const failed = results.find((r) => r.error);
     if (failed?.error) throw new Error(failed.error.message);
 
-    type Row = Pick<DiagnosticAssessment, "id" | "token" | "tutor_id" | "student_name" | "submitted_by_name"> & ProspectRow;
+    type Row = Pick<DiagnosticAssessment, "id" | "token" | "tutor_id" | "student_name" | "submitted_by_name"> & ProspectRow & {
+      questionnaire: Questionnaire | null;
+      questionnaire_answers: Answers | null;
+      questionnaire_submitted_at: string | null;
+    };
     const byId = new Map<string, Row>();
     for (const r of results) for (const row of (r.data ?? []) as Row[]) byId.set(row.id, row);
     const list = [...byId.values()].sort((a, b) => b.created_at.localeCompare(a.created_at));
@@ -787,9 +815,15 @@ router.get("/tutor/diagnostic/list", async (req: Request, res: Response) => {
     };
 
     const now = new Date();
-    const rows = list.map((row) => ({
+    const rows = list.map((row) => {
+      const booking = bookingFor(row);
+      // Roster students' diagnostics never carry a questionnaire.
+      const q = row.student_id ? null : row.questionnaire;
+      return {
       ...row,
-      booking: bookingFor(row),
+      booking,
+      questionnaire_status: questionnaireStatus({ hasSnapshot: !!q, submittedAt: row.questionnaire_submitted_at, hasLiveBooking: !!booking }),
+      red_flags: q && row.questionnaire_answers ? countRedFlags(q, row.questionnaire_answers) : 0,
       student_name: row.student_name || (row.student_id ? names.get(row.student_id) ?? null : null),
       set_by: row.tutor_id === tutorId ? null : names.get(row.tutor_id) ?? "Another tutor",
       link: linkFor(req, row.token),
@@ -797,7 +831,8 @@ router.get("/tutor/diagnostic/list", async (req: Request, res: Response) => {
       // Only the tutor who sent it can resend or cancel it.
       can_resend: row.tutor_id === tutorId && canResend(row, now),
       can_cancel: row.tutor_id === tutorId && !row.student_id && ["sent", "opened", "in_progress", "link"].includes(diagnosticStatus(row, now)),
-    }));
+      };
+    });
 
     return res.json({ assessments: rows });
   } catch (err) {

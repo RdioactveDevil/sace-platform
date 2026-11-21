@@ -5,6 +5,7 @@ import {
   OWNER_QUESTIONNAIRE,
   countRedFlags,
   flaggedAnswers,
+  questionnaireLinkFor,
   questionnaireOpen,
   questionnaireStatus,
   snapshotFrom,
@@ -225,4 +226,23 @@ test("reserved item ids rejected; inherited keys not read as answers", () => {
     bad(validateQuestionnaire({ intro: "", items: [{ id, ...short() }] }));
   const q: Questionnaire = { intro: "", items: [{ id: "toString", type: "short", label: "Q", required: true }] };
   bad(validateAnswers(q, {}));
+});
+
+test("questionnaireLinkFor: snapshot wins, legacy only without one, else null", () => {
+  const saved = process.env.APP_URL;
+  process.env.APP_URL = "https://www.gradefarm.com.au/";
+  try {
+    assert.equal(
+      questionnaireLinkFor({ token: "ab/c d", questionnaire: DEFAULT_QUESTIONNAIRE, pre_call_form_url: "https://forms.example/x" }),
+      "https://www.gradefarm.com.au/questionnaire/ab%2Fc%20d",
+    );
+    assert.equal(
+      questionnaireLinkFor({ token: "tok", questionnaire: null, pre_call_form_url: " https://forms.example/x " }),
+      "https://forms.example/x",
+    );
+    assert.equal(questionnaireLinkFor({ token: "tok", questionnaire: null, pre_call_form_url: null }), null);
+    assert.equal(questionnaireLinkFor({ token: "tok", questionnaire: null, pre_call_form_url: "  " }), null);
+  } finally {
+    if (saved === undefined) delete process.env.APP_URL; else process.env.APP_URL = saved;
+  }
 });

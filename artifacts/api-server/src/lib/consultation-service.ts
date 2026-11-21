@@ -4,6 +4,7 @@
  * calendar's busy times), live bookings, and the emails with calendar
  * invites. Pure rules live in consultation-access.ts.
  */
+import { questionnaireLinkFor } from "./questionnaire";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Resend } from "resend";
 import { openSlots, type Interval } from "./booking-slots";
@@ -190,8 +191,9 @@ export async function tutorContact(
 export async function questionnaireUrl(admin: SupabaseClient, diagnosticId: string | null): Promise<string | null> {
   if (!diagnosticId) return null;
   const { data } = await admin
-    .from("diagnostic_assessments").select("pre_call_form_url").eq("id", diagnosticId).maybeSingle<{ pre_call_form_url: string | null }>();
-  return data?.pre_call_form_url?.trim() || null;
+    .from("diagnostic_assessments").select("token, questionnaire, pre_call_form_url").eq("id", diagnosticId)
+    .maybeSingle<{ token: string; questionnaire: unknown | null; pre_call_form_url: string | null }>();
+  return data ? questionnaireLinkFor(data) : null;
 }
 
 /**

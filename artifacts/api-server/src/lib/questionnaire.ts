@@ -8,6 +8,7 @@
  * that were shown.
  */
 import { randomBytes } from "node:crypto";
+import { appUrl } from "./email";
 
 export type QOption = { id: string; label: string; flag?: boolean };
 export type QItem = {
@@ -392,4 +393,17 @@ export function questionnaireStatus(o: {
   if (!o.hasSnapshot) return null;
   if (o.submittedAt) return "submitted";
   return o.hasLiveBooking ? "waiting" : "none";
+}
+
+/**
+ * The link booking emails and the Booked screen carry. A snapshot wins: the
+ * built-in form. The legacy link is used only for a diagnostic without one.
+ */
+export function questionnaireLinkFor(d: {
+  token: string;
+  questionnaire: unknown | null;
+  pre_call_form_url: string | null;
+}): string | null {
+  if (d.questionnaire) return `${appUrl()}/questionnaire/${encodeURIComponent(d.token)}`;
+  return d.pre_call_form_url?.trim() || null;
 }
