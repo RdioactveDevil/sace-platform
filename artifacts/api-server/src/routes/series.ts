@@ -564,6 +564,11 @@ router.get("/rooms/:roomName", async (req: Request, res: Response) => {
     .eq("livekit_room_name", roomName).maybeSingle();
 
   if (!session) { res.status(404).json({ error: "Room not found" }); return; }
+  // A consultation's details (its title names the prospect) are only its tutor's.
+  if (session.session_type === "consultation" && session.tutor_id !== ctx.userId) {
+    res.status(404).json({ error: "Room not found" });
+    return;
+  }
 
   const { data: tutorProfile } = await ctx.admin
     .from("profiles").select("display_name").eq("id", session.tutor_id).single<{ display_name: string | null }>();

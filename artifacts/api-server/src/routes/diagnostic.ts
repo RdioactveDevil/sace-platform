@@ -668,19 +668,23 @@ router.post("/tutor/diagnostic/create", async (req: Request, res: Response) => {
     if (!ctx) return;
     const { admin, tutorId } = ctx;
 
-    const { yearLevel, subjects, questions, studentName, preCallFormUrl, prospectEmail } = req.body as {
+    const { yearLevel, subjects, questions, studentName, preCallFormUrl, prospectEmail, parentEmail } = req.body as {
       yearLevel: string;
       subjects: SubjectConfig[];
       questions: DiagnosticQuestion[];
       studentName?: string;
       preCallFormUrl?: string;
       prospectEmail?: string;
+      parentEmail?: string;
     };
 
     if (!yearLevel?.trim()) return res.status(400).json({ error: "yearLevel is required" });
     if (!Array.isArray(questions) || questions.length === 0) return res.status(400).json({ error: "questions are required" });
     const checked = normaliseProspectEmail(prospectEmail);
     if ("error" in checked) return res.status(400).json({ error: checked.error });
+    // Optional: a parent gets copies of the consultation call's emails.
+    const parent = normaliseProspectEmail(parentEmail);
+    if ("error" in parent) return res.status(400).json({ error: "Enter a valid email address for the parent." });
 
     // A curriculum subject keeps its scope (only subtopics of that curriculum), so it can follow the student later.
     const curriculumId = Array.isArray(subjects) ? subjects[0]?.curriculumId : undefined;
@@ -699,6 +703,7 @@ router.post("/tutor/diagnostic/create", async (req: Request, res: Response) => {
         score_max:         questions.reduce((s, q) => s + q.marks, 0),
         ...(curriculumId && scope ? { curriculum_id: curriculumId, subtopic_ids: scope.subtopicIds } : {}),
         prospect_email:    checked.email,
+        parent_email:      parent.email,
       })
       .select("id, token")
       .single<{ id: string; token: string }>();
@@ -741,7 +746,7 @@ router.get("/tutor/diagnostic/list", async (req: Request, res: Response) => {
     if (!ctx) return;
     const { admin, tutorId } = ctx;
 
-    const columns = `id, token, tutor_id, year_level, subjects, student_name, submitted_by_name, score_total, score_max, completed_at, pre_call_form_url, ${PROSPECT_COLUMNS}`;
+    const columns = `id, token, tutor_id, year_level, subjects, student_name, submitted_by_name, score_total, score_max, completed_at, pre_call_form_url, parent_email, ${PROSPECT_COLUMNS}`;
     const studentIds = await rosterStudentIds(admin, tutorId);
     // Rosters can be long: look the students' diagnostics up in batches.
     const results = await Promise.all([
@@ -766,9 +771,25 @@ router.get("/tutor/diagnostic/list", async (req: Request, res: Response) => {
       }
     }
 
+    // This tutor's booked consultation calls, for the "Booked" state on prospects' rows
+    // (one live call per prospect email, whichever of their diagnostics it was booked from).
+    const { data: calls, error: callsErr } = await admin
+      .from("tutoring_sessions")
+      .select("id, scheduled_at, diagnostic_id, guest_email, reminder_minutes")
+      .eq("tutor_id", tutorId).eq("session_type", "consultation").eq("status", "scheduled");
+    if (callsErr) throw new Error(callsErr.message);
+    type Call = { id: string; scheduled_at: string; diagnostic_id: string | null; guest_email: string | null; reminder_minutes: number[] | null };
+    const bookingFor = (row: Row) => {
+      if (row.tutor_id !== tutorId || row.student_id) return null;
+      const email = row.prospect_email?.toLowerCase() ?? null;
+      const call = ((calls ?? []) as Call[]).find((c) => c.diagnostic_id === row.id || (!!email && c.guest_email?.toLowerCase() === email));
+      return call ? { sessionId: call.id, start: call.scheduled_at, reminderMinutes: call.reminder_minutes ?? [] } : null;
+    };
+
     const now = new Date();
     const rows = list.map((row) => ({
       ...row,
+      booking: bookingFor(row),
       student_name: row.student_name || (row.student_id ? names.get(row.student_id) ?? null : null),
       set_by: row.tutor_id === tutorId ? null : names.get(row.tutor_id) ?? "Another tutor",
       link: linkFor(req, row.token),

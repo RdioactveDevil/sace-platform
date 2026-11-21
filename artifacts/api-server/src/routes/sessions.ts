@@ -15,6 +15,7 @@ import { getR2Config } from "../lib/r2";
 import { appUrl, sendEmail } from "../lib/email";
 import { sessionBookedEmail } from "../lib/tutor-emails";
 import { FEATURE_MISSING, requireTutorPlan, tutorHasFeature } from "../lib/tutor-plan";
+import { openSessionAllowed } from "../lib/consultation-access";
 
 export const RECORDING_BUCKET = "tutor-resources";
 
@@ -221,19 +222,23 @@ async function requireAuth(req: Request, res: Response): Promise<CallerContext |
   };
 }
 
-/** Check if a user has access to a session (tutor, direct student, participant, or open session). */
+/**
+ * Check if a user has access to a session (tutor, direct student, participant, or open session).
+ * A consultation is only ever its tutor's (the guest joins by token, routes/consultations.ts).
+ */
 async function userCanAccessSession(
   admin: SupabaseClient & { auth: SupabaseAdminAuth },
-  sessionRow: { tutor_id: string; student_id: string | null },
+  sessionRow: { id: string; tutor_id: string; student_id: string | null; session_type: string },
   userId: string
 ): Promise<boolean> {
   if (sessionRow.tutor_id === userId) return true;
+  if (sessionRow.session_type === "consultation") return false;
   if (sessionRow.student_id === userId) return true;
   // Check participants table (covers group and invite-only sessions)
-  const { data: participant, count } = await admin
+  const { data: participant } = await admin
     .from("session_participants")
     .select("student_id", { count: "exact" })
-    .eq("session_id", (sessionRow as Record<string, unknown>)["id"] as string)
+    .eq("session_id", sessionRow.id)
     .eq("student_id", userId)
     .maybeSingle();
   if (participant) return true;
@@ -241,8 +246,14 @@ async function userCanAccessSession(
   const { count: totalCount } = await admin
     .from("session_participants")
     .select("*", { count: "exact", head: true })
-    .eq("session_id", (sessionRow as Record<string, unknown>)["id"] as string);
-  return (totalCount ?? 0) === 0;
+    .eq("session_id", sessionRow.id);
+  return openSessionAllowed(sessionRow.session_type, totalCount ?? 0);
+}
+
+/** A session as the API returns it: a consultation's guest token stays on the server (it's the guest's join link). */
+function withoutGuestToken<T extends Record<string, unknown>>(s: T): Omit<T, "guest_token"> {
+  const { guest_token: _gt, ...rest } = s;
+  return rest;
 }
 
 /** Send a session invite email to a single student. */
@@ -526,12 +537,14 @@ router.get("/sessions", async (req: Request, res: Response) => {
   const enriched = sessionList.map((s: Record<string, unknown>) => {
     const parts = participantMap[s.id as string] ?? [];
     return {
-      ...s,
+      ...withoutGuestToken(s),
       participants: parts,
       participant_count: parts.length,
       // Convenience field: for individual sessions, the one student's name; for group, comma list
       other_party_name: ctx.isTutor
-        ? (s.session_type === "group"
+        ? (s.session_type === "consultation"
+          ? String(s.guest_name || s.guest_email || "Prospective student")
+          : s.session_type === "group"
           ? parts.map(p => p.display_name).join(", ") || "Group"
           : (parts[0]?.display_name ?? "Student"))
         : tutorMap[s.tutor_id as string] ?? "Tutor",
@@ -571,7 +584,7 @@ router.get("/sessions/:id", async (req: Request, res: Response) => {
 
   res.json({
     session: {
-      ...session,
+      ...withoutGuestToken(session),
       participants: (participants as unknown as Array<{ student_id: string; profiles: Array<{ display_name: string | null }> | null }> ?? []).map((p) => ({
         student_id: p.student_id,
         display_name: p.profiles?.[0]?.display_name ?? "Student",
@@ -805,7 +818,7 @@ router.patch("/sessions/:id", async (req: Request, res: Response) => {
   const { id } = req.params;
   const { data: session, error: fetchErr } = await ctx.admin
     .from("tutoring_sessions")
-    .select("tutor_id, status")
+    .select("tutor_id, status, session_type")
     .eq("id", id)
     .single();
 
@@ -825,6 +838,12 @@ router.patch("/sessions/:id", async (req: Request, res: Response) => {
     if (req.body[field] !== undefined) updates[field] = req.body[field];
   }
 
+  // Moving or cancelling a consultation sends the guest a new invite (routes/consultations.ts).
+  if (session.session_type === "consultation" && ["scheduled_at", "duration_minutes", "status"].some((f) => f in updates)) {
+    res.status(409).json({ error: "Reschedule or cancel consultations from the consultation card." });
+    return;
+  }
+
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: "No valid fields to update" });
     return;
@@ -842,7 +861,7 @@ router.patch("/sessions/:id", async (req: Request, res: Response) => {
     return;
   }
 
-  res.json({ session: updated });
+  res.json({ session: withoutGuestToken(updated) });
 });
 
 // DELETE /sessions/:id — cancel session
@@ -853,7 +872,7 @@ router.delete("/sessions/:id", async (req: Request, res: Response) => {
   const { id } = req.params;
   const { data: session, error: fetchErr } = await ctx.admin
     .from("tutoring_sessions")
-    .select("tutor_id")
+    .select("tutor_id, session_type")
     .eq("id", id)
     .single();
 
@@ -864,6 +883,12 @@ router.delete("/sessions/:id", async (req: Request, res: Response) => {
 
   if (session.tutor_id !== ctx.userId) {
     res.status(403).json({ error: "Only the tutor can cancel a session" });
+    return;
+  }
+
+  // Cancelling a consultation emails the guest a cancelled invite (POST /tutor/consultations/:id/cancel).
+  if (session.session_type === "consultation") {
+    res.status(409).json({ error: "Cancel consultations from the consultation card." });
     return;
   }
 
