@@ -2094,6 +2094,11 @@ export async function loadDiagnosticByToken(token) {
   return json
 }
 
+/** A prospect pressed Start on their diagnostic (public — no auth). For the tutor's list; failures don't matter. */
+export async function startDiagnostic(token) {
+  await fetch(`/api/diagnostic/${encodeURIComponent(token)}/start`, { method: 'POST' })
+}
+
 /** Submit student answers (public — no auth). */
 export async function submitDiagnosticAnswers(token, { studentName, answers }) {
   const res = await fetch(`/api/diagnostic/${encodeURIComponent(token)}/submit`, {

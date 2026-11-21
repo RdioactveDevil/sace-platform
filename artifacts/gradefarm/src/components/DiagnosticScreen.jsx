@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
-import { loadDiagnosticByToken, submitDiagnosticAnswers, prepareDiagnostic } from '../lib/db'
+import { loadDiagnosticByToken, submitDiagnosticAnswers, prepareDiagnostic, startDiagnostic } from '../lib/db'
 import MathText from './MathText'
 import { MathLiveInput, MathKeyboard, isTouchDevice } from './MathInput'
 import { Check } from 'lucide-react'
@@ -196,7 +196,9 @@ const btnStyle = (kind, full = true) => ({
   ...(kind === 'primary' ? { border: 'none', background: C.accent, color: 'var(--t-onAccent)' } : { border: `1px solid ${C.border}`, background: C.card, color: C.text }),
 })
 
-function SubmittedScreen({ preCallFormUrl, onRedirect, studentName, tutorName }) {
+// A link diagnostic, sent to someone who isn't the sender's student yet (often
+// before a consultation call): the sender is named in full, never "your tutor".
+function SubmittedScreen({ preCallFormUrl, onRedirect, studentName, senderName }) {
   useEffect(() => {
     if (preCallFormUrl) {
       const timer = setTimeout(onRedirect, 6000)
@@ -207,12 +209,12 @@ function SubmittedScreen({ preCallFormUrl, onRedirect, studentName, tutorName })
   const first = (studentName || '').trim().split(' ')[0]
   return (
     <Panel>
-      <OkLine>Sent to {tutorName || 'your tutor'}</OkLine>
+      <OkLine>{senderName ? `Sent to ${senderName}` : 'Sent'}</OkLine>
       <H1>Thanks{first ? `, ${first}` : ''}. That's done.</H1>
-      <P muted>{tutorName || 'Your tutor'} will go through your answers and plan your lessons around them.{preCallFormUrl ? '' : ' You can close this page.'}</P>
+      <P muted>{senderName ? `${senderName} will go through your answers with you on your call.` : 'Your answers will be gone through with you on your call.'}{preCallFormUrl ? '' : ' You can close this page.'}</P>
       {preCallFormUrl && (
         <>
-          <P muted>Next, a few questions to help {tutorName || 'your tutor'} prepare for your first lesson. They open in a few seconds.</P>
+          <P muted>Next, a few questions to help {senderName || 'them'} prepare for your call. They open in a few seconds.</P>
           <button type="button" className="af-btn" onClick={onRedirect} style={btnStyle('primary')}>Open the questions now</button>
         </>
       )}
@@ -372,6 +374,16 @@ export default function DiagnosticScreen({ theme = 'dark', onToggleTheme }) {
     }
   }
 
+  // Into the questions. A prospect's start is noted for the sender's list, once.
+  const startNoted = useRef(false)
+  const beginTest = () => {
+    setPhase('test')
+    if (!linked && !startNoted.current) {
+      startNoted.current = true
+      startDiagnostic(token).catch(() => {})
+    }
+  }
+
   const handleRedirect = () => {
     if (result?.preCallFormUrl || assessment?.pre_call_form_url) {
       window.location.href = result?.preCallFormUrl || assessment?.pre_call_form_url
@@ -384,6 +396,7 @@ export default function DiagnosticScreen({ theme = 'dark', onToggleTheme }) {
 
   const tutorName = assessment?.tutor_name || null
   const tutorFirst = tutorName ? tutorName.split(' ')[0] : null
+  const senderName = assessment?.sender_name || null
   const sectionNames = groups.map(g => g.label)
   const sectionsLine = sectionNames.length > 1
     ? `${sectionNames.length === 2 ? 'Two' : 'Three'} short sections: ${sectionNames.slice(0, -1).join(', ')} and ${sectionNames[sectionNames.length - 1]}.`
@@ -441,7 +454,7 @@ export default function DiagnosticScreen({ theme = 'dark', onToggleTheme }) {
         {phase === 'error' && (
           <Panel>
             <H1>This diagnostic isn't available</H1>
-            <P muted>{error || "We couldn't find it. Check the link with your tutor."}</P>
+            <P muted>{error || "We couldn't find it. Check the link with whoever sent it."}</P>
           </Panel>
         )}
 
@@ -457,15 +470,15 @@ export default function DiagnosticScreen({ theme = 'dark', onToggleTheme }) {
               {sectionsLine ? `${sectionsLine} ` : ''}Answer what you can; it's fine to be unsure.{' '}
               {linked
                 ? `${tutorFirst || 'Your tutor'} gets your results, and your practice starts with what needs it most.`
-                : `${tutorFirst || 'Your tutor'} gets your answers to plan your lessons.`}
+                : senderName ? `${senderName} will go through your answers with you on your call.` : 'Your answers will be gone through with you on your call.'}
             </P>
             {!linked && (
               <Field id="dg-name" label="Your name" theme={theme}>
                 <input id="dg-name" className="af-inp" type="text" autoComplete="name" value={studentName} onChange={e => setStudentName(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && studentName.trim()) setPhase('test') }} />
+                  onKeyDown={e => { if (e.key === 'Enter' && studentName.trim()) beginTest() }} />
               </Field>
             )}
-            <button type="button" className="af-btn" onClick={() => { if (linked || studentName.trim()) setPhase('test') }} disabled={!linked && !studentName.trim()}
+            <button type="button" className="af-btn" onClick={() => { if (linked || studentName.trim()) beginTest() }} disabled={!linked && !studentName.trim()}
               style={{ ...btnStyle('primary'), opacity: !linked && !studentName.trim() ? 0.55 : 1, cursor: !linked && !studentName.trim() ? 'default' : 'pointer' }}>
               Start
             </button>
@@ -527,7 +540,7 @@ export default function DiagnosticScreen({ theme = 'dark', onToggleTheme }) {
             preCallFormUrl={result?.preCallFormUrl || assessment?.pre_call_form_url}
             onRedirect={handleRedirect}
             studentName={studentName}
-            tutorName={tutorName}
+            senderName={senderName}
           />
         )}
       </AuthLayout>
