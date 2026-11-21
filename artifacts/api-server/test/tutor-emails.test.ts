@@ -85,3 +85,19 @@ test("emails sent together are spaced out under the rate limit", async () => {
   at.sort((a, b) => a - b);
   assert.ok(at[1] - at[0] >= 500 && at[2] - at[1] >= 500, `gaps ${at[1] - at[0]}, ${at[2] - at[1]}`);
 });
+
+test("sendEmail passes replyTo and a base64 attachment to Resend", async () => {
+  let payload: Record<string, unknown> | undefined;
+  const resend = { emails: { send: async (p: Record<string, unknown>) => { payload = p; return { data: { id: "1" }, error: null }; } } } as unknown as Resend;
+  const base = { to: "a@example.com", subject: "S", content: { heading: "H", paragraphs: [], footer: "F" } };
+  await sendEmail(resend, {
+    ...base, replyTo: "tutor@example.com",
+    attachments: [{ filename: "invite.ics", content: "BEGIN:VCALENDAR", contentType: "text/calendar; method=REQUEST" }],
+  });
+  assert.equal(payload!.replyTo, "tutor@example.com");
+  assert.deepEqual(payload!.attachments, [
+    { filename: "invite.ics", content: Buffer.from("BEGIN:VCALENDAR").toString("base64"), contentType: "text/calendar; method=REQUEST" },
+  ]);
+  await sendEmail(resend, base);
+  assert.ok(!("replyTo" in payload!) && !("attachments" in payload!));
+});

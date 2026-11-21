@@ -201,6 +201,10 @@ export interface OutgoingEmail {
   content: EmailContent | PrebuiltEmail;
   /** Resend drops a repeat send with the same key within 24 hours. */
   idempotencyKey?: string;
+  /** Where replies go (default: the From address). */
+  replyTo?: string;
+  /** Attachments; `content` is the file's text, base64-encoded here for Resend. */
+  attachments?: Array<{ filename: string; content: string; contentType?: string }>;
 }
 
 /** Resend's default limit is 2 requests per second per team. */
@@ -248,7 +252,19 @@ export async function sendEmail(resend: Resend, email: OutgoingEmail): Promise<S
   }
   try {
     const { data, error } = await resend.emails.send(
-      { from: EMAIL_FROM, to: [to], subject: email.subject, html, text, headers },
+      {
+        from: EMAIL_FROM, to: [to], subject: email.subject, html, text, headers,
+        ...(email.replyTo ? { replyTo: email.replyTo } : {}),
+        ...(email.attachments?.length
+          ? {
+              attachments: email.attachments.map((a) => ({
+                filename: a.filename,
+                content: Buffer.from(a.content).toString("base64"),
+                ...(a.contentType ? { contentType: a.contentType } : {}),
+              })),
+            }
+          : {}),
+      },
       email.idempotencyKey ? { idempotencyKey: email.idempotencyKey.slice(0, 256) } : undefined,
     );
     if (error) return { id: null, error: error.message || String(error) };
