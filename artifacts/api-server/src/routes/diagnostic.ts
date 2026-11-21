@@ -7,6 +7,7 @@ import { logger } from "../lib/logger";
 import { requireUser } from "../lib/auth";
 import { requireTutorPlan } from "../lib/tutor-plan";
 import { diagnosticScope, studentSummary, type ScopeTopic } from "../lib/student-diagnostic";
+import { scopeOutline } from "../lib/diagnostic-outline";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -39,6 +40,9 @@ interface SubjectConfig {
   name: string;
   topics: string[];
   writingType?: "essay" | "paragraph";
+  // A curriculum subject: its id and the subtopics chosen (none = the whole subject).
+  curriculumId?: string;
+  subtopicIds?: string[];
 }
 
 interface DiagnosticAssessment {
@@ -237,13 +241,19 @@ function sanitiseQuestionsForStudent(questions: DiagnosticQuestion[]): Omit<Diag
 async function generateQuestions(
   yearLevel: string,
   subjects: SubjectConfig[],
+  // For a curriculum subject: "- Topic: Sub; Sub" lines ("" = the whole course).
+  outline?: string,
 ): Promise<DiagnosticQuestion[]> {
   const isEnglishOnly = subjects.every((s) =>
     s.name.toLowerCase().includes("english") || s.name.toLowerCase().includes("writing")
   );
 
   const subjectDesc = subjects.map((s) => {
-    const base = `${s.name} — Topics: ${s.topics.join(", ")}`;
+    const base = outline === undefined
+      ? `${s.name} — Topics: ${s.topics.join(", ")}`
+      : outline
+        ? `${s.name} — topics and subtopics (topic: subtopic; subtopic; …):\n${outline}\n`
+        : `${s.name} — the whole course`;
     if (s.writingType) return `${base} (Writing type: ${s.writingType})`;
     return base;
   }).join("; ");
@@ -292,7 +302,7 @@ STRICT RULES:
 3. Moderate questions total exactly 10 marks.
 4. Exam questions total exactly 10 marks.
 5. Questions must be appropriate for ${yearLevel} level — not too easy, not too hard.
-6. Use real curriculum-aligned content for the given subject(s) and topics.
+6. Use real curriculum-aligned content for the given subject(s) and topics.${outline ? " Copy topic and subtopic names exactly as written in the list." : ""}
 7. Multiple choice questions must have exactly 4 options labelled A, B, C, D.
 8. correct_answer for multiple_choice must be a single uppercase letter (A/B/C/D).
 9. ALL mathematical expressions MUST use LaTeX formatting with $ delimiters.
@@ -349,7 +359,7 @@ function validQuestion(q: Partial<DiagnosticQuestion>): DiagnosticQuestion | nul
  */
 async function generateCurriculumDiagnostic(subject: string, level: string, scope: ScopeTopic[]): Promise<DiagnosticQuestion[]> {
   if (!scope.length) throw new Error("This subject has no topics to build a diagnostic from yet.");
-  const outline = scope.map((t) => (t.subtopics.length ? `- ${t.topic}: ${t.subtopics.join("; ")}` : `- ${t.topic}`)).join("\n");
+  const outline = scopeOutline(scope);
   const { easy, moderate, exam } = STUDENT_DIAGNOSTIC_SECTIONS;
   const writing = isWritingSubject(subject);
 
@@ -591,6 +601,7 @@ router.post("/tutor/diagnostic/generate", async (req: Request, res: Response) =>
   try {
     const ctx = await requireTutor(req, res);
     if (!ctx) return;
+    const { admin } = ctx;
 
     const { yearLevel, subjects } = req.body as {
       yearLevel: string;
@@ -600,7 +611,11 @@ router.post("/tutor/diagnostic/generate", async (req: Request, res: Response) =>
     if (!yearLevel?.trim()) return res.status(400).json({ error: "yearLevel is required" });
     if (!Array.isArray(subjects) || subjects.length === 0) return res.status(400).json({ error: "At least one subject is required" });
 
-    const questions = await generateQuestions(yearLevel.trim(), subjects);
+    const curriculumId = subjects[0]?.curriculumId;
+    const outline = curriculumId
+      ? scopeOutline((await diagnosticScope(admin, curriculumId, subjects[0].subtopicIds ?? [])).topics)
+      : undefined;
+    const questions = await generateQuestions(yearLevel.trim(), subjects, outline);
     return res.json({ questions });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";
@@ -626,6 +641,10 @@ router.post("/tutor/diagnostic/create", async (req: Request, res: Response) => {
     if (!yearLevel?.trim()) return res.status(400).json({ error: "yearLevel is required" });
     if (!Array.isArray(questions) || questions.length === 0) return res.status(400).json({ error: "questions are required" });
 
+    // A curriculum subject keeps its scope (only subtopics of that curriculum), so it can follow the student later.
+    const curriculumId = Array.isArray(subjects) ? subjects[0]?.curriculumId : undefined;
+    const scope = curriculumId ? await diagnosticScope(admin, curriculumId, subjects[0].subtopicIds ?? []) : null;
+
     const { data, error } = await admin
       .from("diagnostic_assessments")
       .insert({
@@ -637,6 +656,7 @@ router.post("/tutor/diagnostic/create", async (req: Request, res: Response) => {
         pre_call_form_url: preCallFormUrl?.trim() || null,
         status:            "pending",
         score_max:         questions.reduce((s, q) => s + q.marks, 0),
+        ...(curriculumId && scope ? { curriculum_id: curriculumId, subtopic_ids: scope.subtopicIds } : {}),
       })
       .select("id, token")
       .single<{ id: string; token: string }>();
