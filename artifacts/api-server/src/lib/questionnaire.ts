@@ -407,3 +407,28 @@ export function questionnaireLinkFor(d: {
   if (d.questionnaire) return `${appUrl()}/questionnaire/${encodeURIComponent(d.token)}`;
   return d.pre_call_form_url?.trim() || null;
 }
+
+// ---------------------------------------------------------------------------
+// Reminder
+// ---------------------------------------------------------------------------
+
+const REMINDER_LEAD_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Time for the one reminder: from 24 hours before the live call's start until
+ * it starts, answers not in, none sent yet. A call booked less than 24 hours
+ * ahead is skipped: the booking email already carried the link.
+ */
+export function dueQuestionnaireReminder(o: {
+  call: { scheduled_at: string; created_at: string } | null;
+  submittedAt: string | null;
+  remindedAt: string | null;
+  now: number;
+}): boolean {
+  if (!o.call || o.submittedAt || o.remindedAt) return false;
+  const start = Date.parse(o.call.scheduled_at);
+  const created = Date.parse(o.call.created_at);
+  if (!Number.isFinite(start) || !Number.isFinite(created)) return false;
+  if (start - created < REMINDER_LEAD_MS) return false;
+  return o.now >= start - REMINDER_LEAD_MS && o.now < start;
+}

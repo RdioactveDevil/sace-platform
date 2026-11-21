@@ -22,6 +22,12 @@
  *   • book_your_call        – once, a day after a prospect finishes a link
  *                             diagnostic, if they haven't booked a call and the
  *                             tutor takes bookings (booking_reminded_at)
+ *   • questionnaire_reminder – once, a day before a booked consultation, to the
+ *                             guest and their parent, if the pre-call
+ *                             questionnaire isn't filled in (recorded on the
+ *                             diagnostic: questionnaire_reminded_at)
+ *   • questionnaire_done    – the tutor who sent a prospect's diagnostic, when
+ *                             the prospect submits the questionnaire
  *   • diagnostic_done       – the student's tutors (the one who set it and any
  *                             others on their roster), when they finish one
  *   • parent_report         – Sunday evening, a student's week to the parent
@@ -52,6 +58,8 @@ import { dueBookYourCall, dueConsultationReminders, BOOK_YOUR_CALL_AFTER_MS, BOO
 import { bookYourCallEmail, consultationReminderEmail } from "./consultation-emails";
 import { hasHours, type SettingsRow } from "./consultation-access";
 import { guestJoinUrl, tutorJoinUrl } from "./consultation-service";
+import { dueQuestionnaireReminder, flaggedAnswers, questionnaireLinkFor, type Answers, type Questionnaire } from "./questionnaire";
+import { questionnaireDoneEmail, questionnaireReminderEmail } from "./questionnaire-emails";
 import { loadParentReport, parentReportEmail } from "./parent-reports";
 import { planIsLive, tutorBillingRow, tutorPlanOptions, type TutorBillingRow } from "./tutor-plan";
 
@@ -70,6 +78,8 @@ export type EmailKind =
   | "prospect_reminder"
   | "consultation_reminder"
   | "book_your_call"
+  | "questionnaire_reminder"
+  | "questionnaire_done"
   | "parent_report";
 
 const MINUTE = 60_000;
@@ -1186,6 +1196,137 @@ async function runBookYourCall(job: Job) {
   }
 }
 
+// ── Pre-call questionnaire ──────────────────────────────────────────────────
+
+type QuestionnaireDiagnostic = {
+  id: string; token: string; tutor_id: string; questionnaire: unknown | null; pre_call_form_url: string | null;
+  questionnaire_answers: unknown | null; questionnaire_submitted_at: string | null; questionnaire_reminded_at: string | null;
+  submitted_by_name: string | null; student_name: string | null; prospect_email: string | null;
+};
+
+/** Once, a day before the live call: the guest and their parent get the questionnaire link. */
+async function runQuestionnaireReminders(job: Job) {
+  const nowMs = job.now.getTime();
+  const { data: callData, error: callErr } = await job.admin
+    .from("tutoring_sessions")
+    .select("id, diagnostic_id, tutor_id, scheduled_at, created_at, guest_email, guest_name, guest_parent_email, guest_time_zone")
+    .eq("session_type", "consultation")
+    .eq("status", "scheduled")
+    .not("diagnostic_id", "is", null)
+    .gt("scheduled_at", job.now.toISOString())
+    .lte("scheduled_at", new Date(nowMs + DAY).toISOString())
+    .limit(500);
+  if (callErr) throw new Error(`tutoring_sessions: ${callErr.message}`);
+  type Call = { id: string; diagnostic_id: string; tutor_id: string; scheduled_at: string; created_at: string; guest_email: string | null; guest_name: string | null; guest_parent_email: string | null; guest_time_zone: string | null };
+  // The live call is the latest scheduled one.
+  const latest = new Map<string, Call>();
+  for (const c of (callData ?? []) as Call[]) {
+    const have = latest.get(c.diagnostic_id);
+    if (!have || c.created_at > have.created_at) latest.set(c.diagnostic_id, c);
+  }
+  if (latest.size === 0) return;
+
+  const { data, error } = await job.admin
+    .from("diagnostic_assessments")
+    .select("id, token, tutor_id, questionnaire, pre_call_form_url, questionnaire_submitted_at, questionnaire_reminded_at")
+    .in("id", [...latest.keys()])
+    .is("student_id", null)
+    .not("questionnaire", "is", null)
+    .is("questionnaire_submitted_at", null)
+    .is("questionnaire_reminded_at", null)
+    .is("cancelled_at", null)
+    .limit(500);
+  if (error) throw new Error(`diagnostic_assessments: ${error.message}`);
+  const rows = (data ?? []) as QuestionnaireDiagnostic[];
+  if (rows.length === 0) return;
+
+  const tutorIds = [...new Set(rows.map((d) => d.tutor_id))];
+  const tutors = await loadRecipients(job, tutorIds);
+  const { names, settings } = await loadTutorBooking(job, tutorIds);
+  for (const d of rows) {
+    const call = latest.get(d.id)!;
+    const tutor = tutors.get(d.tutor_id);
+    if (!tutor || !call.guest_email) continue;
+    if (!dueQuestionnaireReminder({ call, submittedAt: d.questionnaire_submitted_at, remindedAt: d.questionnaire_reminded_at, now: nowMs })) continue;
+    const url = questionnaireLinkFor(d);
+    if (!url) continue;
+    const tutorName = names.get(d.tutor_id) ?? prospectSenderName(null);
+    const timeZone = call.guest_time_zone || settings.get(d.tutor_id)?.time_zone || TIME_ZONE;
+    const targets: Array<{ who: "guest" | "parent"; to: string }> = [{ who: "guest", to: call.guest_email }];
+    if (call.guest_parent_email) targets.push({ who: "parent", to: call.guest_parent_email });
+    if (job.budget < targets.length) {
+      job.summary.budgetExhausted = true;
+      return;
+    }
+    const built = targets.map((t) => ({
+      ...t,
+      ...questionnaireReminderEmail({ to: t.who, tutorName, studentName: call.guest_name?.trim() || "", start: call.scheduled_at, timeZone, url }),
+    }));
+    if (job.dryRun) {
+      for (const b of built) job.summary.planned!.push({ kind: "questionnaire_reminder", to: b.to, subject: b.subject });
+      job.budget -= built.length;
+      continue;
+    }
+    // Claim it: another run may be here too.
+    const remindedAt = new Date().toISOString();
+    const { data: claimed, error: claimErr } = await job.admin
+      .from("diagnostic_assessments").update({ questionnaire_reminded_at: remindedAt })
+      .eq("id", d.id).is("questionnaire_reminded_at", null).is("questionnaire_submitted_at", null).select("id");
+    if (claimErr) throw new Error(`diagnostic_assessments: ${claimErr.message}`);
+    if (!claimed?.length) continue;
+    let retry = false;
+    for (const b of built) {
+      job.budget--;
+      const result = await sendEmail(job.resend!, {
+        to: b.to, subject: b.subject, content: b.content, replyTo: tutor.email,
+        idempotencyKey: `questionnaire_reminder:${d.id}:${b.who}`,
+      });
+      if (result.error) {
+        if (!result.blocked) retry = true;
+        bump(result.blocked ? job.summary.blocked : job.summary.failed, "questionnaire_reminder");
+        logger.warn({ diagnosticId: d.id, recipient: b.who, error: result.error }, "emails: questionnaire reminder failed");
+      } else {
+        bump(job.summary.sent, "questionnaire_reminder");
+      }
+    }
+    // Let the next run try again (the idempotency keys stop a repeat of whoever got it).
+    if (retry) await job.admin.from("diagnostic_assessments").update({ questionnaire_reminded_at: null }).eq("id", d.id).eq("questionnaire_reminded_at", remindedAt);
+  }
+}
+
+/** Tell the tutor who sent a prospect's diagnostic when the prospect's answers arrive. */
+async function runQuestionnaireDone(job: Job) {
+  const { data, error } = await job.admin
+    .from("diagnostic_assessments")
+    .select("id, token, tutor_id, questionnaire, pre_call_form_url, questionnaire_answers, questionnaire_submitted_at, submitted_by_name, student_name, prospect_email")
+    .is("student_id", null)
+    .not("questionnaire", "is", null)
+    .gte("questionnaire_submitted_at", new Date(job.now.getTime() - DIAGNOSTIC_DONE_LOOKBACK).toISOString())
+    .limit(500);
+  if (error) throw new Error(`diagnostic_assessments: ${error.message}`);
+  const rows = (data ?? []) as QuestionnaireDiagnostic[];
+  if (rows.length === 0) return;
+  const done = await loadDone(job, "questionnaire_done", rows.map((d) => d.id));
+  const pending = rows.filter((d) => !done.has(`${d.id}:${d.tutor_id}`));
+  if (pending.length === 0) return;
+  const tutors = await loadRecipients(job, pending.map((d) => d.tutor_id));
+  const { names } = await loadTutorBooking(job, [...new Set(pending.map((d) => d.tutor_id))]);
+  for (const d of pending) {
+    const tutor = tutors.get(d.tutor_id);
+    if (!tutor || tutor.unsubscribed) continue;
+    const studentName = d.submitted_by_name?.trim() || d.student_name?.trim() || d.prospect_email || "Your prospect";
+    await deliver(job, "questionnaire_done", tutor, [d.id], () => {
+      const { subject, content } = questionnaireDoneEmail({
+        tutorName: names.get(d.tutor_id) ?? tutor.name,
+        studentName,
+        flagged: flaggedAnswers((d.questionnaire ?? { intro: "", items: [] }) as Questionnaire, (d.questionnaire_answers ?? {}) as Answers),
+        reportUrl: `${appUrl()}/tutor?tab=diagnostic`,
+      });
+      return { subject, content: { ...content, unsubscribe: unsubscribeUrl(tutor.id) } };
+    });
+  }
+}
+
 // ── Parent progress reports ─────────────────────────────────────────────────
 
 export function localWeekday(date: Date): string {
@@ -1391,6 +1532,8 @@ export async function runAutomatedEmails(admin: SupabaseClient, resend: Resend |
     ["prospect reminders", runProspectReminders],
     ["consultation reminders", runConsultationReminders],
     ["book your call", runBookYourCall],
+    ["questionnaire reminders", runQuestionnaireReminders],
+    ["questionnaire answers", runQuestionnaireDone],
     ["invite reminders", runInviteReminders],
     ["parent reports", runParentReports],
     ["account parent reports", runAccountParentReports],

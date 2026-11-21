@@ -246,3 +246,22 @@ test("questionnaireLinkFor: snapshot wins, legacy only without one, else null", 
     if (saved === undefined) delete process.env.APP_URL; else process.env.APP_URL = saved;
   }
 });
+
+import { dueQuestionnaireReminder } from "../src/lib/questionnaire";
+
+test("dueQuestionnaireReminder: from a day before the start until the start", () => {
+  const start = Date.parse("2027-03-10T05:00:00Z");
+  const H = 3_600_000;
+  const call = { scheduled_at: new Date(start).toISOString(), created_at: new Date(start - 3 * 24 * H).toISOString() };
+  const due = (o: Partial<Parameters<typeof dueQuestionnaireReminder>[0]> & { now: number }) =>
+    dueQuestionnaireReminder({ call, submittedAt: null, remindedAt: null, ...o });
+  assert.equal(due({ now: start - 24 * H - 60_000 }), false);
+  assert.equal(due({ now: start - 23 * H - 59 * 60_000 }), true);
+  assert.equal(due({ now: start + 1 }), false);
+  assert.equal(due({ now: start, }), false);
+  assert.equal(due({ now: start - 5 * H, call: { ...call, created_at: new Date(start - 20 * H).toISOString() } }), false);
+  assert.equal(due({ now: start - 5 * H, call: { ...call, created_at: new Date(start - 24 * H).toISOString() } }), true);
+  assert.equal(due({ now: start - 5 * H, submittedAt: "2027-03-09T00:00:00Z" }), false);
+  assert.equal(due({ now: start - 5 * H, remindedAt: "2027-03-09T00:00:00Z" }), false);
+  assert.equal(due({ now: start - 5 * H, call: null }), false);
+});

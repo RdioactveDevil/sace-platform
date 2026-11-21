@@ -98,6 +98,14 @@ class Query implements PromiseLike<{ data: unknown; error: { code?: string; mess
 export function fakeSupabase(db: FakeDb): SupabaseClient {
   return {
     from: (table: string) => new Query(db, table),
+    // claim_email: take a (kind, ref, recipient) once, as the real function does for fresh rows.
+    rpc: async (fn: string, a: { p_kind: string; p_ref_id: string; p_recipient_id: string }) => {
+      if (fn !== "claim_email") return { data: null, error: { message: `fake: rpc ${fn} unsupported` } };
+      const log = (db.tables.email_log ??= []);
+      if (log.some((r) => r.kind === a.p_kind && r.ref_id === a.p_ref_id && r.recipient_id === a.p_recipient_id)) return { data: false, error: null };
+      log.push({ kind: a.p_kind, ref_id: a.p_ref_id, recipient_id: a.p_recipient_id, status: "pending", attempts: 1, updated_at: new Date().toISOString() });
+      return { data: true, error: null };
+    },
     auth: {
       admin: {
         getUserById: async (id: string) => {
