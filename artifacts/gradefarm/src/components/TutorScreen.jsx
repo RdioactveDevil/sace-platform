@@ -64,6 +64,7 @@ import { ASSIGNMENT_DIFFICULTIES, assignmentGoalLabel } from '../lib/engine'
 import { WEEKDAYS, defaultDueDays, describeDue, describeRepeat, localYmd } from '../lib/recurring'
 import SegmentedToggle from './SegmentedToggle'
 import ConsultationModal from './ConsultationModal'
+import PresentReport from './PresentReport'
 import { formatWhen } from '../lib/bookingFormat'
 
 const GOLD   = 'var(--t-accent)'
@@ -1714,6 +1715,12 @@ function DiagnosticTab({ profile, theme }) {
 
   // ── Report panel ──
   const [reportData, setReportData]   = useState(null)
+  const [presenting, setPresenting]    = useState(false)
+  const presentBtnRef = useRef(null)
+  const exitPresent = useCallback(() => {
+    setPresenting(false)
+    setTimeout(() => presentBtnRef.current?.focus(), 0)
+  }, [])
   const [reportLoading, setReportLoading] = useState(false)
   const [reportError, setReportError] = useState('')
 
@@ -2323,8 +2330,17 @@ function DiagnosticTab({ profile, theme }) {
             const pct = r.percentage
             const bandColors = { Outstanding: t.success, High: GOLD, Satisfactory: t.blue, Developing: 'color-mix(in srgb, var(--t-accent) 55%, var(--t-danger))', Beginning: t.danger }
             const bc = bandColors[r.performance_band] || GOLD
+            const canPresent = a.status === 'completed' && !a.student_id
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {canPresent && (
+                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <button ref={presentBtnRef} onClick={() => setPresenting(true)} style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: 'var(--t-accent)', color: 'var(--t-onAccent)', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
+                      Present
+                    </button>
+                  </div>
+                )}
+                {presenting && canPresent && <PresentReport assessment={a} report={r} theme={theme} onExit={exitPresent} />}
                 {/* Header */}
                 <div style={card}>
                   <div style={{ padding: '20px 24px', display: 'flex', gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>
