@@ -51,6 +51,7 @@ import {
   fetchUnreadMessageCount,
 } from '../lib/db'
 import { fetchLiveCurricula, loadCurriculumMacroGroups } from '../lib/curriculaDb'
+import { dbDiagnosticSubject } from '../lib/diagnosticSubjects'
 import { ASSIGNMENT_DIFFICULTIES, assignmentGoalLabel } from '../lib/engine'
 import { WEEKDAYS, defaultDueDays, describeDue, describeRepeat, localYmd } from '../lib/recurring'
 import SegmentedToggle from './SegmentedToggle'
@@ -1638,14 +1639,6 @@ function getSubjectsForYearLevel(yearLevel, subjectList = ALL_DIAGNOSTIC_SUBJECT
   return subjectList.filter(s => s.yearGroups.includes('primary'))
 }
 
-function curriculumToYearGroups(level_label) {
-  const l = (level_label || '').toLowerCase()
-  if (l.includes('stage 2') || l.includes('year 12')) return ['stage2']
-  if (l.includes('stage 1') || l.includes('year 11')) return ['stage1']
-  if (['year 7', 'year 8', 'year 9', 'year 10'].some(y => l.includes(y))) return ['junior']
-  return ['junior']
-}
-
 function DiagnosticTab({ profile, theme }) {
   const t = THEMES[theme]
 
@@ -1659,13 +1652,7 @@ function DiagnosticTab({ profile, theme }) {
         const builtInNames = new Set(ALL_DIAGNOSTIC_SUBJECTS.map(s => s.name.toLowerCase()))
         const dynamic = curricula
           .filter(c => !builtInNames.has(c.name.toLowerCase()))
-          .map(c => ({
-            id: `db_${c.id}`,
-            name: c.name,
-            yearGroups: curriculumToYearGroups(c.level_label),
-            topics: [],
-            isWriting: false,
-          }))
+          .map(dbDiagnosticSubject)
         setMergedSubjects([...ALL_DIAGNOSTIC_SUBJECTS, ...dynamic])
       })
       .catch(() => { /* fall back to static list already set */ })
