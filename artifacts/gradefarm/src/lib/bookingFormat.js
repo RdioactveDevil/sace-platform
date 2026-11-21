@@ -83,12 +83,24 @@ export function groupSlotsByDay(slots, timeZone) {
 
 const zoneName = (timeZone) => ZONES.find((z) => z.value === timeZone)?.label ?? String(timeZone).split('/').pop().replace(/_/g, ' ')
 
-/** "Tue 3 Nov, 4:30 pm (Melbourne)". */
+/**
+ * "Tue 3 Nov, 4:30 pm (Melbourne)". With no zone (not known yet) the time is in
+ * the browser's zone and carries no label, rather than a wrong one.
+ */
 export function formatWhen(iso, timeZone) {
   if (!iso) return ''
   const d = new Date(iso)
-  const p = partsIn(d, timeZone, { weekday: 'short', day: 'numeric', month: 'short' })
-  return `${p.weekday} ${p.day} ${p.month}, ${clock(d, timeZone)} (${zoneName(timeZone)})`
+  const zone = timeZone || undefined
+  const p = partsIn(d, zone, { weekday: 'short', day: 'numeric', month: 'short' })
+  return `${p.weekday} ${p.day} ${p.month}, ${clock(d, zone)}${timeZone ? ` (${zoneName(timeZone)})` : ''}`
+}
+
+/** A new block of hours for a day: from where the last one ends (or 09:00) for an hour, never past 23:59. */
+export function nextBlock(blocks) {
+  const start = blocks.length && isValidHHMM(blocks[blocks.length - 1][1]) ? blocks[blocks.length - 1][1] : '09:00'
+  const [h, m] = start.split(':').map(Number)
+  const end = h >= 23 ? '23:59' : `${String(h + 1).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+  return [start, end]
 }
 
 /** The zone's offset from UTC, in ms, at an instant. */

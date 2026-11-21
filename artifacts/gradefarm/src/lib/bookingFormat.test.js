@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  reminderLabel, groupSlotsByDay, emptyWeek, isValidHHMM, formatWhen, zonedToIso, reminderToMinutes, splitReminder, ZONES,
+  reminderLabel, groupSlotsByDay, emptyWeek, isValidHHMM, formatWhen, zonedToIso, reminderToMinutes, splitReminder, ZONES, nextBlock,
 } from './bookingFormat.js'
 
 test('reminderLabel', () => {
@@ -52,6 +52,20 @@ test('formatWhen shows the time in the zone with its label', () => {
   assert.equal(formatWhen('2026-11-03T05:30:00.000Z', 'Australia/Melbourne'), 'Tue 3 Nov, 4:30 pm (Melbourne)')
   assert.equal(formatWhen('2026-11-03T05:30:00.000Z', 'Australia/Adelaide'), 'Tue 3 Nov, 4:00 pm (Adelaide)')
   assert.equal(formatWhen(null, 'Australia/Adelaide'), '')
+})
+
+test('formatWhen without a zone shows no zone label', () => {
+  const s = formatWhen('2026-11-03T05:30:00.000Z', undefined)
+  assert.match(s, /^\w{3} 3 Nov, \d{1,2}:\d{2} [ap]m$/)
+  assert.equal(formatWhen('2026-11-03T05:30:00.000Z', null).includes('('), false)
+})
+
+test('nextBlock starts where the last block ends and runs an hour', () => {
+  assert.deepEqual(nextBlock([]), ['09:00', '10:00'])
+  assert.deepEqual(nextBlock([['09:00', '12:00']]), ['12:00', '13:00'])
+  assert.deepEqual(nextBlock([['09:00', '12:30']]), ['12:30', '13:30'])
+  assert.deepEqual(nextBlock([['20:00', '23:30']]), ['23:30', '23:59'])
+  assert.deepEqual(nextBlock([['09:00', '']]), ['09:00', '10:00'])
 })
 
 test('zonedToIso turns a wall-clock time in a zone into an instant', () => {

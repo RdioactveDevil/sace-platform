@@ -1700,7 +1700,7 @@ function DiagnosticTab({ profile, theme }) {
 
   // ── Consultation calls: the row being booked or moved, and the tutor's zone for showing times ──
   const [callModal, setCallModal] = useState(null) // { mode: 'book' | 'reschedule', diagnostic?, session? }
-  const [tutorZone, setTutorZone] = useState('Australia/Adelaide')
+  const [tutorZone, setTutorZone] = useState(null) // null until known: times then show without a zone label
   useEffect(() => {
     let cancelled = false
     fetchBookingSettings().then(s => { if (!cancelled && s?.timeZone) setTutorZone(s.timeZone) }).catch(() => {})

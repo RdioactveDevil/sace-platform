@@ -8,7 +8,7 @@ import InfinityLoader from './InfinityLoader'
 import SegmentedToggle from './SegmentedToggle'
 import ConsultationSettings from './ConsultationSettings'
 import ConsultationModal, { RemindersModal } from './ConsultationModal'
-import { reminderLabel } from '../lib/bookingFormat'
+import { reminderLabel, formatWhen } from '../lib/bookingFormat'
 import {
   fetchRoster,
   fetchStudentEmails,
@@ -21,6 +21,7 @@ import {
   cancelSessionSeries,
   getTutorBilling,
   cancelConsultation,
+  fetchBookingSettings,
 } from '../lib/db'
 
 const GOLD  = 'var(--t-accent)'
@@ -444,9 +445,10 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
 }
 
 // ── Session Card ──────────────────────────────────────────────────────────────
-function SessionCard({ session, theme, onJoin, onCancel, onReschedule, onReminders }) {
+function SessionCard({ session, theme, onJoin, onCancel, onReschedule, onReminders, tutorZone }) {
   const t = THEMES[theme]
   const [cancelling, setCancelling] = useState(false)
+  const [cancelError, setCancelError] = useState('')
   const [copied, setCopied] = useState(false)
   const isPast = new Date(session.scheduled_at) < new Date()
   const canJoin = session.status === 'scheduled' || session.status === 'active'
@@ -459,7 +461,8 @@ function SessionCard({ session, theme, onJoin, onCancel, onReschedule, onReminde
       : 'Cancel this session?'
     if (!(await confirmDialog(message, { confirm: isConsultation ? 'Cancel call' : 'Cancel session', cancel: 'Keep it', danger: true }))) return
     setCancelling(true)
-    try { await onCancel(session.id) } finally { setCancelling(false) }
+    setCancelError('')
+    try { await onCancel(session.id) } catch (err) { setCancelError(err.message || "That didn't work. Please try again.") } finally { setCancelling(false) }
   }
 
   const handleCopyLink = () => {
@@ -493,10 +496,11 @@ function SessionCard({ session, theme, onJoin, onCancel, onReschedule, onReminde
             {session.other_party_name || (isConsultation ? 'Prospective student' : 'Student')}
             {session.session_type === 'group' && session.participant_count > 0 && ` (${session.participant_count})`}
           </span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Calendar size={14} aria-hidden="true" />{fmtDateTime(session.scheduled_at)}</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Calendar size={14} aria-hidden="true" />{isConsultation ? formatWhen(session.scheduled_at, tutorZone) : fmtDateTime(session.scheduled_at)}</span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Timer size={14} aria-hidden="true" />{session.duration_minutes} min</span>
           {isConsultation && session.guest_email && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Mail size={14} aria-hidden="true" />{session.guest_email}</span>}
         </div>
+        {cancelError && <div role="alert" style={{ marginTop: 8, fontSize: 13, color: t.danger }}>{cancelError}</div>}
         {isConsultation && canCancel && session.reminder_minutes?.length > 0 && (
           <div style={{ fontSize: 12, color: t.textMuted, marginTop: 6 }}>
             Reminders: {[...session.reminder_minutes].sort((a, b) => b - a).map(reminderLabel).join(', ')}
@@ -629,6 +633,7 @@ export default function SessionsTab({ profile, theme }) {
   const [showModal, setShowModal] = useState(false)
   const [filter, setFilter] = useState('upcoming')
   const [view, setView] = useState('sessions') // 'sessions' | 'recurring'
+  const [tutorZone, setTutorZone] = useState(null)   // null until known: times then show without a zone label
   const [moving, setMoving] = useState(null)       // consultation being rescheduled
   const [editingReminders, setEditingReminders] = useState(null)
 
@@ -658,6 +663,11 @@ export default function SessionsTab({ profile, theme }) {
   }, [profile.id])
 
   useEffect(() => { load() }, [load])
+  useEffect(() => {
+    let cancelled = false
+    fetchBookingSettings().then(s => { if (!cancelled && s?.timeZone) setTutorZone(s.timeZone) }).catch(() => {})
+    return () => { cancelled = true }
+  }, [])
 
   const handleCancel = async (id) => {
     await cancelTutoringSession(id)
@@ -775,6 +785,7 @@ export default function SessionsTab({ profile, theme }) {
                   onCancel={session.session_type === 'consultation' ? handleCancelCall : handleCancel}
                   onReschedule={setMoving}
                   onReminders={setEditingReminders}
+                  tutorZone={tutorZone}
                 />
               ))}
             </div>

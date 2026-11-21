@@ -4,7 +4,7 @@ import { THEMES } from '../lib/theme'
 import InfinityLoader from './InfinityLoader'
 import ReminderEditor from './ReminderEditor'
 import { fetchBookingSettings, saveBookingSettings } from '../lib/db'
-import { ZONES, WEEK_DAYS, emptyWeek, isValidHHMM } from '../lib/bookingFormat'
+import { ZONES, WEEK_DAYS, emptyWeek, isValidHHMM, nextBlock } from '../lib/bookingFormat'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
@@ -149,7 +149,7 @@ export default function ConsultationSettings({ theme, defaultOpen = false }) {
                         </div>
                       ))}
                     </div>
-                    <button type="button" onClick={() => setBlocks(key, [...blocks, blocks.length ? [blocks[blocks.length - 1][1], blocks[blocks.length - 1][1]] : ['09:00', '17:00']])} style={{ ...ghostBtn, color: t.text, fontWeight: 700 }}>
+                    <button type="button" onClick={() => setBlocks(key, [...blocks, nextBlock(blocks)])} style={{ ...ghostBtn, color: t.text, fontWeight: 700 }}>
                       Add hours
                     </button>
                   </div>

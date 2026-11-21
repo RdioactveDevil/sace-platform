@@ -5,7 +5,7 @@ import { THEMES } from '../lib/theme'
 import SegmentedToggle from './SegmentedToggle'
 import InfinityLoader from './InfinityLoader'
 import ReminderEditor from './ReminderEditor'
-import { fetchConsultationSlots, bookConsultation, updateConsultation } from '../lib/db'
+import { fetchConsultationSlots, fetchBookingSettings, bookConsultation, updateConsultation } from '../lib/db'
 import { groupSlotsByDay, formatWhen, zonedToIso, ZONES } from '../lib/bookingFormat'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
@@ -29,7 +29,8 @@ export default function ConsultationModal({ mode, diagnostic, session, theme, on
 
   const [loading, setLoading] = useState(!!diagnosticId)
   const [slots, setSlots] = useState([])
-  const [zone, setZone] = useState(ZONES[0].value)
+  const [zone, setZone] = useState(null)          // the tutor's own zone, from their settings; null until known
+  const [zoneError, setZoneError] = useState('')
   const [callMinutes, setCallMinutes] = useState(null)
   const [noHours, setNoHours] = useState(false)
   const [loadError, setLoadError] = useState('')
@@ -44,13 +45,20 @@ export default function ConsultationModal({ mode, diagnostic, session, theme, on
   const [error, setError] = useState('')
 
   useEffect(() => {
+    let cancelled = false
+    fetchBookingSettings()
+      .then(s => { if (!cancelled) { if (s?.timeZone) setZone(s.timeZone); else setZoneError("Couldn't find your time zone.") } })
+      .catch(e => { if (!cancelled) setZoneError(e.message || "Couldn't load your time zone.") })
+    return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
     if (!diagnosticId) { setHow('any'); return undefined }
     let cancelled = false
     fetchConsultationSlots(diagnosticId)
       .then(r => {
         if (cancelled) return
         setSlots(r.slots || [])
-        setZone(r.timeZone || ZONES[0].value)
         setCallMinutes(r.callMinutes ?? null)
         setNoHours(!!r.noHours)
         if (!(r.slots || []).length) setHow('any')
@@ -60,15 +68,17 @@ export default function ConsultationModal({ mode, diagnostic, session, theme, on
     return () => { cancelled = true }
   }, [diagnosticId])
 
-  const days = useMemo(() => groupSlotsByDay(slots, zone), [slots, zone])
+  const days = useMemo(() => (zone ? groupSlotsByDay(slots, zone) : []), [slots, zone])
   const zoneLabel = ZONES.find(z => z.value === zone)?.label || zone
-  const anyIso = zonedToIso(date, time, zone)
+  const zoneReady = !!zone
+  const anyIso = zoneReady ? zonedToIso(date, time, zone) : null
   const startIso = how === 'offered' ? chosen : anyIso
   const current = !booking ? session.scheduled_at : null
 
   const submit = async (e) => {
     e.preventDefault()
     setError('')
+    if (!zoneReady) { setError(zoneError || 'Still loading your time zone.'); return }
     if (!startIso) { setError(how === 'offered' ? 'Choose a time for the call.' : 'Choose a date and time.'); return }
     if (new Date(startIso) <= new Date()) { setError('Choose a time in the future.'); return }
     if (booking) {
@@ -128,6 +138,7 @@ export default function ConsultationModal({ mode, diagnostic, session, theme, on
                 )}
               </div>
             )}
+            {zoneError && <p role="alert" style={{ color: t.danger, fontSize: 13, margin: 0 }}>{zoneError} Times can't be set until it loads. Close this and try again.</p>}
             {loadError && <p role="alert" style={{ color: t.danger, fontSize: 13, margin: 0 }}>{loadError}</p>}
 
             {booking && (
@@ -146,11 +157,11 @@ export default function ConsultationModal({ mode, diagnostic, session, theme, on
             {slots.length > 0 && (
               <SegmentedToggle size="sm" label="How to choose the time" value={how} onChange={setHow} options={[
                 { value: 'offered', label: 'Open times' },
-                { value: 'any', label: 'Pick any time' },
+                { value: 'any', label: 'Pick any time', disabled: !zoneReady },
               ]} />
             )}
 
-            {how === 'offered' ? (
+            {how === 'offered' && zoneReady ? (
               <div>
                 <label style={labelStyle}>Times shown in {zoneLabel} time{callMinutes ? ` · ${callMinutes} minute call` : ''}</label>
                 <div style={{ maxHeight: 280, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14, paddingRight: 4 }}>
@@ -172,15 +183,15 @@ export default function ConsultationModal({ mode, diagnostic, session, theme, on
                   ))}
                 </div>
               </div>
-            ) : (
+            ) : how === 'offered' ? null : (
               <div>
                 {slots.length === 0 && !loadError && !noHours && (
                   <p style={{ margin: '0 0 10px', fontSize: 13, color: t.textMuted }}>No open times in the next few weeks. Pick a time yourself.</p>
                 )}
-                <label style={labelStyle}>Date and time in {zoneLabel} time</label>
+                <label style={labelStyle}>Date and time{zoneReady ? ` in ${zoneLabel} time` : ''}</label>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <input className="td-input-gold" type="date" aria-label="Date" value={date} onChange={e => setDate(e.target.value)} style={inputStyle} />
-                  <input className="td-input-gold" type="time" aria-label="Time" value={time} onChange={e => setTime(e.target.value)} style={inputStyle} />
+                  <input className="td-input-gold" type="date" aria-label="Date" disabled={!zoneReady} value={date} onChange={e => setDate(e.target.value)} style={inputStyle} />
+                  <input className="td-input-gold" type="time" aria-label="Time" disabled={!zoneReady} value={time} onChange={e => setTime(e.target.value)} style={inputStyle} />
                 </div>
                 <div style={{ fontSize: 11, color: t.textFaint, marginTop: 6 }}>
                   Any future time that doesn't overlap another of your sessions.
@@ -197,7 +208,7 @@ export default function ConsultationModal({ mode, diagnostic, session, theme, on
               <button type="button" onClick={onClose} style={{ padding: '10px 20px', borderRadius: 9, border: dark ? '1px solid var(--t-border)' : `1px solid ${t.border}`, background: dark ? 'var(--t-bgSubtle)' : 'transparent', color: t.textMuted, fontFamily: FONT_B, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
                 Cancel
               </button>
-              <button type="submit" disabled={saving} className={saving ? '' : 'btn-gold-shimmer'} style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: saving ? (dark ? 'var(--t-bgSubtle)' : t.border) : 'var(--t-accent)', color: saving ? t.textMuted : 'var(--t-onAccent)', fontFamily: FONT_B, fontSize: 13, fontWeight: 800, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>
+              <button type="submit" disabled={saving || !zoneReady} className={saving || !zoneReady ? '' : 'btn-gold-shimmer'} style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: saving || !zoneReady ? (dark ? 'var(--t-bgSubtle)' : t.border) : 'var(--t-accent)', color: saving || !zoneReady ? t.textMuted : 'var(--t-onAccent)', fontFamily: FONT_B, fontSize: 13, fontWeight: 800, cursor: saving || !zoneReady ? 'not-allowed' : 'pointer', opacity: saving || !zoneReady ? 0.7 : 1 }}>
                 {saving ? 'Saving…' : booking ? 'Book call' : 'Reschedule'}
               </button>
             </div>
