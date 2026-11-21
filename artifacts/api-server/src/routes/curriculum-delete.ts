@@ -197,7 +197,8 @@ router.post("/admin/curriculum-delete", async (req, res) => {
       await step("user_subscriptions", () => admin.from("user_subscriptions").delete().eq("subject_name", cur.name).neq("source", "stripe"));
       await step("tutor_student_subjects", () => admin.from("tutor_student_subjects").delete().eq("subject_name", cur.name));
     }
-    // Topics, subtopics, resources, exemplars and diagnostics go by cascade.
+    // Topics, subtopics, resources, exemplars and students' diagnostics go by cascade;
+    // tutors' link diagnostics stay, unlinked (a trigger on curricula; migration 20261121000001).
     await step("curricula", () => admin.from("curricula").delete().eq("id", cur.id));
 
     logger.info({ curriculumId: cur.id, name: cur.name, questions: plan.ids.length, by: caller.userId }, "curriculum deleted with all data");

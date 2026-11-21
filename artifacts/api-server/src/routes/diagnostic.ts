@@ -7,7 +7,7 @@ import { logger } from "../lib/logger";
 import { requireUser } from "../lib/auth";
 import { requireTutorPlan } from "../lib/tutor-plan";
 import { diagnosticScope, studentSummary, type ScopeTopic } from "../lib/student-diagnostic";
-import { scopeOutline } from "../lib/diagnostic-outline";
+import { scopeOutline, subtopicFieldHint } from "../lib/diagnostic-outline";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -292,7 +292,7 @@ Each question object must have these exact fields:
   "marks": <integer>,
   "difficulty": "easy" | "moderate" | "exam",
   "topic": "<topic name from the provided list>",
-  "subtopic": "<specific subtopic or concept>",
+  "subtopic": "${subtopicFieldHint(outline)}",
   "solution_notes": "<brief explanation of the correct answer for marking>"
 }
 
