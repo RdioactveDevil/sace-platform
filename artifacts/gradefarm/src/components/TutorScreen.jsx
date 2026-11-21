@@ -47,6 +47,8 @@ import {
   createDiagnosticAssessment,
   resendDiagnostic,
   cancelDiagnostic,
+  cancelConsultation,
+  fetchBookingSettings,
   fetchDiagnosticAssessments,
   fetchDiagnosticReport,
   fetchTutorResources,
@@ -59,6 +61,8 @@ import { statusChip } from '../lib/diagnosticStatus'
 import { ASSIGNMENT_DIFFICULTIES, assignmentGoalLabel } from '../lib/engine'
 import { WEEKDAYS, defaultDueDays, describeDue, describeRepeat, localYmd } from '../lib/recurring'
 import SegmentedToggle from './SegmentedToggle'
+import ConsultationModal from './ConsultationModal'
+import { formatWhen } from '../lib/bookingFormat'
 
 const GOLD   = 'var(--t-accent)'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
@@ -1647,6 +1651,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 function DiagnosticTab({ profile, theme }) {
   const t = THEMES[theme]
+  const navigate = useNavigate()
 
   // ── Dynamic subjects from DB (merged with static fallback) ──
   const [mergedSubjects, setMergedSubjects] = useState(ALL_DIAGNOSTIC_SUBJECTS)
@@ -1674,6 +1679,7 @@ function DiagnosticTab({ profile, theme }) {
   const [writingType, setWritingType] = useState('paragraph')
   const [studentName, setStudentName] = useState('')
   const [prospectEmail, setProspectEmail] = useState('')
+  const [parentEmail, setParentEmail] = useState('')
   const [preCallFormUrl, setPreCallFormUrl] = useState('')
 
   // ── Generated data ──
@@ -1691,6 +1697,15 @@ function DiagnosticTab({ profile, theme }) {
   // ── Past diagnostics list ──
   const [diagnostics, setDiagnostics] = useState([])
   const [listLoading, setListLoading] = useState(false)
+
+  // ── Consultation calls: the row being booked or moved, and the tutor's zone for showing times ──
+  const [callModal, setCallModal] = useState(null) // { mode: 'book' | 'reschedule', diagnostic?, session? }
+  const [tutorZone, setTutorZone] = useState('Australia/Adelaide')
+  useEffect(() => {
+    let cancelled = false
+    fetchBookingSettings().then(s => { if (!cancelled && s?.timeZone) setTutorZone(s.timeZone) }).catch(() => {})
+    return () => { cancelled = true }
+  }, [])
 
   // ── Report panel ──
   const [reportData, setReportData]   = useState(null)
@@ -1729,6 +1744,7 @@ function DiagnosticTab({ profile, theme }) {
     if (!selectedSubjectId) { setGenError('Please select a subject.'); return }
     if (!selectedSubject.fromDb && selectedTopics.length === 0) { setGenError('Please select at least one topic.'); return }
     if (prospectEmail.trim() && !EMAIL_RE.test(prospectEmail.trim())) { setGenError("Enter a valid email address for the student, or leave it blank."); return }
+    if (parentEmail.trim() && !EMAIL_RE.test(parentEmail.trim())) { setGenError("Enter a valid email address for the parent, or leave it blank."); return }
     const subjectConfig = buildSubjectConfig()
 
 
@@ -1755,6 +1771,7 @@ function DiagnosticTab({ profile, theme }) {
         studentName: studentName.trim() || null,
         preCallFormUrl: preCallFormUrl.trim() || null,
         prospectEmail: prospectEmail.trim() || null,
+        parentEmail: parentEmail.trim() || null,
       })
       setCreatedLink(json.link)
       setCreatedSend(prospectEmail.trim() ? { id: json.id, email: prospectEmail.trim().toLowerCase(), emailed: !!json.emailed, emailError: json.emailError || '' } : null)
@@ -1785,6 +1802,10 @@ function DiagnosticTab({ profile, theme }) {
   const handleCancel = async (d) => {
     const ok = await confirmDialog(`Cancel this diagnostic? The link stops working${d.prospect_email ? ` for ${d.prospect_email}` : ''}, and you can't undo this.`, { confirm: 'Cancel diagnostic', cancel: 'Keep it', danger: true })
     if (ok) runRowAction(d.id, () => cancelDiagnostic(d.id))
+  }
+  const handleCancelCall = async (d) => {
+    const ok = await confirmDialog(`Cancel the call with ${d.submitted_by_name || d.student_name || d.prospect_email || 'this prospect'}? They'll be emailed that it's cancelled.`, { confirm: 'Cancel call', cancel: 'Keep it', danger: true })
+    if (ok) runRowAction(d.id, () => cancelConsultation(d.booking.sessionId))
   }
   const handleCreatedResend = async () => {
     if (!createdSend) return
@@ -1823,6 +1844,7 @@ function DiagnosticTab({ profile, theme }) {
     setWritingType('paragraph')
     setStudentName('')
     setProspectEmail('')
+    setParentEmail('')
     setPreCallFormUrl('')
     setCreatedSend(null)
     setQuestions([])
@@ -1959,6 +1981,11 @@ function DiagnosticTab({ profile, theme }) {
                 </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
+                <div>
+                  <label style={labelStyle}>Parent's email <span style={{ fontWeight: 400, textTransform: 'none', color: t.textFaint }}>(optional)</span></label>
+                  <input className="td-input-gold" type="email" value={parentEmail} onChange={e => setParentEmail(e.target.value)} placeholder="e.g. parent@example.com" style={inputStyle} />
+                  <div style={{ fontSize: 11, color: t.textFaint, marginTop: 4 }}>Gets a copy of the emails about the consultation call.</div>
+                </div>
                 <div>
                   <label style={labelStyle}>Pre-lesson questionnaire link <span style={{ fontWeight: 400, textTransform: 'none', color: t.textFaint }}>(optional)</span></label>
                   <input className="td-input-gold" value={preCallFormUrl} onChange={e => setPreCallFormUrl(e.target.value)} placeholder="https://forms.google.com/…" style={inputStyle} />
@@ -2174,6 +2201,10 @@ function DiagnosticTab({ profile, theme }) {
                 const chipBorder = { success: `${t.success}59`, gold: 'var(--t-border)', danger: `${t.danger}59`, muted: 'var(--t-border)' }[chip.tone]
                 const chipBg = { success: t.successBg, gold: 'var(--t-bgSubtle)', danger: t.dangerBg, muted: 'var(--t-bgSubtle)' }[chip.tone]
                 const busy = rowBusy === d.id
+                // A finished prospect's diagnostic can have a call booked; a roster student's can't.
+                const isProspect = !d.student_id && d.tutor_id === profile.id
+                const canBook = isProspect && completed && !d.booking
+                const rowName = d.submitted_by_name || d.student_name || null
                 return (
                   <div key={d.id} style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -2191,8 +2222,28 @@ function DiagnosticTab({ profile, theme }) {
                         {d.sent_at ? ` · Sent ${fmtDate(d.sent_at)}` : ` · Created ${fmtDate(d.created_at)}`}
                         {completed && d.completed_at ? ` · Submitted ${fmtDate(d.completed_at)}` : ''}
                       </div>
+                      {isProspect && d.booking && (
+                        <div style={{ fontSize: 12, fontWeight: 700, color: t.text, marginTop: 5 }}>
+                          Call {formatWhen(d.booking.start, tutorZone)}
+                        </div>
+                      )}
                     </div>
                     <div style={{ display: 'flex', gap: 8, flexShrink: 0, flexWrap: 'wrap' }}>
+                      {canBook && (
+                        <button onClick={() => setCallModal({ mode: 'book', diagnostic: { id: d.id, prospect_email: d.prospect_email, parent_email: d.parent_email, name: rowName } })} disabled={busy} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.text, fontSize: 12, fontWeight: 700, cursor: busy ? 'default' : 'pointer', fontFamily: FONT_B }}>
+                          Book call
+                        </button>
+                      )}
+                      {isProspect && d.booking && (
+                        <>
+                          <button onClick={() => setCallModal({ mode: 'reschedule', session: { id: d.booking.sessionId, diagnostic_id: d.id, scheduled_at: d.booking.start, guest_name: rowName, guest_email: d.prospect_email } })} disabled={busy} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.text, fontSize: 12, fontWeight: 700, cursor: busy ? 'default' : 'pointer', fontFamily: FONT_B }}>
+                            Reschedule
+                          </button>
+                          <button onClick={() => handleCancelCall(d)} disabled={busy} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, cursor: busy ? 'default' : 'pointer', fontFamily: FONT_B }}>
+                            {busy ? '…' : 'Cancel call'}
+                          </button>
+                        </>
+                      )}
                       {d.can_resend && (
                         <button onClick={() => handleResend(d)} disabled={busy} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.text, fontSize: 12, fontWeight: 700, cursor: busy ? 'default' : 'pointer', fontFamily: FONT_B }}>
                           {busy ? '…' : 'Resend'}
@@ -2218,6 +2269,14 @@ function DiagnosticTab({ profile, theme }) {
             </div>
           )}
         </div>
+      )}
+
+      {callModal && (
+        <ConsultationModal
+          mode={callModal.mode} diagnostic={callModal.diagnostic} session={callModal.session} theme={theme}
+          onClose={() => setCallModal(null)} onDone={loadList}
+          onOpenSettings={() => navigate('/tutor/sessions?consultation=settings')}
+        />
       )}
 
       {/* ── Step: Report ── */}

@@ -2059,10 +2059,10 @@ export async function generateDiagnosticQuestions({ yearLevel, subjects }) {
 }
 
 /** Save a diagnostic assessment and get the unique student link. */
-export async function createDiagnosticAssessment({ yearLevel, subjects, questions, studentName, preCallFormUrl, prospectEmail }) {
+export async function createDiagnosticAssessment({ yearLevel, subjects, questions, studentName, preCallFormUrl, prospectEmail, parentEmail }) {
   return tutorFetch('/api/tutor/diagnostic/create', {
     method: 'POST',
-    body: JSON.stringify({ yearLevel, subjects, questions, studentName, preCallFormUrl, prospectEmail }),
+    body: JSON.stringify({ yearLevel, subjects, questions, studentName, preCallFormUrl, prospectEmail, parentEmail }),
   })
 }
 
@@ -2074,6 +2074,40 @@ export async function resendDiagnostic(assessmentId) {
 /** Cancel a sent diagnostic: its link stops working. */
 export async function cancelDiagnostic(assessmentId) {
   return tutorFetch(`/api/tutor/diagnostic/${encodeURIComponent(assessmentId)}/cancel`, { method: 'POST' })
+}
+
+// ── CONSULTATION CALLS (tutor side) ──────────────────────────────────────────
+
+/** The tutor's booking settings: hours, call length, reminders, calendar status (never the calendar address). */
+export async function fetchBookingSettings() {
+  const json = await tutorFetch('/api/tutor/booking-settings')
+  return json.settings
+}
+
+/** Save booking settings. Omitted fields keep their values; busyIcalUrl: null clears the calendar. */
+export async function saveBookingSettings(settings) {
+  const json = await tutorFetch('/api/tutor/booking-settings', { method: 'PUT', body: JSON.stringify(settings) })
+  return json.settings
+}
+
+/** Open call times for a prospect's diagnostic: { slots, timeZone, callMinutes, noHours }. */
+export async function fetchConsultationSlots(diagnosticId) {
+  return tutorFetch(`/api/tutor/consultations/slots?diagnosticId=${encodeURIComponent(diagnosticId)}`)
+}
+
+/** Book a call for a prospect. { diagnosticId, start, email?, parentEmail?, reminderMinutes? } -> { sessionId } */
+export async function bookConsultation(body) {
+  return tutorFetch('/api/tutor/consultations', { method: 'POST', body: JSON.stringify(body) })
+}
+
+/** Move a call and/or change its reminders. { start?, reminderMinutes? } */
+export async function updateConsultation(id, body) {
+  return tutorFetch(`/api/tutor/consultations/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) })
+}
+
+/** Cancel a booked call (the prospect and parent are emailed). */
+export async function cancelConsultation(id) {
+  return tutorFetch(`/api/tutor/consultations/${encodeURIComponent(id)}/cancel`, { method: 'POST' })
 }
 
 /** List all diagnostics created by this tutor. */

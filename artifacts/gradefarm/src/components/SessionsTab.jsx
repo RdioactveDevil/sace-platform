@@ -1,11 +1,14 @@
 import { confirmDialog } from '../lib/dialog'
 import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { useNavigate } from 'react-router-dom'
-import { Calendar, User, Users, Repeat, Link, Timer, Video, TriangleAlert, CircleCheck, Play, Inbox } from 'lucide-react'
+import { useNavigate, useLocation } from 'react-router-dom'
+import { Calendar, Mail, User, Users, Repeat, Link, Timer, Video, TriangleAlert, CircleCheck, Play, Inbox } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 import InfinityLoader from './InfinityLoader'
 import SegmentedToggle from './SegmentedToggle'
+import ConsultationSettings from './ConsultationSettings'
+import ConsultationModal, { RemindersModal } from './ConsultationModal'
+import { reminderLabel } from '../lib/bookingFormat'
 import {
   fetchRoster,
   fetchStudentEmails,
@@ -17,6 +20,7 @@ import {
   fetchSessionSeries,
   cancelSessionSeries,
   getTutorBilling,
+  cancelConsultation,
 } from '../lib/db'
 
 const GOLD  = 'var(--t-accent)'
@@ -440,16 +444,20 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
 }
 
 // ── Session Card ──────────────────────────────────────────────────────────────
-function SessionCard({ session, theme, onJoin, onCancel }) {
+function SessionCard({ session, theme, onJoin, onCancel, onReschedule, onReminders }) {
   const t = THEMES[theme]
   const [cancelling, setCancelling] = useState(false)
   const [copied, setCopied] = useState(false)
   const isPast = new Date(session.scheduled_at) < new Date()
   const canJoin = session.status === 'scheduled' || session.status === 'active'
   const canCancel = session.status === 'scheduled'
+  const isConsultation = session.session_type === 'consultation'
 
   const handleCancel = async () => {
-    if (!(await confirmDialog('Cancel this session?', { confirm: 'Cancel session', cancel: 'Keep it', danger: true }))) return
+    const message = isConsultation
+      ? `Cancel this call${session.other_party_name ? ` with ${session.other_party_name}` : ''}? They'll be emailed that it's cancelled.`
+      : 'Cancel this session?'
+    if (!(await confirmDialog(message, { confirm: isConsultation ? 'Cancel call' : 'Cancel session', cancel: 'Keep it', danger: true }))) return
     setCancelling(true)
     try { await onCancel(session.id) } finally { setCancelling(false) }
   }
@@ -474,20 +482,26 @@ function SessionCard({ session, theme, onJoin, onCancel }) {
       <div style={{ flex: 1, minWidth: 200 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
           <span style={{ fontSize: 15, fontWeight: 700, color: t.text }}>
-            {session.title || 'Lesson'}
+            {isConsultation ? 'Consultation' : session.title || 'Lesson'}
           </span>
           <StatusBadge status={session.status} t={t} />
-          <RecordingBadge session={session} t={t} />
+          {!isConsultation && <RecordingBadge session={session} t={t} />}
         </div>
         <div style={{ fontSize: 13, color: t.textMuted, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
             {session.session_type === 'group' ? <Users size={14} aria-hidden="true" /> : <User size={14} aria-hidden="true" />}
-            {session.other_party_name || 'Student'}
+            {session.other_party_name || (isConsultation ? 'Prospective student' : 'Student')}
             {session.session_type === 'group' && session.participant_count > 0 && ` (${session.participant_count})`}
           </span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Calendar size={14} aria-hidden="true" />{fmtDateTime(session.scheduled_at)}</span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Timer size={14} aria-hidden="true" />{session.duration_minutes} min</span>
+          {isConsultation && session.guest_email && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Mail size={14} aria-hidden="true" />{session.guest_email}</span>}
         </div>
+        {isConsultation && canCancel && session.reminder_minutes?.length > 0 && (
+          <div style={{ fontSize: 12, color: t.textMuted, marginTop: 6 }}>
+            Reminders: {[...session.reminder_minutes].sort((a, b) => b - a).map(reminderLabel).join(', ')}
+          </div>
+        )}
         {session.notes && (
           <p style={{ margin: '8px 0 0', fontSize: 13, color: t.textMuted, fontStyle: 'italic' }}>
             {session.notes}
@@ -495,13 +509,13 @@ function SessionCard({ session, theme, onJoin, onCancel }) {
         )}
       </div>
       <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-        <button
+        {!isConsultation && <button
           onClick={handleCopyLink}
           style={{ background: copied ? t.successBg : t.bgSubtle, color: copied ? t.success : t.textMuted, border: `1px solid ${t.border}`, borderRadius: 8, padding: '9px 14px', fontSize: 13, fontWeight: 600, fontFamily: FONT_B, cursor: 'pointer', transition: 'all 0.2s' }}
           title="Copy meeting link"
         >
           {copied ? '✓' : <Link size={14} aria-hidden="true" style={{ verticalAlign: '-2px' }} />}
-        </button>
+        </button>}
         {canJoin && (
           <button
             onClick={() => onJoin(session.id)}
@@ -511,6 +525,16 @@ function SessionCard({ session, theme, onJoin, onCancel }) {
               ? <><span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--t-danger)', display: 'inline-block' }} />Rejoin</>
               : <><Play size={13} fill="currentColor" aria-hidden="true" />Join</>}
           </button>
+        )}
+        {isConsultation && canCancel && (
+          <>
+            <button onClick={() => onReschedule(session)} style={{ background: 'transparent', color: t.text, border: `1px solid ${t.border}`, borderRadius: 8, padding: '9px 14px', fontSize: 13, fontWeight: 600, fontFamily: FONT_B, cursor: 'pointer' }}>
+              Reschedule
+            </button>
+            <button onClick={() => onReminders(session)} style={{ background: 'transparent', color: t.text, border: `1px solid ${t.border}`, borderRadius: 8, padding: '9px 14px', fontSize: 13, fontWeight: 600, fontFamily: FONT_B, cursor: 'pointer' }}>
+              Reminders
+            </button>
+          </>
         )}
         {canCancel && (
           <button
@@ -593,6 +617,8 @@ function SeriesCard({ series, theme, onCancel }) {
 export default function SessionsTab({ profile, theme }) {
   const t = THEMES[theme]
   const navigate = useNavigate()
+  const location = useLocation()
+  const openSettings = new URLSearchParams(location.search).get('consultation') === 'settings'
 
   const [sessions, setSessions] = useState([])
   const [seriesList, setSeriesList] = useState([])
@@ -603,6 +629,8 @@ export default function SessionsTab({ profile, theme }) {
   const [showModal, setShowModal] = useState(false)
   const [filter, setFilter] = useState('upcoming')
   const [view, setView] = useState('sessions') // 'sessions' | 'recurring'
+  const [moving, setMoving] = useState(null)       // consultation being rescheduled
+  const [editingReminders, setEditingReminders] = useState(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -633,6 +661,12 @@ export default function SessionsTab({ profile, theme }) {
 
   const handleCancel = async (id) => {
     await cancelTutoringSession(id)
+    setSessions(prev => prev.map(s => s.id === id ? { ...s, status: 'cancelled' } : s))
+  }
+
+  // A consultation is cancelled through its own route (it emails the prospect).
+  const handleCancelCall = async (id) => {
+    await cancelConsultation(id)
     setSessions(prev => prev.map(s => s.id === id ? { ...s, status: 'cancelled' } : s))
   }
 
@@ -686,6 +720,8 @@ export default function SessionsTab({ profile, theme }) {
         </button>
       </div>
 
+      {view === 'sessions' && <ConsultationSettings theme={theme} defaultOpen={openSettings} />}
+
       {/* Recurring series view */}
       {view === 'recurring' && (
         <div>
@@ -736,13 +772,18 @@ export default function SessionsTab({ profile, theme }) {
                   session={session}
                   theme={theme}
                   onJoin={(id) => navigate(`/session/${id}`)}
-                  onCancel={handleCancel}
+                  onCancel={session.session_type === 'consultation' ? handleCancelCall : handleCancel}
+                  onReschedule={setMoving}
+                  onReminders={setEditingReminders}
                 />
               ))}
             </div>
           )}
         </>
       )}
+
+      {moving && <ConsultationModal mode="reschedule" session={moving} theme={theme} onClose={() => setMoving(null)} onDone={load} />}
+      {editingReminders && <RemindersModal session={editingReminders} theme={theme} onClose={() => setEditingReminders(null)} onDone={load} />}
 
       {showModal && (
         <ScheduleModal
