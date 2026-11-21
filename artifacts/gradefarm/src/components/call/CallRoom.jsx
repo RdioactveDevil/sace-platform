@@ -228,7 +228,7 @@ function RecordButton() {
   )
 }
 
-function Dock({ isTutor, showWhiteboard, onToggleWhiteboard, showChat, onToggleChat, unread, onLeave, onEnd, showBackground, onToggleBackground }) {
+function Dock({ isTutor, canRecord = true, showWhiteboard, onToggleWhiteboard, showChat, onToggleChat, unread, onLeave, onEnd, showBackground, onToggleBackground }) {
   return (
     <div className="gf-dock" role="toolbar" aria-label="Call controls">
       <div className="gf-dock-group">
@@ -250,7 +250,7 @@ function Dock({ isTutor, showWhiteboard, onToggleWhiteboard, showChat, onToggleC
           <Wallpaper size={19} aria-hidden="true" />
           <span>Background</span>
         </button>
-        {isTutor && <RecordButton />}
+        {isTutor && canRecord && <RecordButton />}
       </div>
       <div className="gf-dock-group">
         {isTutor && onEnd ? (
@@ -336,7 +336,7 @@ function ChatPanel({ chatMessages, send, isSending, onClose }) {
  * Everything inside <LiveKitRoom>: header, stage, controls and chat. Shared by
  * one-off sessions (/session/:id) and recurring rooms (/room/:name).
  */
-export default function CallRoom({ title, subtitle, isTutor, onLeave, onEnd }) {
+export default function CallRoom({ title, subtitle, isTutor, canRecord = true, onLeave, onEnd }) {
   const connectionState = useConnectionState()
   const showJoinOverlay = useLiveKitJoinOverlay(connectionState)
   const [showChat, setShowChat] = useState(false)
@@ -411,6 +411,7 @@ export default function CallRoom({ title, subtitle, isTutor, onLeave, onEnd }) {
       </div>
       <Dock
         isTutor={isTutor}
+        canRecord={canRecord}
         showBackground={showBackground}
         onToggleBackground={() => setShowBackground(v => !v)}
         showWhiteboard={showWhiteboard}

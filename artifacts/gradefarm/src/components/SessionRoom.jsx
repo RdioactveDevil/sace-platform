@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { fetchTutoringSession, getTutoringSessionToken, endTutoringSession } from '../lib/db'
 import RoomFrame from './call/RoomFrame'
+import { recordingAllowed } from '../lib/callRoom'
 
 function sessionWhen(session) {
   if (!session?.scheduled_at) return null
@@ -55,6 +56,7 @@ export default function SessionRoom({ profile }) {
       title={session?.title || 'Tutoring session'}
       subtitle={sessionWhen(session)}
       isTutor={isTutor}
+      canRecord={recordingAllowed(session)}
       onLeave={handleLeave}
       onEnd={isTutor ? handleEnd : undefined}
     />

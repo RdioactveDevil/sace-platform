@@ -35,7 +35,7 @@ function StatusScreen({ message, isError, onBack }) {
  * Full-page call: a loading / error screen until the token arrives, then the
  * LiveKit room with the shared call UI.
  */
-export default function RoomFrame({ loading, error, token, wsUrl, title, subtitle, isTutor, onLeave, onEnd }) {
+export default function RoomFrame({ loading, error, token, wsUrl, title, subtitle, isTutor, canRecord = true, onLeave, onEnd }) {
   useCallViewportLock()
   return (
     <div style={frameStyle}>
@@ -53,7 +53,7 @@ export default function RoomFrame({ loading, error, token, wsUrl, title, subtitl
           style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, background: '#0a0c1a' }}
           onDisconnected={onLeave}
         >
-          <CallRoom title={title} subtitle={subtitle} isTutor={isTutor} onLeave={onLeave} onEnd={onEnd} />
+          <CallRoom title={title} subtitle={subtitle} isTutor={isTutor} canRecord={canRecord} onLeave={onLeave} onEnd={onEnd} />
         </LiveKitRoom>
       )}
     </div>

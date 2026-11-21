@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { bookConsultationAsProspect } from '../lib/db'
-import { groupSlotsByDay, formatWhen, zoneCity } from '../lib/bookingFormat'
+import { groupSlotsByDay, formatWhen, zoneCity, prospectBookingBody } from '../lib/bookingFormat'
 import { Field } from './AuthLayout'
 import { C, FONT, P, OkLine, btnStyle } from './publicUi'
 
@@ -56,7 +56,7 @@ export default function BookingPicker({ token, data, theme = 'dark', name, headi
     setError('')
     setBusy(true)
     try {
-      const res = await bookConsultationAsProspect(token, { start, email: email.trim(), parentEmail: parentEmail.trim() || undefined, name: name?.trim() || undefined, timeZone: zone })
+      const res = await bookConsultationAsProspect(token, prospectBookingBody({ start, email, parentEmail, name, timeZone: zone }))
       if (res.questionnaireUrl) setQuestionnaireUrl(res.questionnaireUrl)
       setFresh(true)
       setBooking({ start: res.start, joinUrl: res.joinUrl })

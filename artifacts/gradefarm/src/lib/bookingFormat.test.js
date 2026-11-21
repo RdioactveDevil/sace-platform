@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  reminderLabel, groupSlotsByDay, emptyWeek, isValidHHMM, formatWhen, zonedToIso, reminderToMinutes, splitReminder, ZONES, nextBlock, zoneCity, joinCountdownText,
+  reminderLabel, groupSlotsByDay, emptyWeek, isValidHHMM, formatWhen, zonedToIso, reminderToMinutes, splitReminder, ZONES, nextBlock, zoneCity, joinCountdownText, prospectBookingBody,
 } from './bookingFormat.js'
 
 test('reminderLabel', () => {
@@ -111,4 +111,14 @@ test('joinCountdownText says when the call opens, in the viewer zone', () => {
   assert.equal(joinCountdownText(from, at('2026-11-03T05:19:00.000Z'), 'Australia/Melbourne'), 'You can join from 4:20 pm, in 1 minute.')
   assert.equal(joinCountdownText(from, at('2026-11-03T03:00:00.000Z'), 'Australia/Melbourne'), 'You can join from 4:20 pm on Tue 3 Nov.')
   assert.equal(joinCountdownText(null, 0, 'Australia/Melbourne'), null)
+})
+
+test('prospectBookingBody sends a cleared parent email as an empty string, not left out', () => {
+  const base = { start: '2027-03-01T10:00:00.000Z', email: ' kid@example.com ', name: '', timeZone: 'Australia/Adelaide' }
+  const cleared = prospectBookingBody({ ...base, parentEmail: '  ' })
+  assert.equal(cleared.parentEmail, '')
+  assert.ok('parentEmail' in JSON.parse(JSON.stringify(cleared)))
+  assert.equal(cleared.email, 'kid@example.com')
+  assert.equal(cleared.name, undefined)
+  assert.equal(prospectBookingBody({ ...base, parentEmail: ' mum@example.com ' }).parentEmail, 'mum@example.com')
 })

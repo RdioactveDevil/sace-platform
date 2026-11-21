@@ -150,3 +150,17 @@ export function joinCountdownText(canJoinFrom, nowMs, timeZone) {
   const p = partsIn(new Date(opens), zone, { weekday: 'short', day: 'numeric', month: 'short' })
   return `You can join from ${at} on ${p.weekday} ${p.day} ${p.month}.`
 }
+
+/**
+ * The prospect's booking request. A parent email they cleared is sent as ''
+ * (left out, the server would use the one the tutor entered).
+ */
+export function prospectBookingBody({ start, email, parentEmail, name, timeZone }) {
+  return {
+    start,
+    email: String(email || '').trim(),
+    parentEmail: String(parentEmail || '').trim(),
+    name: String(name || '').trim() || undefined,
+    timeZone,
+  }
+}

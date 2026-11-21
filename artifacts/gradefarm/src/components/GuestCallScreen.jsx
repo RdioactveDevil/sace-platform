@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import { loadGuestCall, joinGuestCall } from '../lib/db'
 import { formatWhen, joinCountdownText } from '../lib/bookingFormat'
+import { guestLoadError, guestJoinOutcome } from '../lib/guestCall'
 import { AuthLayout } from './AuthLayout'
 import { Panel, H1, P, btnStyle } from './publicUi'
 import RoomFrame from './call/RoomFrame'
@@ -12,7 +13,7 @@ const zoneNow = () => { try { return Intl.DateTimeFormat().resolvedOptions().tim
 export default function GuestCallScreen({ theme = 'dark', onToggleTheme }) {
   const { guestToken } = useParams()
   const [call, setCall] = useState(null)
-  const [error, setError] = useState('')
+  const [error, setError] = useState(null) // { invalid, message } when loading failed
   const [now, setNow] = useState(() => Date.now())
   const [room, setRoom] = useState(null) // { token, wsUrl } once joined
   const [joining, setJoining] = useState(false)
@@ -21,7 +22,8 @@ export default function GuestCallScreen({ theme = 'dark', onToggleTheme }) {
   const zone = zoneNow()
 
   const load = useCallback(() => {
-    loadGuestCall(guestToken).then(setCall).catch(err => setError(err.message || "This call link isn't valid."))
+    setError(null)
+    loadGuestCall(guestToken).then(setCall).catch(err => setError(guestLoadError(err)))
   }, [guestToken])
   useEffect(() => { load() }, [load])
 
@@ -37,9 +39,10 @@ export default function GuestCallScreen({ theme = 'dark', onToggleTheme }) {
     try {
       setRoom(await joinGuestCall(guestToken))
     } catch (err) {
-      if (err.status === 403 && err.body?.canJoinFrom) setCall(c => ({ ...c, canJoinFrom: err.body.canJoinFrom }))
-      else if (err.status === 410) { setFinished(true); load() } // cancelled shows as such after the reload
-      else setJoinError(err.message || 'Could not join the call.')
+      const outcome = guestJoinOutcome(err, Date.now())
+      if (outcome.kind === 'wait') { setNow(Date.now()); setCall(c => ({ ...c, canJoinFrom: outcome.canJoinFrom })) }
+      else if (outcome.kind === 'finished') { setFinished(true); load() } // cancelled shows as such after the reload
+      else setJoinError(outcome.message)
     } finally {
       setJoining(false)
     }
@@ -57,10 +60,17 @@ export default function GuestCallScreen({ theme = 'dark', onToggleTheme }) {
   return (
     <AuthLayout theme={theme} onToggleTheme={onToggleTheme}>
       {!call && !error && <Panel><P muted>Loading your call…</P></Panel>}
-      {error && (
+      {!call && error?.invalid && (
         <Panel>
-          <H1>This call link isn't valid</H1>
-          <P muted>{error} Check the link with whoever sent it.</P>
+          <H1>{error.message}</H1>
+          <P muted>Check the link with whoever sent it.</P>
+        </Panel>
+      )}
+      {!call && error && !error.invalid && (
+        <Panel>
+          <H1>Your call didn't load.</H1>
+          <P muted>{error.message}</P>
+          <button type="button" className="af-btn" onClick={load} style={btnStyle('primary')}>Try again</button>
         </Panel>
       )}
       {call?.status === 'cancelled' && (

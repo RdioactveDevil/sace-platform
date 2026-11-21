@@ -2165,7 +2165,7 @@ export function loadConsultationSlots(token) {
   return consultationFetch(`/api/consultation/${encodeURIComponent(token)}/slots`, undefined, 'Could not load times.')
 }
 
-/** Book a time ({ start, email, parentEmail?, name?, timeZone }): { start, joinUrl, questionnaireUrl }. */
+/** Book a time ({ start, email, parentEmail?, name?, timeZone }; parentEmail '' means none, left out means the tutor's): { start, joinUrl, questionnaireUrl }. */
 export function bookConsultationAsProspect(token, { start, email, parentEmail, name, timeZone }) {
   return consultationFetch(`/api/consultation/${encodeURIComponent(token)}/book`, {
     method: 'POST',
