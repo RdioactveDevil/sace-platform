@@ -358,7 +358,7 @@ export async function loadSubjectHealth(curriculumId, subjectName) {
 
 // ─── ONE PERSON (Admin → People → a person) ──────────────────────────────────
 
-/** { profile, signIn, parentConsentNeeded, billing } for one account. */
+/** { profile, signIn, parentConsentNeeded, emailBlocks, billing } for one account. */
 export async function getPerson(id) {
   return adminAuthFetch(`/api/admin/people/${encodeURIComponent(id)}`)
 }
@@ -371,6 +371,11 @@ export async function savePersonDetails(id, fields) {
 /** { parentName, parentEmail } and/or { resend: true } and/or { confirmed: boolean }. */
 export async function savePersonParent(id, body) {
   return adminAuthFetch(`/api/admin/people/${encodeURIComponent(id)}/parent`, { method: 'PUT', body: JSON.stringify(body) })
+}
+
+/** Send to an address again that bounced or reported us as spam (one of this person's). */
+export async function clearPersonEmailBlock(id, email) {
+  return adminAuthFetch(`/api/admin/people/${encodeURIComponent(id)}/email-block`, { method: 'DELETE', body: JSON.stringify({ email }) })
 }
 
 /** Email them a link to choose a new password. */
