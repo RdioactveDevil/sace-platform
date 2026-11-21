@@ -20,7 +20,7 @@ export interface ConsultationIcsOptions {
 const utc = (ms: number) => new Date(ms).toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
 
 /** TEXT values: escape backslash, semicolon, comma and newlines. */
-const text = (s: string) => s.replace(/\\/g, "\\\\").replace(/;/g, "\;").replace(/,/g, "\\,").replace(/\r\n|\r|\n/g, "\\n");
+const text = (s: string) => s.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r\n|\r|\n/g, "\\n");
 
 /** Parameter values can't hold quotes, semicolons, colons or commas unquoted: quote when needed. */
 const param = (s: string) => {

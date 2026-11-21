@@ -45,7 +45,7 @@ test("method, status, sequence and uid", () => {
 
 test("text is escaped", () => {
   const ics = consultationIcs({ ...base, summary: "a, b; c\\d", description: "line1\nline2\r\nline3" });
-  assert.ok(ics.includes("SUMMARY:a\\, b\; c\\\\d\r\n"));
+  assert.ok(ics.includes("SUMMARY:a\\, b\\; c\\\\d\r\n"));
   assert.ok(ics.includes("DESCRIPTION:line1\\nline2\\nline3\r\n"));
 });
 
