@@ -8,6 +8,9 @@ import { requireUser } from "../lib/auth";
 import { requireTutorPlan } from "../lib/tutor-plan";
 import { diagnosticScope, studentSummary, type ScopeTopic } from "../lib/student-diagnostic";
 import { scopeOutline, subtopicFieldHint } from "../lib/diagnostic-outline";
+import { canResend, diagnosticStatus, normaliseProspectEmail, unavailableReason, type ProspectRow } from "../lib/prospect-status";
+import { prospectDiagnosticEmail } from "../lib/prospect-emails";
+import { getResend, sendEmail } from "../lib/email";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -69,6 +72,13 @@ interface DiagnosticAssessment {
   generation_started_at: string | null;
   questions_ready_at: string | null;
   waived_at: string | null;
+  // A link diagnostic emailed to a prospective student (lib/prospect-status.ts).
+  prospect_email: string | null;
+  sent_at: string | null;
+  opened_at: string | null;
+  started_at: string | null;
+  reminded_at: string | null;
+  cancelled_at: string | null;
 }
 
 interface QuestionResult {
@@ -193,7 +203,7 @@ function extractJson(text: string): unknown {
   return null;
 }
 
-async function requireTutor(req: Request, res: Response): Promise<{ admin: AdminClient; tutorId: string; tutorName: string } | null> {
+async function requireTutor(req: Request, res: Response): Promise<{ admin: AdminClient; tutorId: string; tutorName: string; displayName: string | null } | null> {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith("Bearer ")) {
     res.status(401).json({ error: "Unauthorized" });
@@ -220,7 +230,7 @@ async function requireTutor(req: Request, res: Response): Promise<{ admin: Admin
   }
   if (!(await requireTutorPlan(admin, res, userData.user.id, !!profile.is_admin))) return null;
 
-  return { admin, tutorId: userData.user.id, tutorName: profile.display_name ?? "Your tutor" };
+  return { admin, tutorId: userData.user.id, tutorName: profile.display_name ?? "Your tutor", displayName: profile.display_name?.trim() || null };
 }
 
 function performanceBand(pct: number): string {
@@ -623,6 +633,32 @@ router.post("/tutor/diagnostic/generate", async (req: Request, res: Response) =>
   }
 });
 
+const PROSPECT_COLUMNS = "status, student_id, prospect_email, created_at, sent_at, opened_at, started_at, reminded_at, cancelled_at";
+
+const linkFor = (req: Request, token: string) =>
+  `${req.headers.origin || req.headers.referer?.replace(/\/$/, "") || "https://app.gradefarm.com.au"}/diagnostic/${token}`;
+
+/**
+ * Email a link diagnostic to the prospect and record when. The sender is named
+ * in full and never called their tutor: they aren't, until after the call.
+ */
+async function emailProspect(
+  admin: AdminClient,
+  d: { id: string; token: string; prospect_email: string; subjects: SubjectConfig[] | null },
+  senderName: string,
+  link: string,
+): Promise<{ error?: string }> {
+  const resend = getResend();
+  if (!resend) return { error: "Email isn't set up on this server." };
+  const { subject, content } = prospectDiagnosticEmail({ senderName, subject: d.subjects?.[0]?.name || "your subject", link });
+  const sentAt = new Date().toISOString();
+  const result = await sendEmail(resend, { to: d.prospect_email, subject, content, idempotencyKey: `prospect-diagnostic:${d.id}:${sentAt}` });
+  if (result.error) return { error: result.blocked ? "That address can't receive our emails (it bounced or reported spam before)." : "The email couldn't be sent. Try Resend." };
+  const { error } = await admin.from("diagnostic_assessments").update({ sent_at: sentAt, reminded_at: null }).eq("id", d.id);
+  if (error) logger.error({ err: error, id: d.id }, "diagnostic: emailed a prospect but couldn't record it");
+  return {};
+}
+
 /** POST /tutor/diagnostic/create — Save a generated assessment and return the unique link */
 router.post("/tutor/diagnostic/create", async (req: Request, res: Response) => {
   try {
@@ -630,16 +666,19 @@ router.post("/tutor/diagnostic/create", async (req: Request, res: Response) => {
     if (!ctx) return;
     const { admin, tutorId } = ctx;
 
-    const { yearLevel, subjects, questions, studentName, preCallFormUrl } = req.body as {
+    const { yearLevel, subjects, questions, studentName, preCallFormUrl, prospectEmail } = req.body as {
       yearLevel: string;
       subjects: SubjectConfig[];
       questions: DiagnosticQuestion[];
       studentName?: string;
       preCallFormUrl?: string;
+      prospectEmail?: string;
     };
 
     if (!yearLevel?.trim()) return res.status(400).json({ error: "yearLevel is required" });
     if (!Array.isArray(questions) || questions.length === 0) return res.status(400).json({ error: "questions are required" });
+    const checked = normaliseProspectEmail(prospectEmail);
+    if ("error" in checked) return res.status(400).json({ error: checked.error });
 
     // A curriculum subject keeps its scope (only subtopics of that curriculum), so it can follow the student later.
     const curriculumId = Array.isArray(subjects) ? subjects[0]?.curriculumId : undefined;
@@ -657,16 +696,19 @@ router.post("/tutor/diagnostic/create", async (req: Request, res: Response) => {
         status:            "pending",
         score_max:         questions.reduce((s, q) => s + q.marks, 0),
         ...(curriculumId && scope ? { curriculum_id: curriculumId, subtopic_ids: scope.subtopicIds } : {}),
+        prospect_email:    checked.email,
       })
       .select("id, token")
       .single<{ id: string; token: string }>();
 
     if (error) throw new Error(error.message);
 
-    const origin = req.headers.origin || req.headers.referer?.replace(/\/$/, "") || "https://app.gradefarm.com.au";
-    const link = `${origin}/diagnostic/${data.token}`;
+    const link = linkFor(req, data.token);
+    if (!checked.email) return res.json({ id: data.id, token: data.token, link, emailed: false });
 
-    return res.json({ id: data.id, token: data.token, link });
+    // The diagnostic is saved either way; a failed send leaves it to Resend.
+    const sent = await emailProspect(admin, { id: data.id, token: data.token, prospect_email: checked.email, subjects }, ctx.displayName || "gradefarm.", link);
+    return res.json({ id: data.id, token: data.token, link, emailed: !sent.error, ...(sent.error ? { emailError: sent.error } : {}) });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";
     return res.status(500).json({ error: message });
@@ -697,7 +739,7 @@ router.get("/tutor/diagnostic/list", async (req: Request, res: Response) => {
     if (!ctx) return;
     const { admin, tutorId } = ctx;
 
-    const columns = "id, token, tutor_id, student_id, year_level, subjects, status, student_name, submitted_by_name, score_total, score_max, created_at, completed_at, pre_call_form_url";
+    const columns = `id, token, tutor_id, year_level, subjects, student_name, submitted_by_name, score_total, score_max, completed_at, pre_call_form_url, ${PROSPECT_COLUMNS}`;
     const studentIds = await rosterStudentIds(admin, tutorId);
     // Rosters can be long: look the students' diagnostics up in batches.
     const results = await Promise.all([
@@ -707,7 +749,7 @@ router.get("/tutor/diagnostic/list", async (req: Request, res: Response) => {
     const failed = results.find((r) => r.error);
     if (failed?.error) throw new Error(failed.error.message);
 
-    type Row = Pick<DiagnosticAssessment, "id" | "token" | "tutor_id" | "student_id" | "student_name" | "submitted_by_name" | "created_at">;
+    type Row = Pick<DiagnosticAssessment, "id" | "token" | "tutor_id" | "student_name" | "submitted_by_name"> & ProspectRow;
     const byId = new Map<string, Row>();
     for (const r of results) for (const row of (r.data ?? []) as Row[]) byId.set(row.id, row);
     const list = [...byId.values()].sort((a, b) => b.created_at.localeCompare(a.created_at));
@@ -722,15 +764,66 @@ router.get("/tutor/diagnostic/list", async (req: Request, res: Response) => {
       }
     }
 
-    const origin = req.headers.origin || req.headers.referer?.replace(/\/$/, "") || "https://app.gradefarm.com.au";
+    const now = new Date();
     const rows = list.map((row) => ({
       ...row,
       student_name: row.student_name || (row.student_id ? names.get(row.student_id) ?? null : null),
       set_by: row.tutor_id === tutorId ? null : names.get(row.tutor_id) ?? "Another tutor",
-      link: `${origin}/diagnostic/${row.token}`,
+      link: linkFor(req, row.token),
+      status_label: diagnosticStatus(row, now),
+      // Only the tutor who sent it can resend or cancel it.
+      can_resend: row.tutor_id === tutorId && canResend(row, now),
+      can_cancel: row.tutor_id === tutorId && !row.student_id && ["sent", "opened", "in_progress", "link"].includes(diagnosticStatus(row, now)),
     }));
 
     return res.json({ assessments: rows });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
+/** A link diagnostic this tutor sent, with what resend and cancel need; null if it isn't theirs. */
+async function ownLinkDiagnostic(admin: AdminClient, tutorId: string, id: string) {
+  const { data, error } = await admin
+    .from("diagnostic_assessments")
+    .select(`id, token, tutor_id, subjects, ${PROSPECT_COLUMNS}`)
+    .eq("id", id)
+    .maybeSingle<Pick<DiagnosticAssessment, "id" | "token" | "tutor_id" | "subjects"> & ProspectRow>();
+  if (error) throw new Error(error.message);
+  return data && data.tutor_id === tutorId && !data.student_id ? data : null;
+}
+
+/** POST /tutor/diagnostic/:id/resend — email it to the prospect again (restarts its 30 days and its reminder) */
+router.post("/tutor/diagnostic/:id/resend", async (req: Request, res: Response) => {
+  try {
+    const ctx = await requireTutor(req, res);
+    if (!ctx) return;
+    const d = await ownLinkDiagnostic(ctx.admin, ctx.tutorId, String(req.params.id));
+    if (!d) return res.status(404).json({ error: "Diagnostic not found" });
+    if (!d.prospect_email || !canResend(d, new Date())) return res.status(409).json({ error: "This diagnostic can't be resent." });
+    const sent = await emailProspect(ctx.admin, { ...d, prospect_email: d.prospect_email }, ctx.displayName || "gradefarm.", linkFor(req, d.token));
+    if (sent.error) return res.status(502).json({ error: sent.error });
+    return res.json({ ok: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
+/** POST /tutor/diagnostic/:id/cancel — the link stops working */
+router.post("/tutor/diagnostic/:id/cancel", async (req: Request, res: Response) => {
+  try {
+    const ctx = await requireTutor(req, res);
+    if (!ctx) return;
+    const d = await ownLinkDiagnostic(ctx.admin, ctx.tutorId, String(req.params.id));
+    if (!d) return res.status(404).json({ error: "Diagnostic not found" });
+    const { data: cancelled, error } = await ctx.admin
+      .from("diagnostic_assessments").update({ cancelled_at: new Date().toISOString() })
+      .eq("id", d.id).eq("status", "pending").is("cancelled_at", null).select("id");
+    if (error) throw new Error(error.message);
+    if (!cancelled?.length) return res.status(409).json({ error: "This diagnostic can't be cancelled." });
+    return res.json({ ok: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";
     return res.status(500).json({ error: message });
@@ -779,13 +872,21 @@ router.get("/diagnostic/:token", async (req: Request, res: Response) => {
 
     const { data, error } = await admin
       .from("diagnostic_assessments")
-      .select("id, token, year_level, subjects, questions, status, student_name, score_max, pre_call_form_url, completed_at, student_id, questions_ready_at, report, tutor_id")
+      .select(`id, token, year_level, subjects, questions, student_name, score_max, pre_call_form_url, completed_at, questions_ready_at, report, tutor_id, ${PROSPECT_COLUMNS}`)
       .eq("token", token)
-      .single<Pick<DiagnosticAssessment, "id" | "token" | "year_level" | "subjects" | "questions" | "status" | "student_name" | "score_max" | "pre_call_form_url" | "completed_at" | "student_id" | "questions_ready_at" | "report" | "tutor_id">>();
+      .single<Pick<DiagnosticAssessment, "id" | "token" | "year_level" | "subjects" | "questions" | "student_name" | "score_max" | "pre_call_form_url" | "completed_at" | "questions_ready_at" | "report" | "tutor_id"> & ProspectRow>();
 
     if (error || !data) return res.status(404).json({ error: "Assessment not found" });
+    const unavailable = unavailableReason(data, new Date());
+    if (unavailable) return res.status(410).json({ error: unavailable });
+    // A prospect's link: note the first time it's opened.
+    if (!data.student_id && data.status === "pending" && !data.opened_at) {
+      const { error: openErr } = await admin.from("diagnostic_assessments")
+        .update({ opened_at: new Date().toISOString() }).eq("id", data.id).is("opened_at", null);
+      if (openErr) logger.warn({ err: openErr, id: data.id }, "diagnostic: couldn't record opened_at");
+    }
 
-    const { student_id, questions_ready_at, report, tutor_id, ...rest } = data;
+    const { student_id, questions_ready_at, report, tutor_id, prospect_email: _pe, created_at: _ca, sent_at: _sa, opened_at: _oa, started_at: _st, reminded_at: _ra, cancelled_at: _cx, ...rest } = data;
     // The tutor's display name, so the page can say who it goes to.
     let tutor_name: string | null = null;
     if (tutor_id) {
@@ -803,8 +904,32 @@ router.get("/diagnostic/:token", async (req: Request, res: Response) => {
         ready: !student_id || !!questions_ready_at,
         summary: student_id && report ? studentSummary(report) : null,
         tutor_name,
+        // Who sent a link diagnostic, by full name (never "your tutor": a prospect isn't their student yet).
+        sender_name: student_id ? null : tutor_name,
       },
     });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
+/** POST /diagnostic/:token/start — a prospect pressed Start (for the tutor's list) */
+router.post("/diagnostic/:token/start", async (req: Request, res: Response) => {
+  try {
+    const admin = getAdminClient();
+    const { data, error } = await admin
+      .from("diagnostic_assessments").select(`id, ${PROSPECT_COLUMNS}`)
+      .eq("token", req.params.token).maybeSingle<{ id: string } & ProspectRow>();
+    if (error || !data) return res.status(404).json({ error: "Assessment not found" });
+    const unavailable = unavailableReason(data, new Date());
+    if (unavailable) return res.status(410).json({ error: unavailable });
+    if (!data.student_id && data.status === "pending" && !data.started_at) {
+      const { error: upErr } = await admin.from("diagnostic_assessments")
+        .update({ started_at: new Date().toISOString() }).eq("id", data.id).is("started_at", null);
+      if (upErr) throw new Error(upErr.message);
+    }
+    return res.json({ ok: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";
     return res.status(500).json({ error: message });
@@ -834,6 +959,8 @@ router.post("/diagnostic/:token/submit", async (req: Request, res: Response) => 
       return res.status(400).json({ error: "This assessment has already been submitted." });
     }
     if (!data.questions?.length) return res.status(409).json({ error: "This diagnostic isn't ready yet." });
+    const unavailable = unavailableReason(data, new Date());
+    if (unavailable) return res.status(410).json({ error: unavailable });
 
     // Run AI marking
     const report = await markAssessment(data.questions, answers, data.year_level, data.subjects);

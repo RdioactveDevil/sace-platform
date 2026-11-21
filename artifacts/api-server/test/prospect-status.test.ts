@@ -4,6 +4,7 @@ import {
   canResend,
   diagnosticStatus,
   dueForProspectReminder,
+  normaliseProspectEmail,
   unavailableReason,
   type ProspectRow,
 } from "../src/lib/prospect-status";
@@ -77,4 +78,14 @@ test("one reminder two days after sending, if not started", () => {
   assert.equal(dueForProspectReminder(row(), after(31 * DAY)), false);
   assert.equal(dueForProspectReminder(row({ prospect_email: null }), due), false);
   assert.equal(dueForProspectReminder(row({ student_id: "s1" }), due), false);
+});
+
+test("a prospect's email is optional, checked, trimmed and lower-cased", () => {
+  assert.deepEqual(normaliseProspectEmail(""), { email: null });
+  assert.deepEqual(normaliseProspectEmail("  "), { email: null });
+  assert.deepEqual(normaliseProspectEmail(undefined), { email: null });
+  assert.deepEqual(normaliseProspectEmail("Sam@Example.COM "), { email: "sam@example.com" });
+  assert.deepEqual(normaliseProspectEmail("not-an-email"), { error: "Enter a valid email address." });
+  assert.deepEqual(normaliseProspectEmail(`${"a".repeat(250)}@x.co`), { error: "Enter a valid email address." });
+  assert.deepEqual(normaliseProspectEmail(42), { error: "Enter a valid email address." });
 });

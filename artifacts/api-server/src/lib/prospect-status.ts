@@ -60,3 +60,15 @@ export function dueForProspectReminder(r: ProspectRow, now: Date): boolean {
   if (r.status !== "pending" || r.reminded_at || r.started_at || r.cancelled_at || expired(r, now)) return false;
   return now.getTime() - Date.parse(r.sent_at) >= PROSPECT_REMINDER_AFTER_MS;
 }
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** The prospect's email from the create form: optional; trimmed and lower-cased when given. */
+export function normaliseProspectEmail(raw: unknown): { email: string | null } | { error: string } {
+  if (raw === undefined || raw === null) return { email: null };
+  if (typeof raw !== "string") return { error: "Enter a valid email address." };
+  const email = raw.trim().toLowerCase();
+  if (!email) return { email: null };
+  if (email.length > 254 || !EMAIL_RE.test(email)) return { error: "Enter a valid email address." };
+  return { email };
+}
