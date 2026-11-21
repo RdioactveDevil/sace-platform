@@ -64,6 +64,8 @@ import { ASSIGNMENT_DIFFICULTIES, assignmentGoalLabel } from '../lib/engine'
 import { WEEKDAYS, defaultDueDays, describeDue, describeRepeat, localYmd } from '../lib/recurring'
 import SegmentedToggle from './SegmentedToggle'
 import ConsultationModal from './ConsultationModal'
+import SignUpModal from './SignUpModal'
+import { signUpChip } from '../lib/signUp'
 import PresentReport from './PresentReport'
 import { formatWhen } from '../lib/bookingFormat'
 
@@ -1706,6 +1708,7 @@ function DiagnosticTab({ profile, theme }) {
 
   // ── Consultation calls: the row being booked or moved, and the tutor's zone for showing times ──
   const [callModal, setCallModal] = useState(null) // { mode: 'book' | 'reschedule', diagnostic?, session? }
+  const [signUpRow, setSignUpRow] = useState(null) // the finished diagnostic being signed up
   const [tutorZone, setTutorZone] = useState(null) // null until known: times then show without a zone label
   useEffect(() => {
     let cancelled = false
@@ -2229,6 +2232,8 @@ function DiagnosticTab({ profile, theme }) {
                 // A finished prospect's diagnostic can have a call booked; a roster student's can't.
                 const isProspect = !d.student_id && d.tutor_id === profile.id
                 const canBook = isProspect && completed && !d.booking
+                const canSignUp = isProspect && completed && !d.signup
+                const suChip = signUpChip(d.signup)
                 const rowName = d.submitted_by_name || d.student_name || null
                 return (
                   <div key={d.id} style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
@@ -2239,6 +2244,7 @@ function DiagnosticTab({ profile, theme }) {
                           {chip.label}
                         </span>
                         {qChip && <span style={chipStyle(qChip)}>{qChip.label}</span>}
+                        {suChip && <span style={chipStyle(suChip)}>{suChip.label}</span>}
                         {d.red_flags > 0 && <span style={chipStyle({ tone: 'danger' })}>Red flag</span>}
                       </div>
                       <div style={{ fontSize: 11, color: t.textMuted }}>
@@ -2259,6 +2265,11 @@ function DiagnosticTab({ profile, theme }) {
                       {canBook && (
                         <button onClick={() => setCallModal({ mode: 'book', diagnostic: { id: d.id, prospect_email: d.prospect_email, parent_email: d.parent_email, name: rowName } })} disabled={busy} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.text, fontSize: 12, fontWeight: 700, cursor: busy ? 'default' : 'pointer', fontFamily: FONT_B }}>
                           Book call
+                        </button>
+                      )}
+                      {canSignUp && (
+                        <button onClick={() => setSignUpRow(d)} disabled={busy} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.text, fontSize: 12, fontWeight: 700, cursor: busy ? 'default' : 'pointer', fontFamily: FONT_B }}>
+                          Sign them up
                         </button>
                       )}
                       {isProspect && d.booking && (
@@ -2308,6 +2319,10 @@ function DiagnosticTab({ profile, theme }) {
         </div>
       )}
 
+      {signUpRow && (
+        <SignUpModal row={signUpRow} theme={theme} onClose={() => setSignUpRow(null)} onDone={loadList} />
+      )}
+
       {callModal && (
         <ConsultationModal
           mode={callModal.mode} diagnostic={callModal.diagnostic} session={callModal.session} theme={theme}
@@ -2331,10 +2346,19 @@ function DiagnosticTab({ profile, theme }) {
             const bandColors = { Outstanding: t.success, High: GOLD, Satisfactory: t.blue, Developing: 'color-mix(in srgb, var(--t-accent) 55%, var(--t-danger))', Beginning: t.danger }
             const bc = bandColors[r.performance_band] || GOLD
             const canPresent = a.status === 'completed' && !a.student_id
+            const listRow = diagnostics.find(x => x.id === a.id)
+            const canSignUp = canPresent && !!listRow && listRow.tutor_id === profile.id && !listRow.signup
+            const suChip = listRow ? signUpChip(listRow.signup) : null
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {canPresent && (
-                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    {suChip && <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 12, border: `1px solid ${suChip.tone === 'success' ? `${t.success}59` : 'var(--t-border)'}`, background: suChip.tone === 'success' ? t.successBg : 'var(--t-bgSubtle)', color: suChip.tone === 'success' ? t.success : t.goldText, fontWeight: 700 }}>{suChip.label}</span>}
+                    {canSignUp && (
+                      <button onClick={() => setSignUpRow(listRow)} style={{ padding: '8px 18px', borderRadius: 8, border: `1px solid ${t.border}`, background: 'transparent', color: t.text, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>
+                        Sign them up
+                      </button>
+                    )}
                     <button ref={presentBtnRef} onClick={() => setPresenting(true)} style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: 'var(--t-accent)', color: 'var(--t-onAccent)', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
                       Present
                     </button>

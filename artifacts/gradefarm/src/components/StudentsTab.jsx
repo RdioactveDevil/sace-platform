@@ -25,7 +25,7 @@ import {
   setStudentParent,
 } from '../lib/db'
 import { parseEmailList, gettingStartedStatus } from '../lib/rosterOnboarding'
-import DiagnosticScopePicker from './DiagnosticScopePicker'
+import { SubjectChips, InviteSubjectsSection } from './InviteSubjects'
 
 const GOLD = 'var(--t-accent)'
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
@@ -621,24 +621,9 @@ export default function StudentsTab({ profile, theme, allTutors = false, onNavig
             <button type="submit" disabled={addLoading || !addresses.length} style={{ ...btn(true), ...(addLoading || !email.trim() ? { background: t.border, color: t.textMuted, cursor: 'not-allowed' } : {}) }}>{addLoading ? 'Sending…' : addresses.length > 1 ? `Send ${addresses.length} invites` : 'Send invite'}</button>
           </form>
           {includable.canInclude && (
-            <div style={{ marginTop: 12 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: t.textMuted, marginBottom: 6 }}>Subjects included free</div>
-              <SubjectChips subjects={includable.subjects} selected={inviteSubjects} theme={theme}
-                onToggle={id => setInviteSubjects(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]))} />
-              {inviteSubjects.length > 0 && (
-                <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <div style={{ fontSize: 12, color: t.textMuted }}>
-                    Before practising, they do a 20-question diagnostic on each subject. Choose what it covers, or leave it on all topics.
-                  </div>
-                  {inviteSubjects.map(id => (
-                    <DiagnosticScopePicker key={id} theme={theme}
-                      subject={includable.subjects.find(su => su.id === id)}
-                      selected={inviteScope[id] || []}
-                      onChange={ids => setInviteScope(prev => ({ ...prev, [id]: ids }))} />
-                  ))}
-                </div>
-              )}
-            </div>
+            <InviteSubjectsSection subjects={includable.subjects} selected={inviteSubjects} scope={inviteScope} theme={theme}
+              onToggle={id => setInviteSubjects(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]))}
+              onScope={(id, ids) => setInviteScope(prev => ({ ...prev, [id]: ids }))} />
           )}
           {addError && <div style={{ marginTop: 8, fontSize: 12, color: t.danger }}>{addError}</div>}
           {addNotice && <div style={{ marginTop: 8, fontSize: 12, color: t.success, fontWeight: 600 }}>{addNotice}</div>}
@@ -883,25 +868,6 @@ function ParentReportEditor({ student, theme, ctrl, available, onChange }) {
 }
 
 // ── Toggle chips for picking subjects ──────────────────────────────────────────
-function SubjectChips({ subjects, selected, onToggle, busyId = null, theme }) {
-  const t = THEMES[theme]
-  return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-      {subjects.map(su => {
-        const on = selected.includes(su.id)
-        return (
-          <button key={su.id} type="button" onClick={() => onToggle(su.id)} disabled={!!busyId} aria-pressed={on}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 700, padding: '7px 12px', borderRadius: 9, cursor: busyId ? 'default' : 'pointer', fontFamily: FONT_B, opacity: busyId && busyId !== su.id ? 0.6 : 1,
-              border: `1px solid ${on ? 'var(--t-text)' : t.border}`, background: on ? 'var(--t-bgSubtle)' : 'transparent', color: on ? 'var(--t-text)' : t.textSub }}>
-            <span>{busyId === su.id ? '…' : on ? '✓' : '+'}</span>
-            {su.label}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
-
 // ── The subjects this tutor includes, free, for the student ────────────────────
 function IncludedSubjectsPicker({ student, subjects, theme, onChange }) {
   const t = THEMES[theme]

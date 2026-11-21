@@ -1307,7 +1307,7 @@ export async function fetchRoster(tutorId, { allTutors = false } = {}) {
  *  to send it to a parent who sets the account up for their child (left out,
  *  a re-send keeps who it's for).
  *  Resolves to { invite, emailSent, emailError }. */
-export async function inviteStudent(studentEmail, curriculumIds, diagnosticSubtopics, recipient) {
+export async function inviteStudent(studentEmail, curriculumIds, diagnosticSubtopics, recipient, sourceDiagnosticId) {
   const body = { email: studentEmail }
   if (curriculumIds !== undefined) body.curriculumIds = curriculumIds
   if (diagnosticSubtopics !== undefined) body.diagnosticSubtopics = diagnosticSubtopics
@@ -1315,6 +1315,7 @@ export async function inviteStudent(studentEmail, curriculumIds, diagnosticSubto
     body.recipient = recipient.parent ? 'parent' : 'student'
     if (recipient.parent) body.childName = recipient.childName
   }
+  if (sourceDiagnosticId) body.sourceDiagnosticId = sourceDiagnosticId
   return tutorFetch('/api/tutor/invites', { method: 'POST', body: JSON.stringify(body) })
 }
 
