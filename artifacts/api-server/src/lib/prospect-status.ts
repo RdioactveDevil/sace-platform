@@ -72,3 +72,12 @@ export function normaliseProspectEmail(raw: unknown): { email: string | null } |
   if (email.length > 254 || !EMAIL_RE.test(email)) return { error: "Enter a valid email address." };
   return { email };
 }
+
+/**
+ * Who hears that a diagnostic is finished: for a prospect's (no student
+ * account) only the tutor who sent it; for a roster student's, the setter and
+ * the student's other tutors, once each.
+ */
+export function doneRecipients(setterId: string, studentId: string | null, rosterTutorIds: string[] | undefined): string[] {
+  return studentId ? [...new Set([setterId, ...(rosterTutorIds ?? [])])] : [setterId];
+}

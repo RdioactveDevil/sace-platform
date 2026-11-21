@@ -12,6 +12,10 @@
  *                             have no account, so no email_log row)
  *   • diagnostic_reminder   – once, if a student hasn't done the diagnostic on a
  *                             tutor-included subject after a couple of days
+ *   • prospect_reminder     – once, if a prospective student emailed a link
+ *                             diagnostic hasn't started it 2 days later
+ *                             (recorded on the diagnostic: no account, so no
+ *                             email_log row; lib/prospect-status.ts)
  *   • diagnostic_done       – the student's tutors (the one who set it and any
  *                             others on their roster), when they finish one
  *   • parent_report         – Sunday evening, a student's week to the parent
@@ -35,7 +39,9 @@ import { needsParentConsent } from "./parent-consent";
 import { freeAllowance, studentWelcomeEmail, tutorWelcomeEmail } from "./welcome-email";
 import { subjectLabel } from "./included-subject";
 import { studentSummary } from "./student-diagnostic";
-import { rosterTutorIds, tutorsToNotify } from "./student-tutors";
+import { rosterTutorIds } from "./student-tutors";
+import { doneRecipients, dueForProspectReminder, PROSPECT_TTL_MS, type ProspectRow } from "./prospect-status";
+import { prospectFinishedEmail, prospectReminderEmail } from "./prospect-emails";
 import { loadParentReport, parentReportEmail } from "./parent-reports";
 import { planIsLive, tutorBillingRow, tutorPlanOptions, type TutorBillingRow } from "./tutor-plan";
 
@@ -51,6 +57,7 @@ export type EmailKind =
   | "invite_reminder"
   | "diagnostic_reminder"
   | "diagnostic_done"
+  | "prospect_reminder"
   | "parent_report";
 
 const MINUTE = 60_000;
@@ -789,6 +796,14 @@ interface DiagnosticRow {
   report: Parameters<typeof studentSummary>[0] | null;
 }
 
+/** A finished diagnostic, a roster student's or a prospect's (student_id null). */
+type DoneRow = Omit<DiagnosticRow, "student_id"> & {
+  student_id: string | null;
+  submitted_by_name: string | null;
+  student_name: string | null;
+  prospect_email: string | null;
+};
+
 const diagnosticSubject = (d: DiagnosticRow) => d.subjects?.[0]?.name || "your subject";
 
 async function runDiagnosticReminders(job: Job) {
@@ -833,36 +848,47 @@ async function runDiagnosticReminders(job: Job) {
 async function runDiagnosticDone(job: Job) {
   const { data, error } = await job.admin
     .from("diagnostic_assessments")
-    .select("id, token, tutor_id, student_id, subjects, created_at, completed_at, report")
-    .not("student_id", "is", null)
+    .select("id, token, tutor_id, student_id, subjects, created_at, completed_at, report, submitted_by_name, student_name, prospect_email")
     .eq("status", "completed")
     .gte("completed_at", new Date(job.now.getTime() - DIAGNOSTIC_DONE_LOOKBACK).toISOString())
     .limit(500);
   if (error) throw new Error(`diagnostic_assessments: ${error.message}`);
-  const rows = ((data ?? []) as DiagnosticRow[]).filter((d) => d.report);
+  const rows = ((data ?? []) as DoneRow[]).filter((d) => d.report);
   if (rows.length === 0) return;
 
-  // The tutor who set it and every other tutor with the student on their roster.
-  const roster = await rosterTutorIds(job.admin, rows.map((d) => d.student_id));
+  // A roster student's: the tutor who set it and every other tutor with the
+  // student on their roster. A prospect's: only the tutor who sent it.
+  const studentIds = rows.map((d) => d.student_id).filter((x): x is string => !!x);
+  const roster = studentIds.length ? await rosterTutorIds(job.admin, studentIds) : new Map<string, string[]>();
   const done = await loadDone(job, "diagnostic_done", rows.map((d) => d.id));
   const pending = rows.flatMap((d) =>
-    tutorsToNotify(d.tutor_id, roster.get(d.student_id))
+    doneRecipients(d.tutor_id, d.student_id, d.student_id ? roster.get(d.student_id) : undefined)
       .filter((tutorId) => !done.has(`${d.id}:${tutorId}`))
       .map((tutorId) => ({ d, tutorId })),
   );
   if (pending.length === 0) return;
-  const people = await loadRecipients(job, [...pending.map((p) => p.tutorId), ...pending.map((p) => p.d.student_id)]);
+  const people = await loadRecipients(job, [...pending.map((p) => p.tutorId), ...studentIds]);
   for (const { d, tutorId } of pending) {
     const tutor = people.get(tutorId);
     if (!tutor || tutor.unsubscribed) continue;
+    const sum = studentSummary(d.report!);
+    if (!d.student_id) {
+      const prospectName = d.submitted_by_name?.trim() || d.student_name?.trim() || d.prospect_email || "Your prospect";
+      await deliver(job, "diagnostic_done", tutor, [d.id], () => {
+        const { subject, content } = prospectFinishedEmail({
+          tutorName: tutor.name, prospectName, subject: diagnosticSubject(d as DiagnosticRow), summary: sum, link: `${appUrl()}/tutor?tab=diagnostic`,
+        });
+        return { subject, content: { ...content, unsubscribe: unsubscribeUrl(tutor.id) } };
+      });
+      continue;
+    }
     const setter = tutorId === d.tutor_id;
     const studentName = people.get(d.student_id)?.name ?? "Your student";
-    const sum = studentSummary(d.report!);
     await deliver(job, "diagnostic_done", tutor, [d.id], () => ({
-      subject: `${studentName} finished their ${diagnosticSubject(d)} diagnostic: ${sum.percentage}%`,
+      subject: `${studentName} finished their ${diagnosticSubject(d as DiagnosticRow)} diagnostic: ${sum.percentage}%`,
       content: {
         heading: `${studentName}'s diagnostic is in`,
-        paragraphs: [`Hi ${firstName(tutor.name)}, ${studentName} has finished their ${diagnosticSubject(d)} diagnostic.`],
+        paragraphs: [`Hi ${firstName(tutor.name)}, ${studentName} has finished their ${diagnosticSubject(d as DiagnosticRow)} diagnostic.`],
         details: [
           ["Score", `${sum.percentage}% (${sum.band})`],
           ...(sum.work_on.length ? ([["Work on", sum.work_on.join(", ")]] as Array<[string, string]>) : []),
@@ -875,6 +901,66 @@ async function runDiagnosticDone(job: Job) {
         unsubscribe: unsubscribeUrl(tutor.id),
       },
     }));
+  }
+}
+
+// ── Prospects' diagnostics ──────────────────────────────────────────────────
+
+type ProspectReminderRow = ProspectRow & { id: string; token: string; tutor_id: string; subjects: { name?: string }[] | null };
+
+/** Once, a couple of days after a prospect was emailed a diagnostic they haven't started. */
+async function runProspectReminders(job: Job) {
+  if (!daytime(job)) return;
+  const nowMs = job.now.getTime();
+  const { data, error } = await job.admin
+    .from("diagnostic_assessments")
+    .select("id, token, tutor_id, subjects, status, student_id, prospect_email, created_at, sent_at, opened_at, started_at, reminded_at, cancelled_at")
+    .is("student_id", null)
+    .not("prospect_email", "is", null)
+    .eq("status", "pending")
+    .is("reminded_at", null)
+    .is("started_at", null)
+    .is("cancelled_at", null)
+    .gt("sent_at", new Date(nowMs - PROSPECT_TTL_MS).toISOString())
+    .limit(500);
+  if (error) throw new Error(`diagnostic_assessments: ${error.message}`);
+  const rows = ((data ?? []) as ProspectReminderRow[]).filter((d) => dueForProspectReminder(d, job.now));
+  if (rows.length === 0) return;
+
+  const tutors = await loadRecipients(job, rows.map((d) => d.tutor_id));
+  for (const d of rows) {
+    const tutor = tutors.get(d.tutor_id);
+    if (!tutor) continue; // tutor deactivated
+    if (job.budget <= 0) {
+      job.summary.budgetExhausted = true;
+      return;
+    }
+    const { subject, content } = prospectReminderEmail({
+      senderName: tutor.name.trim() || "gradefarm.",
+      subject: d.subjects?.[0]?.name || "your subject",
+      link: `${appUrl()}/diagnostic/${encodeURIComponent(d.token)}`,
+    });
+    if (job.dryRun) {
+      job.summary.planned!.push({ kind: "prospect_reminder", to: d.prospect_email!, subject });
+      job.budget--;
+      continue;
+    }
+    // Claim it: another run may be here too.
+    const remindedAt = new Date().toISOString();
+    const { data: claimed, error: claimErr } = await job.admin
+      .from("diagnostic_assessments").update({ reminded_at: remindedAt })
+      .eq("id", d.id).eq("status", "pending").is("reminded_at", null).is("started_at", null).select("id");
+    if (claimErr) throw new Error(`diagnostic_assessments: ${claimErr.message}`);
+    if (!claimed?.length) continue;
+    job.budget--;
+    const result = await sendEmail(job.resend!, { to: d.prospect_email!, subject, content, idempotencyKey: `prospect_reminder:${d.id}:${d.sent_at}` });
+    if (result.error) {
+      if (!result.blocked) await job.admin.from("diagnostic_assessments").update({ reminded_at: null }).eq("id", d.id).eq("reminded_at", remindedAt);
+      bump(result.blocked ? job.summary.blocked : job.summary.failed, "prospect_reminder");
+      logger.warn({ diagnosticId: d.id, error: result.error }, "emails: prospect reminder failed");
+    } else {
+      bump(job.summary.sent, "prospect_reminder");
+    }
   }
 }
 
@@ -1080,6 +1166,7 @@ export async function runAutomatedEmails(admin: SupabaseClient, resend: Resend |
     ["recurring assignments", runRecurringAssignmentEmails],
     ["diagnostic results", runDiagnosticDone],
     ["diagnostic reminders", runDiagnosticReminders],
+    ["prospect reminders", runProspectReminders],
     ["invite reminders", runInviteReminders],
     ["parent reports", runParentReports],
     ["account parent reports", runAccountParentReports],

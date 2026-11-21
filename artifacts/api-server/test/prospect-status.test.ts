@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   canResend,
   diagnosticStatus,
+  doneRecipients,
   dueForProspectReminder,
   normaliseProspectEmail,
   unavailableReason,
@@ -88,4 +89,14 @@ test("a prospect's email is optional, checked, trimmed and lower-cased", () => {
   assert.deepEqual(normaliseProspectEmail("not-an-email"), { error: "Enter a valid email address." });
   assert.deepEqual(normaliseProspectEmail(`${"a".repeat(250)}@x.co`), { error: "Enter a valid email address." });
   assert.deepEqual(normaliseProspectEmail(42), { error: "Enter a valid email address." });
+});
+
+test("a prospect's result goes only to the tutor who sent it", () => {
+  assert.deepEqual(doneRecipients("t1", null, ["t2", "t3"]), ["t1"]);
+  assert.deepEqual(doneRecipients("t1", null, undefined), ["t1"]);
+});
+
+test("a roster student's result goes to the setter and their other tutors, once each", () => {
+  assert.deepEqual(doneRecipients("t1", "s1", ["t2", "t1", "t3"]), ["t1", "t2", "t3"]);
+  assert.deepEqual(doneRecipients("t1", "s1", undefined), ["t1"]);
 });
