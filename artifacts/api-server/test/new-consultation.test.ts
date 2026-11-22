@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { newConsultationInput, testInput } from "../src/lib/new-consultation";
+import { newConsultationInput, testInput, usableGeneratedQuestions } from "../src/lib/new-consultation";
 import {
   canResend,
   diagnosticStatus,
@@ -161,4 +161,26 @@ test("a record without a test can't be resent or reminded", () => {
   assert.equal(canResend(row(), after(DAY)), false);
   assert.equal(dueForProspectReminder(row({ sent_at: SENT }), after(3 * DAY)), false);
   assert.equal(dueForProspectReminder(row({ sent_at: SENT, has_test: true }), after(3 * DAY)), true);
+});
+
+// ── Generated questions are made saveable at preview ───────────────────────
+
+test("generated questions: numeric-string marks become integers, at least 1", () => {
+  const out = usableGeneratedQuestions([
+    { id: 7, question: "A", marks: "3" },
+    { id: 8, question: "B", marks: 2.4 },
+    { id: 9, question: "C", marks: "0" },
+    { id: 10, question: "D" },
+    { id: 11, question: "E", marks: "lots" },
+  ]);
+  assert.deepEqual(out.map((q) => q.marks), [3, 2, 1, 1, 1]);
+  assert.deepEqual(out.map((q) => q.id), [1, 2, 3, 4, 5]);
+  // What preview shows is what save accepts.
+  assert.ok(!("error" in testInput({ yearLevel: "Year 11", subjects: [{ name: "Chemistry" }], questions: out })));
+});
+
+test("generated questions: ones without text are dropped; nothing usable is empty", () => {
+  const out = usableGeneratedQuestions([null, "x", { marks: 2 }, { question: "  ", marks: 2 }, { question: "Keep", marks: 2, topic: "T" }]);
+  assert.deepEqual(out, [{ id: 1, question: "Keep", marks: 2, topic: "T" }]);
+  assert.deepEqual(usableGeneratedQuestions([{ question: "" }, 5]), []);
 });

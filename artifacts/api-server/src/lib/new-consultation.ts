@@ -48,6 +48,18 @@ export function testInput(raw: unknown): TestInput | { error: string } {
   };
 }
 
+/**
+ * The model's questions made saveable before the tutor previews them:
+ * questions without text are dropped, marks become whole numbers (at least 1,
+ * numeric strings included, 1 when missing) and ids run from 1. An empty
+ * result means generation failed.
+ */
+export function usableGeneratedQuestions(list: unknown[]): Array<Record<string, unknown> & { id: number; question: string; marks: number }> {
+  return list
+    .filter((q): q is Record<string, unknown> & { question: string } => isObj(q) && typeof q.question === "string" && !!q.question.trim())
+    .map((q, i) => ({ ...q, id: i + 1, marks: Math.max(1, Math.round(Number(q.marks) || 1)) }));
+}
+
 export type NewConsultation = {
   studentName: string;
   primary: { email: string; isParent: boolean };

@@ -134,3 +134,28 @@ test("a student-primary diagnostic's reminder is unchanged", async () => {
   assert.equal(sent[0].to, "sam@example.com");
   assert.equal(sent[0].subject, "Reminder: your Chemistry diagnostic from Jane Smith");
 });
+
+test("book-your-call to a parent-primary record speaks to the parent and names the student", async () => {
+  const db = baseDb();
+  db.tables.diagnostic_assessments.push(record({
+    has_test: true, status: "completed", subjects: [{ name: "Chemistry" }], completed_at: iso(DAYTIME - 25 * HOUR), booking_reminded_at: null,
+  }));
+  const { resend, sent } = fakeResend();
+  const s = await runAutomatedEmails(fakeSupabase(db), resend, { now: new Date(DAYTIME), steps: ["book your call"] });
+  assert.equal(s.sent.book_your_call, 1);
+  assert.equal(sent[0].to, "parent@example.com");
+  assert.match(sent[0].text, /Sam Lee's Chemistry diagnostic/);
+  assert.doesNotMatch(sent[0].text, /your Chemistry diagnostic with you/);
+});
+
+test("book-your-call to a student is unchanged", async () => {
+  const db = baseDb();
+  db.tables.diagnostic_assessments.push(record({
+    has_test: undefined, prospect_is_parent: undefined, prospect_email: "sam@example.com", status: "completed",
+    subjects: [{ name: "Chemistry" }], completed_at: iso(DAYTIME - 25 * HOUR), booking_reminded_at: null,
+  }));
+  const { resend, sent } = fakeResend();
+  await runAutomatedEmails(fakeSupabase(db), resend, { now: new Date(DAYTIME), steps: ["book your call"] });
+  assert.equal(sent[0].to, "sam@example.com");
+  assert.match(sent[0].text, /would like to talk through your Chemistry diagnostic with you/);
+});

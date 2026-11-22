@@ -1143,7 +1143,7 @@ async function runBookYourCall(job: Job) {
   const nowMs = job.now.getTime();
   const { data, error } = await job.admin
     .from("diagnostic_assessments")
-    .select("id, token, tutor_id, subjects, status, student_id, prospect_email, completed_at, booking_reminded_at")
+    .select("id, token, tutor_id, subjects, status, student_id, prospect_email, completed_at, booking_reminded_at, prospect_is_parent, student_name")
     .is("student_id", null)
     .not("prospect_email", "is", null)
     .eq("status", "completed")
@@ -1153,7 +1153,9 @@ async function runBookYourCall(job: Job) {
     .gt("completed_at", new Date(nowMs - BOOK_YOUR_CALL_UNTIL_MS).toISOString())
     .limit(500);
   if (error) throw new Error(`diagnostic_assessments: ${error.message}`);
-  type Row = { id: string; token: string; tutor_id: string; subjects: { name?: string }[] | null; status: string; student_id: string | null; prospect_email: string | null; completed_at: string | null; booking_reminded_at: string | null };
+  type Row = { id: string; token: string; tutor_id: string; subjects: { name?: string }[] | null; status: string; student_id: string | null; prospect_email: string | null; completed_at: string | null; booking_reminded_at: string | null;
+    prospect_is_parent?: boolean | null; student_name?: string | null;
+  };
   const rows = (data ?? []) as Row[];
   if (rows.length === 0) return;
 
@@ -1184,6 +1186,8 @@ async function runBookYourCall(job: Job) {
       tutorName: names.get(d.tutor_id) ?? prospectSenderName(null),
       subject: d.subjects?.[0]?.name || "your subject",
       bookUrl: `${appUrl()}/book/${encodeURIComponent(d.token)}`,
+      // The address may be a parent's (a consultation booked for a parent only).
+      ...(d.prospect_is_parent ? { audience: "parent" as const, studentName: d.student_name ?? undefined } : {}),
     });
     if (job.dryRun) {
       job.summary.planned!.push({ kind: "book_your_call", to: d.prospect_email!, subject });

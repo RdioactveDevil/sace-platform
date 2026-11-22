@@ -143,3 +143,26 @@ test("invite email lists only the links it is given", () => {
     assert.doesNotMatch(none, /Before the call|https:\/\/app\/(q|diagnostic)/);
   }
 });
+
+test("bookYourCallEmail: the student version is unchanged", () => {
+  const e = bookYourCallEmail({ tutorName: "Sam Tutor", subject: "VCE Methods", bookUrl: "https://b/x" });
+  assert.deepEqual(e, bookYourCallEmail({ tutorName: "Sam Tutor", subject: "VCE Methods", bookUrl: "https://b/x", audience: "student", studentName: "Kim Lee" }));
+  assert.equal(e.subject, "Book your consultation call with Sam Tutor");
+  assert.deepEqual(e.content.paragraphs, [
+    "Sam Tutor would like to talk through your VCE Methods diagnostic with you on a consultation call.",
+    "Pick a time that suits you. It only takes a minute.",
+  ]);
+});
+
+test("bookYourCallEmail: the parent version names the student and is addressed to the parent", () => {
+  const e = bookYourCallEmail({ tutorName: "Sam Tutor", subject: "VCE Methods", bookUrl: "https://b/x", audience: "parent", studentName: "Kim Lee" });
+  const t = text(e);
+  assert.match(t, /Hi,/);
+  assert.match(t, /Kim Lee's VCE Methods diagnostic/);
+  assert.doesNotMatch(t, /your VCE Methods diagnostic with you/);
+  assert.doesNotMatch(t, /your tutor/i);
+  assert.equal(e.content.cta?.url, "https://b/x");
+  assert.match(e.content.footer, /only reminder/);
+  const f = bookYourCallEmail({ tutorName: "Sam Tutor", subject: "VCE Methods", bookUrl: "https://b/x", audience: "parent" });
+  assert.match(text(f), /your child's VCE Methods diagnostic/);
+});

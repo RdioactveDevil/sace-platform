@@ -231,8 +231,30 @@ export function consultationReminderEmail(
   };
 }
 
-/** Sent to a prospect who hasn't booked yet, with a link to pick a time. */
-export function bookYourCallEmail(o: { tutorName: string; subject: string; bookUrl: string }): Email {
+/**
+ * Sent to a prospect who hasn't booked yet, with a link to pick a time. When
+ * the address is a parent's, it names the student and speaks to the parent.
+ */
+export function bookYourCallEmail(o: {
+  tutorName: string; subject: string; bookUrl: string; audience?: "student" | "parent"; studentName?: string;
+}): Email {
+  if (o.audience === "parent") {
+    const name = o.studentName?.trim();
+    const whose = name ? `${name}'s` : "your child's";
+    return {
+      subject: `Book ${whose} consultation call with ${o.tutorName}`,
+      content: {
+        heading: "Book a consultation call",
+        paragraphs: [
+          "Hi,",
+          `${o.tutorName} would like to talk through ${whose} ${o.subject} diagnostic with you on a consultation call.`,
+          "Pick a time that suits you. It only takes a minute.",
+        ],
+        cta: { label: "Choose a time", url: o.bookUrl },
+        footer: `You're receiving this because ${o.tutorName} entered your email address on gradefarm. This is the only reminder we'll send. If you don't know them, you can ignore this email.`,
+      },
+    };
+  }
   return {
     subject: `Book your consultation call with ${o.tutorName}`,
     content: {

@@ -10,7 +10,7 @@ import { diagnosticScope, studentSummary, type ScopeTopic } from "../lib/student
 import { scopeOutline, subtopicFieldHint } from "../lib/diagnostic-outline";
 import { signupState } from "../lib/prospect-signup";
 import { DIAGNOSTIC_LIST_COLUMNS, PROSPECT_COLUMNS, canResend, diagnosticStatus, forViewer, hasNoTest, normaliseProspectEmail, unavailableReason, type ProspectRow } from "../lib/prospect-status";
-import { testInput } from "../lib/new-consultation";
+import { testInput, usableGeneratedQuestions } from "../lib/new-consultation";
 import { prospectDiagnosticEmail, prospectLink, prospectSenderName } from "../lib/prospect-emails";
 import { getResend, sendEmail } from "../lib/email";
 import { DEFAULT_QUESTIONNAIRE, countRedFlags, questionnaireLinkFor, questionnaireStatus, snapshotFrom, validateQuestionnaire, type Answers, type Questionnaire } from "../lib/questionnaire";
@@ -342,10 +342,9 @@ Return a JSON object: { "questions": [ ...array of question objects... ] }`;
     throw new Error("Claude did not return valid question JSON. Please try again.");
   }
 
+  // Text required, whole-number marks, ids from 1: what the tutor previews is what saves.
+  questions = usableGeneratedQuestions(questions) as unknown as DiagnosticQuestion[];
   if (!questions.length) throw new Error("No questions were generated. Please try again.");
-
-  // Normalise IDs
-  questions = questions.map((q, i) => ({ ...q, id: i + 1 }));
 
   return questions;
 }
