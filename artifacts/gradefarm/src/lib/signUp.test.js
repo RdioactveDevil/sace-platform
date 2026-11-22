@@ -23,6 +23,15 @@ test('defaults: missing details become empty or null; name falls back to student
   assert.deepEqual(signUpDefaults({}, {}), { email: '', curriculumIds: [], parentEmail: null, childName: '' })
 })
 
+test('defaults: a parent-primary record opens in parent mode with the parent email and the student first name', () => {
+  const d = signUpDefaults({ prospect_email: 'pat@example.com', prospect_is_parent: true, student_name: 'Sam Rowe', parent_email: null, curriculum_id: 'c1' }, { canInclude: true, includableIds: ['c1'] })
+  assert.deepEqual(d, { email: '', curriculumIds: ['c1'], parentEmail: 'pat@example.com', childName: 'Sam', parentMode: true })
+})
+
+test('defaults: a student-primary record has no parentMode flag', () => {
+  assert.equal('parentMode' in signUpDefaults(row, {}), false)
+})
+
 test('chip: nothing when there is no sign-up', () => {
   assert.equal(signUpChip(null), null)
   assert.equal(signUpChip(undefined), null)

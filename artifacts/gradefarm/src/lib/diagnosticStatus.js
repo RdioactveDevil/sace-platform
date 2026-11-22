@@ -8,6 +8,7 @@ const CHIPS = {
   finished:    { label: 'Finished', tone: 'success' },
   expired:     { label: 'Expired', tone: 'danger' },
   cancelled:   { label: 'Cancelled', tone: 'muted' },
+  no_test:     { label: 'No test', tone: 'muted' },
 }
 
 export function statusChip(statusLabel) {

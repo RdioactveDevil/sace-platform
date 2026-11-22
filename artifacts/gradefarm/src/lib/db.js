@@ -2079,6 +2079,14 @@ export async function saveQuestionnaire({ intro, items }) {
   return json.questionnaire
 }
 
+/** Give a consultation's test-less record a test and email its link to the ticked recipients: { emailed: { student?, parent? } }. */
+export async function addTestToDiagnostic(assessmentId, { yearLevel, subjects, questions }) {
+  return tutorFetch(`/api/tutor/diagnostic/${encodeURIComponent(assessmentId)}/add-test`, {
+    method: 'POST',
+    body: JSON.stringify({ yearLevel, subjects, questions }),
+  })
+}
+
 /** Email a sent diagnostic to the prospect again (restarts its 30 days and its reminder). */
 export async function resendDiagnostic(assessmentId) {
   return tutorFetch(`/api/tutor/diagnostic/${encodeURIComponent(assessmentId)}/resend`, { method: 'POST' })
@@ -2103,9 +2111,18 @@ export async function saveBookingSettings(settings) {
   return json.settings
 }
 
-/** Open call times for a prospect's diagnostic: { slots, timeZone, callMinutes, noHours }. */
+/** Open call times: { slots, timeZone, callMinutes, noHours }. For a prospect's diagnostic; with none, the tutor's own open times (a new consultation). */
 export async function fetchConsultationSlots(diagnosticId) {
-  return tutorFetch(`/api/tutor/consultations/slots?diagnosticId=${encodeURIComponent(diagnosticId)}`)
+  return tutorFetch(`/api/tutor/consultations/slots${diagnosticId ? `?diagnosticId=${encodeURIComponent(diagnosticId)}` : ''}`)
+}
+
+/**
+ * Book first: a new prospect record, the call and one email per ticked recipient.
+ * `body` is newConsultationBody(form) -> { diagnosticId, sessionId, start, emailed: { student?, parent? } }.
+ * A 409 carries { error, booking?: { start } } on the error's `body`.
+ */
+export async function createNewConsultation(body) {
+  return tutorFetch('/api/tutor/consultations/new', { method: 'POST', body: JSON.stringify(body) })
 }
 
 /** Book a call for a prospect. { diagnosticId, start, email?, parentEmail?, reminderMinutes? } -> { sessionId } */

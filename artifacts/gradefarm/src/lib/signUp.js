@@ -8,11 +8,17 @@ const firstWord = (s) => String(s || '').trim().split(/\s+/)[0] || ''
 export function signUpDefaults(row, { canInclude, includableIds } = {}) {
   const r = row || {}
   const carry = !!(canInclude && r.curriculum_id && (includableIds || []).includes(r.curriculum_id))
+  const childName = firstWord(r.submitted_by_name || r.student_name)
+  // A parent-primary record (a consultation booked with a parent) holds the parent's address:
+  // the form opens in "send to a parent" mode with it and the student's first name.
+  if (r.prospect_is_parent) {
+    return { email: '', curriculumIds: carry ? [r.curriculum_id] : [], parentEmail: r.prospect_email || null, childName, parentMode: true }
+  }
   return {
     email: r.prospect_email || '',
     curriculumIds: carry ? [r.curriculum_id] : [],
     parentEmail: r.parent_email || null,
-    childName: firstWord(r.submitted_by_name || r.student_name),
+    childName,
   }
 }
 
