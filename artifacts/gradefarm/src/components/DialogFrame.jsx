@@ -25,6 +25,8 @@ export default function DialogFrame({ theme, title, icon, intro, maxWidth = 640,
     const onKey = (e) => {
       const box = dialogRef.current
       if (!box) return
+      // A confirm dialog on top (role="alertdialog") handles its own keys.
+      if (e.defaultPrevented || document.querySelector('[role="alertdialog"]')) return
       // Only the top dialog answers keys.
       const dialogs = document.querySelectorAll('[role="dialog"]')
       if (dialogs[dialogs.length - 1] !== box) return

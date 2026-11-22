@@ -65,6 +65,7 @@ import SegmentedToggle from './SegmentedToggle'
 import ConsultationModal from './ConsultationModal'
 import SignUpModal from './SignUpModal'
 import SendTestModal from './SendTestModal'
+import { testSentSummary } from '../lib/newConsultation'
 import { signUpChip } from '../lib/signUp'
 import PresentReport from './PresentReport'
 import { formatWhen } from '../lib/bookingFormat'
@@ -1530,6 +1531,7 @@ function DiagnosticTab({ profile, theme }) {
   const [callModal, setCallModal] = useState(null) // { mode: 'book' | 'reschedule', diagnostic?, session? }
   const [signUpRow, setSignUpRow] = useState(null) // the finished diagnostic being signed up
   const [sendTestRow, setSendTestRow] = useState(null) // the test-less consultation record being given a test
+  const [testNotice, setTestNotice] = useState(null)   // { ok, text } after "Send a test"
   const [tutorZone, setTutorZone] = useState(null) // null until known: times then show without a zone label
   useEffect(() => {
     let cancelled = false
@@ -1884,6 +1886,12 @@ function DiagnosticTab({ profile, theme }) {
             <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Sent diagnostics</div>
             <button onClick={loadList} style={{ padding: '5px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>Refresh</button>
           </div>
+          {testNotice && (
+            <div role={testNotice.ok ? 'status' : 'alert'} style={{ margin: '12px 20px 0', fontSize: 13, color: testNotice.ok ? t.text : t.danger, padding: '10px 14px', borderRadius: 8, background: testNotice.ok ? t.successBg : t.dangerBg, border: `1px solid ${testNotice.ok ? t.success : t.danger}40`, display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ flex: 1 }}>{testNotice.text}</span>
+              <button type="button" onClick={() => setTestNotice(null)} aria-label="Dismiss" style={{ border: 'none', background: 'transparent', color: t.textMuted, cursor: 'pointer', fontSize: 16, lineHeight: 1, fontFamily: FONT_B }}>×</button>
+            </div>
+          )}
           {rowError && <div role="alert" style={{ margin: '12px 20px 0', fontSize: 13, color: t.danger, padding: '10px 14px', borderRadius: 8, background: t.dangerBg, border: `1px solid ${t.danger}40` }}>{rowError}</div>}
           {listLoading ? (
             <div style={{ padding: 32, textAlign: 'center', color: t.textMuted, fontSize: 13 }}>Loading…</div>
@@ -1947,7 +1955,7 @@ function DiagnosticTab({ profile, theme }) {
                         </button>
                       )}
                       {canSendTest && (
-                        <button onClick={() => setSendTestRow(d)} disabled={busy} style={{ padding: '6px 12px', borderRadius: 7, border: 'none', background: 'var(--t-accent)', color: 'var(--t-onAccent)', fontSize: 12, fontWeight: 800, cursor: busy ? 'default' : 'pointer', fontFamily: FONT_B }}>
+                        <button onClick={() => { setTestNotice(null); setSendTestRow(d) }} disabled={busy} style={{ padding: '6px 12px', borderRadius: 7, border: 'none', background: 'var(--t-accent)', color: 'var(--t-onAccent)', fontSize: 12, fontWeight: 800, cursor: busy ? 'default' : 'pointer', fontFamily: FONT_B }}>
                           Send a test
                         </button>
                       )}
@@ -2010,7 +2018,7 @@ function DiagnosticTab({ profile, theme }) {
       )}
 
       {sendTestRow && (
-        <SendTestModal row={sendTestRow} theme={theme} onClose={() => setSendTestRow(null)} onDone={loadList} />
+        <SendTestModal row={sendTestRow} theme={theme} onClose={() => setSendTestRow(null)} onDone={async (res) => { setTestNotice(testSentSummary(res)); await loadList() }} />
       )}
 
       {callModal && (

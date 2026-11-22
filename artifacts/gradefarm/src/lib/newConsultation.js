@@ -65,3 +65,12 @@ export function whoNotEmailed(emailed) {
   const e = emailed || {}
   return [e.student === false ? 'student' : '', e.parent === false ? 'parent' : ''].filter(Boolean).join(', ')
 }
+
+/** What to tell the tutor after "Send a test" (the add-test response): { ok, text }. */
+export function testSentSummary(res) {
+  const sent = whoWasEmailed(res?.emailed)
+  const failed = whoNotEmailed(res?.emailed)
+  if (sent && !failed && !res?.emailError) return { ok: true, text: `Test sent. Emailed: ${sent}.` }
+  const why = res?.emailError ? ` ${String(res.emailError).replace(/\.+$/, '')}.` : ''
+  return { ok: false, text: `The test is saved, but the email didn't send.${why} Use Resend on its row to send it again.` }
+}

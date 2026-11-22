@@ -35,14 +35,17 @@ export default function SendTestModal({ row, theme, onClose, onDone }) {
     if (!test || saving) return
     setError('')
     setSaving(true)
+    let res
     try {
-      const res = await addTestToDiagnostic(row.id, test)
-      await onDone(res)
-      onClose()
+      res = await addTestToDiagnostic(row.id, test)
     } catch (err) {
       setError(err.message || "That didn't work. Please try again.")
       setSaving(false)
+      return
     }
+    // The test is saved; a failed refresh of the list must not read as a failed send.
+    try { await onDone(res) } catch { /* the list refreshes on its next load */ }
+    onClose()
   }
 
   const inputStyle = {

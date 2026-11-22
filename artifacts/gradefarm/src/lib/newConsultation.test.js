@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { recipientsError, newConsultationBody, newConsultationError, whoWasEmailed, whoNotEmailed, emptyNewConsultation } from './newConsultation.js'
+import { recipientsError, newConsultationBody, newConsultationError, whoWasEmailed, whoNotEmailed, testSentSummary, emptyNewConsultation } from './newConsultation.js'
 
 const q = [{ id: 1, question: 'Solve x + 1 = 3', marks: 2 }]
 const subjects = [{ name: 'Mathematics', topics: ['Algebra'] }]
@@ -92,4 +92,17 @@ test('whoNotEmailed: ticked recipients whose email did not go', () => {
   assert.equal(whoNotEmailed({ student: true, parent: true }), '')
   assert.equal(whoNotEmailed({ parent: true }), '')
   assert.equal(whoNotEmailed(undefined), '')
+})
+
+test('testSentSummary: who got the test, or that it is saved and can be resent', () => {
+  assert.deepEqual(testSentSummary({ emailed: { parent: true } }), { ok: true, text: 'Test sent. Emailed: parent.' })
+  assert.deepEqual(testSentSummary({ emailed: { student: true, parent: true } }), { ok: true, text: 'Test sent. Emailed: student, parent.' })
+  const failed = testSentSummary({ emailed: { student: false }, emailError: 'Mail server down.' })
+  assert.equal(failed.ok, false)
+  assert.match(failed.text, /saved/)
+  assert.match(failed.text, /Mail server down/)
+  assert.match(failed.text, /Resend/)
+  assert.equal(testSentSummary({ emailed: { student: true, parent: false } }).ok, false)
+  assert.equal(testSentSummary({ emailed: {} }).ok, false)
+  assert.equal(testSentSummary(undefined).ok, false)
 })

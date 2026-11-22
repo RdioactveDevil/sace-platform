@@ -48,6 +48,9 @@ export default function NewConsultationModal({ theme, onClose, onDone, onOpenSet
     return () => { cancelled = true }
   }, [])
 
+  // The name field renders once the open times have loaded; focus it then.
+  useEffect(() => { if (!loading) nameRef.current?.focus() }, [loading])
+
   const reminders = form.reminderMinutes ?? defaultReminders
   const full = { ...form, startIso: startIso || '', reminderMinutes: reminders }
   const blocker = zoneReady ? newConsultationError(full) : 'Still loading your time zone.'
@@ -77,15 +80,18 @@ export default function NewConsultationModal({ theme, onClose, onDone, onOpenSet
     if (blocker || saving) { if (blocker) setError(blocker); return }
     setError('')
     setSaving(true)
+    let result
     try {
-      const result = await createNewConsultation(newConsultationBody(full))
-      await onDone(result)
-      onClose()
+      result = await createNewConsultation(newConsultationBody(full))
     } catch (err) {
       const when = err?.status === 409 && err.body?.booking?.start ? ` Booked for ${formatWhen(err.body.booking.start, zone)}.` : ''
       setError(`${err.message || "That didn't work. Please try again."}${when}`)
       setSaving(false)
+      return
     }
+    // It's booked. A failed refresh of the list must not read as a failed booking.
+    try { await onDone(result) } catch { /* the list refreshes on its next load */ }
+    onClose()
   }
 
   const inputStyle = {
@@ -106,7 +112,7 @@ export default function NewConsultationModal({ theme, onClose, onDone, onOpenSet
   return (
     <DialogFrame theme={theme} title="New consultation" icon={<CalendarPlus size={17} aria-hidden="true" />} maxWidth={640}
       intro="Book the call first, then choose who gets the details and what goes with them."
-      onRequestClose={requestClose} firstFocusRef={nameRef}>
+      onRequestClose={requestClose}>
       {loading ? (
         <div style={{ color: t.textMuted, textAlign: 'center', padding: '24px 0', fontSize: 14 }}>
           <InfinityLoader size={40} label={null} style={{ margin: '0 auto 10px' }} />
