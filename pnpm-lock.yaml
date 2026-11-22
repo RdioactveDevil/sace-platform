@@ -199,6 +199,9 @@ importers:
       express:
         specifier: ^5
         version: 5.2.1
+      fflate:
+        specifier: 0.8.2
+        version: 0.8.2
       livekit-server-sdk:
         specifier: ^2.15.2
         version: 2.15.2

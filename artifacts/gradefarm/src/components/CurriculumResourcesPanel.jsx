@@ -4,6 +4,8 @@ import {
   uploadCurriculumResource,
   deleteCurriculumResource,
   MAX_RESOURCE_BYTES,
+  RESOURCE_ACCEPT,
+  resourceFileFormat,
 } from '../lib/curriculumResources'
 import { FileText, X } from 'lucide-react'
 
@@ -24,8 +26,6 @@ const STATUS_STYLE = {
   processing: { color: 'var(--t-goldText)', label: 'Processing…' },
   failed: { color: 'var(--t-danger)', label: 'Failed' },
 }
-
-const isPdf = (f) => f.type === 'application/pdf' || /\.pdf$/i.test(f.name)
 
 function fmtSize(bytes) {
   if (!bytes) return ''
@@ -63,7 +63,7 @@ export default function CurriculumResourcesPanel({ curriculumId }) {
 
   useEffect(() => { refresh() }, [refresh])
 
-  // Adds picked files to the selection, skipping non-PDFs, files over the
+  // Adds picked files to the selection, skipping files we can't read, files over the
   // size limit and files already picked.
   const handleFiles = (list) => {
     const picked = Array.from(list || [])
@@ -72,7 +72,7 @@ export default function CurriculumResourcesPanel({ curriculumId }) {
     const skipped = []
     const ok = []
     for (const f of picked) {
-      if (!isPdf(f)) skipped.push(`${f.name} (not a PDF)`)
+      if (!resourceFileFormat(f)) skipped.push(`${f.name} (${/\.(doc|ppt)$/i.test(f.name) ? 'save it as .docx or .pptx first' : 'not a PDF, Word or PowerPoint file'})`)
       else if (f.size > MAX_RESOURCE_BYTES) skipped.push(`${f.name} (over 50 MB)`)
       else ok.push(f)
     }
@@ -87,7 +87,7 @@ export default function CurriculumResourcesPanel({ curriculumId }) {
   const removeFile = (i) => setFiles(prev => prev.filter((_, j) => j !== i))
   const setFileType = (i, type) => setFiles(prev => prev.map((p, j) => (j === i ? { ...p, type } : p)))
 
-  // Drag and drop: any number of PDFs onto the panel.
+  // Drag and drop: any number of files onto the panel.
   const onDragOver = (e) => { if (uploading) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; if (!dragOver) setDragOver(true) }
   const onDragLeave = (e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(false) }
   const onDrop = (e) => { e.preventDefault(); setDragOver(false); if (!uploading) handleFiles(e.dataTransfer.files) }
@@ -138,14 +138,14 @@ export default function CurriculumResourcesPanel({ curriculumId }) {
         Reference material
       </div>
       <div style={{ fontSize: 12.5, color: 'var(--t-textMuted)', marginBottom: 12 }}>
-        Textbooks, past exams or practice tests as PDFs, up to 50 MB each. Drop in as many as you like and they upload one after another. Big books are split into page ranges. AI works out which subtopics each covers and keeps example questions and style notes, which shape the questions it writes for this subject.
+        Textbooks, past exams, practice tests, notes or slides as PDF, Word (.docx) or PowerPoint (.pptx), up to 50 MB each. Drop in as many as you like and they upload one after another. Big books are split into parts. From Word and PowerPoint files AI reads the text, including equations and speaker notes, but not pictures: for diagram-heavy material, upload a PDF. AI works out which subtopics each covers and keeps example questions and style notes, which shape the questions it writes for this subject.
       </div>
 
       {/* Drop zone */}
       <div
         onDragOver={onDragOver} onDragEnter={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}
         onClick={() => !uploading && fileRef.current?.click()}
-        role="button" tabIndex={0} aria-label="Add PDFs: drop them here or press to choose"
+        role="button" tabIndex={0} aria-label="Add files: drop them here or press to choose"
         onKeyDown={e => { if ((e.key === 'Enter' || e.key === ' ') && !uploading) { e.preventDefault(); fileRef.current?.click() } }}
         style={{
           marginBottom: 12, padding: '22px 16px', borderRadius: 12, textAlign: 'center',
@@ -154,7 +154,7 @@ export default function CurriculumResourcesPanel({ curriculumId }) {
           cursor: uploading ? 'not-allowed' : 'pointer', opacity: uploading ? 0.6 : 1, transition: 'background 0.12s, border-color 0.12s',
         }}
       >
-        <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--t-text)' }}>{dragOver ? 'Drop to add them' : 'Drag PDFs here'}</div>
+        <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--t-text)' }}>{dragOver ? 'Drop to add them' : 'Drag PDF, Word or PowerPoint files here'}</div>
         <div style={{ fontSize: 12.5, color: 'var(--t-textMuted)', marginTop: 4 }}>
           or <span style={{ fontWeight: 700, color: 'var(--t-text)', textDecoration: 'underline' }}>{files.length ? 'choose more' : 'choose files'}</span>. As many as you like.
         </div>
@@ -179,7 +179,7 @@ export default function CurriculumResourcesPanel({ curriculumId }) {
         <input
           ref={fileRef}
           type="file"
-          accept="application/pdf,.pdf"
+          accept={RESOURCE_ACCEPT}
           multiple
           style={{ display: 'none' }}
           onChange={e => handleFiles(e.target.files)}

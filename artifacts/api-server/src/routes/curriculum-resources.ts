@@ -5,6 +5,7 @@ import { CLAUDE_MODEL, CLAUDE_THINKING } from "../lib/anthropic-model";
 import { logger } from "../lib/logger";
 import { extractJsonArray } from "../lib/json-latex";
 import { requireAdmin } from "../lib/auth";
+import { extractOfficeText, resourceFormat, splitText, RESOURCE_MIME } from "../lib/office-text";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -16,6 +17,10 @@ const MAX_PDF_BYTES = 50 * 1024 * 1024;
 // Pages per chunk — kept well under Claude's ~100-page / 32 MB single-request
 // PDF limit so each chunk is one fast, reliable Claude call.
 const CHUNK_PAGES = 50;
+// Characters per part for Word and PowerPoint files (read as text): about the
+// reading load of a 50-page PDF part.
+const TEXT_CHUNK_CHARS = 120_000;
+const NOT_SUPPORTED = "Upload a PDF, Word (.docx) or PowerPoint (.pptx) file. Older .doc and .ppt files need saving again in the newer format first.";
 
 const RESOURCE_TYPES = new Set([
   "textbook",
@@ -38,12 +43,28 @@ type SubtopicRow = { topic_id: string; name: string };
 // Distilled exemplar pack as returned by Claude.
 type DistilledExemplar = { subtopic?: string; topic?: string; content?: string };
 
-// Where a resource's chunk sub-PDFs live in the bucket.
+// Where a resource's parts live in the bucket: page-range sub-PDFs for PDFs,
+// plain text for Word and PowerPoint files.
 function chunkDir(curriculumId: string, resourceId: string): string {
   return `${curriculumId}/chunks/${resourceId}`;
 }
-function chunkPath(curriculumId: string, resourceId: string, index: number): string {
-  return `${chunkDir(curriculumId, resourceId)}/chunk_${index}.pdf`;
+function chunkPath(curriculumId: string, resourceId: string, index: number, kind: "pdf" | "txt" = "pdf"): string {
+  return `${chunkDir(curriculumId, resourceId)}/chunk_${index}.${kind}`;
+}
+
+// What Claude reads: a PDF, or the text of a Word or PowerPoint file.
+type DocSource = { kind: "pdf"; base64: string } | { kind: "text"; text: string; format: "docx" | "pptx" };
+
+function documentBlock(doc: DocSource) {
+  return doc.kind === "pdf"
+    ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: doc.base64 } }
+    : {
+        type: "document",
+        source: { type: "text", media_type: "text/plain", data: doc.text },
+        context: doc.format === "pptx"
+          ? "The text of a PowerPoint presentation, slide by slide, with each slide's speaker notes. Pictures and diagrams are not included."
+          : "The text of a Word document. Pictures and diagrams are not included.",
+      };
 }
 
 /**
@@ -82,18 +103,18 @@ async function loadTaxonomy(admin: SupabaseClient, curriculumId: string) {
 }
 
 /**
- * Distill one PDF (whole document or a single page-range chunk) into
+ * Distill one document (whole, or a single part of a long one) into
  * per-subtopic exemplar packs via Claude.
  */
 async function distillExemplars(opts: {
-  pdfBase64: string;
+  doc: DocSource;
   subjectName: string;
   resourceType: string;
   taxonomyText: string;
   subtopicIndex: Map<string, { topic: string; subtopic: string }>;
   partNote?: string;
 }): Promise<{ subtopic: string | null; topic: string | null; content: string }[]> {
-  const { pdfBase64, subjectName, resourceType, taxonomyText, subtopicIndex, partNote } = opts;
+  const { doc, subjectName, resourceType, taxonomyText, subtopicIndex, partNote } = opts;
 
   const system = [
     `You are analysing a ${resourceType.replace("_", " ")} for the "${subjectName}" curriculum.`,
@@ -138,7 +159,7 @@ async function distillExemplars(opts: {
         {
           role: "user",
           content: [
-            { type: "document", source: { type: "base64", media_type: "application/pdf", data: pdfBase64 } },
+            documentBlock(doc),
             { type: "text", text: "Produce the exemplar packs as a JSON array, following the rules exactly." },
           ],
         },
@@ -197,7 +218,7 @@ async function insertExemplars(
   return rows.length;
 }
 
-/** Best-effort removal of a resource's chunk sub-PDFs. */
+/** Best-effort removal of a resource's stored parts. */
 async function removeChunkFiles(admin: SupabaseClient, curriculumId: string, resourceId: string) {
   try {
     const dir = chunkDir(curriculumId, resourceId);
@@ -211,7 +232,7 @@ async function removeChunkFiles(admin: SupabaseClient, curriculumId: string, res
 }
 
 // ── Create + (small files) process a resource ────────────────────────────────
-// The client uploads the PDF to the curriculum-resources bucket, then calls
+// The client uploads the file (PDF, Word or PowerPoint) to the curriculum-resources bucket, then calls
 // this with the storage path. Small documents are distilled inline and returned
 // as 'ready'. Large documents (multi-chunk textbooks) are split into page-range
 // sub-PDFs here and returned as 'processing'; the client then drives
@@ -233,9 +254,14 @@ router.post("/curriculum-resources", async (req, res) => {
     res.status(400).json({ error: "curriculumId and storagePath are required" });
     return;
   }
+  const format = resourceFormat(filename, mimeType);
+  if (!format) {
+    res.status(400).json({ error: NOT_SUPPORTED });
+    return;
+  }
   if (typeof fileSize === "number" && fileSize > MAX_PDF_BYTES) {
     res.status(400).json({
-      error: `PDF too large (${Math.round((fileSize / (1024 * 1024)) * 10) / 10} MB). Max ${MAX_PDF_BYTES / (1024 * 1024)} MB — split very large textbooks into volumes.`,
+      error: `File too large (${Math.round((fileSize / (1024 * 1024)) * 10) / 10} MB). Max ${MAX_PDF_BYTES / (1024 * 1024)} MB — split very large textbooks into volumes.`,
     });
     return;
   }
@@ -264,7 +290,7 @@ router.post("/curriculum-resources", async (req, res) => {
       storage_path: storagePath,
       file_name: filename ?? null,
       file_size: typeof fileSize === "number" ? fileSize : null,
-      mime_type: mimeType ?? "application/pdf",
+      mime_type: RESOURCE_MIME[format],
       status: "processing",
     })
     .select("id")
@@ -278,9 +304,46 @@ router.post("/curriculum-resources", async (req, res) => {
 
   try {
     const { data: blob, error: dlErr } = await admin.storage.from(BUCKET).download(storagePath);
-    if (dlErr || !blob) throw new Error(dlErr?.message || "Failed to download PDF from storage");
-    const pdfBytes = new Uint8Array(await blob.arrayBuffer());
+    if (dlErr || !blob) throw new Error(dlErr?.message || "Failed to download the file from storage");
+    const fileBytes = new Uint8Array(await blob.arrayBuffer());
 
+    if (format !== "pdf") {
+      const parts = splitText(extractOfficeText(fileBytes, format), TEXT_CHUNK_CHARS);
+      if (parts.length === 1) {
+        const { taxonomyText, subtopicIndex } = await loadTaxonomy(admin, curriculumId);
+        const rows = await distillExemplars({
+          doc: { kind: "text", text: parts[0], format },
+          subjectName: curr.name,
+          resourceType: type,
+          taxonomyText,
+          subtopicIndex,
+        });
+        const count = await insertExemplars(admin, resourceId, curriculumId, curr.name, rows);
+        await admin
+          .from("curriculum_resources")
+          .update({ status: "ready", exemplar_count: count, total_chunks: 1, processed_chunks: 1, error: null })
+          .eq("id", resourceId);
+        res.status(200).json({ id: resourceId, status: "ready", exemplars: count, totalChunks: 1, processedChunks: 1 });
+        return;
+      }
+      for (let i = 0; i < parts.length; i++) {
+        const { error: upErr } = await admin.storage
+          .from(BUCKET)
+          .upload(chunkPath(curriculumId, resourceId, i, "txt"), new TextEncoder().encode(parts[i]), {
+            contentType: "text/plain",
+            upsert: true,
+          });
+        if (upErr) throw new Error(`Failed to store part ${i + 1}: ${upErr.message}`);
+      }
+      await admin
+        .from("curriculum_resources")
+        .update({ total_chunks: parts.length, processed_chunks: 0, error: null })
+        .eq("id", resourceId);
+      res.status(200).json({ id: resourceId, status: "processing", totalChunks: parts.length, processedChunks: 0 });
+      return;
+    }
+
+    const pdfBytes = fileBytes;
     const srcDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
     const pageCount = srcDoc.getPageCount();
     const totalChunks = Math.max(1, Math.ceil(pageCount / CHUNK_PAGES));
@@ -289,7 +352,7 @@ router.post("/curriculum-resources", async (req, res) => {
     if (totalChunks === 1) {
       const { taxonomyText, subtopicIndex } = await loadTaxonomy(admin, curriculumId);
       const rows = await distillExemplars({
-        pdfBase64: Buffer.from(pdfBytes).toString("base64"),
+        doc: { kind: "pdf", base64: Buffer.from(pdfBytes).toString("base64") },
         subjectName: curr.name,
         resourceType: type,
         taxonomyText,
@@ -354,12 +417,13 @@ router.post("/curriculum-resources/:id/process-chunk", async (req, res) => {
   const admin = getAdmin();
   const { data: resource } = await admin
     .from("curriculum_resources")
-    .select("id, curriculum_id, resource_type, total_chunks, processed_chunks, exemplar_count")
+    .select("id, curriculum_id, resource_type, mime_type, total_chunks, processed_chunks, exemplar_count")
     .eq("id", resourceId)
     .maybeSingle<{
       id: string;
       curriculum_id: string;
       resource_type: string;
+      mime_type: string | null;
       total_chunks: number | null;
       processed_chunks: number;
       exemplar_count: number;
@@ -385,15 +449,18 @@ router.post("/curriculum-resources/:id/process-chunk", async (req, res) => {
   }
 
   try {
+    const format = resourceFormat(null, resource.mime_type) ?? "pdf";
     const { data: blob, error: dlErr } = await admin.storage
       .from(BUCKET)
-      .download(chunkPath(resource.curriculum_id, resourceId, chunkIndex));
+      .download(chunkPath(resource.curriculum_id, resourceId, chunkIndex, format === "pdf" ? "pdf" : "txt"));
     if (dlErr || !blob) throw new Error(dlErr?.message || `Chunk ${chunkIndex} missing from storage`);
-    const pdfBase64 = Buffer.from(await blob.arrayBuffer()).toString("base64");
+    const doc: DocSource = format === "pdf"
+      ? { kind: "pdf", base64: Buffer.from(await blob.arrayBuffer()).toString("base64") }
+      : { kind: "text", text: await blob.text(), format };
 
     const { taxonomyText, subtopicIndex } = await loadTaxonomy(admin, resource.curriculum_id);
     const rows = await distillExemplars({
-      pdfBase64,
+      doc,
       subjectName: curr.name,
       resourceType: resource.resource_type,
       taxonomyText,
