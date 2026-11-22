@@ -6,6 +6,7 @@
  *   GET/PUT /tutor/booking-settings          hours, call length, reminders, calendar
  *   GET  /tutor/consultations/slots          open times (for the booking picker)
  *   POST /tutor/consultations                book for a prospect
+ *   POST /tutor/consultations/new            book first: a new prospect record, the call, one email each
  *   PATCH /tutor/consultations/:id           move it and/or change its reminders
  *   POST /tutor/consultations/:id/cancel
  * Prospect (no account):
@@ -28,12 +29,15 @@ import {
 } from "../lib/consultation-access";
 import {
   CALL_COLUMNS, guestJoinUrl, liveBooking, loadSettings, notifyAfterWrite, openTimes, questionnaireUrl, readCalendar,
-  tutorContact, type CallRow,
+  sendConsultationEmails, tutorContact, type CallRow, type ConsultationSends,
 } from "../lib/consultation-service";
 import { logger } from "../lib/logger";
+import { newConsultationInput } from "../lib/new-consultation";
 import { normaliseProspectEmail } from "../lib/prospect-status";
-import { prospectSenderName } from "../lib/prospect-emails";
+import { prospectLink, prospectSenderName } from "../lib/prospect-emails";
+import { snapshotFrom } from "../lib/questionnaire";
 import { requireTutorPlan } from "../lib/tutor-plan";
+import { masterQuestionnaire, testScopeFields } from "./diagnostic";
 
 const router = Router();
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -92,12 +96,16 @@ const fail = (res: Response, err: unknown) => {
 
 const MAX_NAME = 100;
 
-/** Book via book_consultation (atomic, gap-aware). Returns the new session's id or why not. */
+/**
+ * Book via book_consultation (atomic, gap-aware). Returns the new session's id
+ * or why not. A parent's address as the guest is flagged right after
+ * (book_consultation has no parameter for it), before any email goes.
+ */
 async function book(
   admin: AdminClient,
   o: {
     tutorId: string; start: number; settings: SettingsRow; diagnosticId: string; email: string; name: string | null;
-    parentEmail: string | null; timeZone: string; reminders: number[];
+    parentEmail: string | null; timeZone: string; reminders: number[]; guestIsParent?: boolean;
   },
 ): Promise<{ id: string; token: string } | { taken: "slot_taken" | "duplicate" }> {
   const s = settingsFromRow(o.settings);
@@ -121,6 +129,11 @@ async function book(
   const taken = bookingError(error);
   if (taken) return { taken };
   if (error || typeof data !== "string") throw new Error(error?.message ?? "book_consultation returned no id");
+  if (o.guestIsParent) {
+    const { error: flagErr } = await admin.from("tutoring_sessions").update({ guest_is_parent: true }).eq("id", data);
+    // The booking stands; its later emails would use the student wording.
+    if (flagErr) logger.error({ err: flagErr, sessionId: data }, "consultations: booked, but couldn't mark the guest as a parent");
+  }
   return { id: data, token };
 }
 
@@ -191,8 +204,12 @@ router.put("/tutor/booking-settings", async (req: Request, res: Response) => {
 type ProspectDiagnostic = {
   id: string; token: string; questionnaire: unknown | null; tutor_id: string; student_id: string | null; status: string; cancelled_at: string | null;
   prospect_email: string | null; parent_email: string | null; submitted_by_name: string | null; student_name: string | null;
+  prospect_is_parent: boolean | null;
 };
-const DIAGNOSTIC_COLUMNS = "id, token, questionnaire, tutor_id, student_id, status, cancelled_at, prospect_email, parent_email, submitted_by_name, student_name";
+const DIAGNOSTIC_COLUMNS = "id, token, questionnaire, tutor_id, student_id, status, cancelled_at, prospect_email, parent_email, submitted_by_name, student_name, prospect_is_parent";
+
+/** A booking under the record's own address keeps its "this is a parent" flag. */
+const guestIsParent = (d: ProspectDiagnostic, email: string) => !!d.prospect_is_parent && email === d.prospect_email?.toLowerCase();
 
 /** A prospect's (link) diagnostic this tutor sent; null if not theirs. */
 async function ownProspectDiagnostic(admin: AdminClient, tutorId: string, id: unknown): Promise<ProspectDiagnostic | null> {
@@ -204,12 +221,14 @@ async function ownProspectDiagnostic(admin: AdminClient, tutorId: string, id: un
 
 const prospectName = (d: ProspectDiagnostic) => (d.submitted_by_name || d.student_name || "").trim().slice(0, MAX_NAME) || null;
 
+/** The tutor's open times; for one of their prospects' diagnostics, or (left out) for a new consultation. */
 router.get("/tutor/consultations/slots", async (req: Request, res: Response) => {
   try {
     const ctx = await requireTutor(req, res);
     if (!ctx) return;
-    const d = await ownProspectDiagnostic(ctx.admin, ctx.tutorId, req.query.diagnosticId);
-    if (!d) return res.status(404).json({ error: "Diagnostic not found" });
+    if (req.query.diagnosticId !== undefined && !(await ownProspectDiagnostic(ctx.admin, ctx.tutorId, req.query.diagnosticId))) {
+      return res.status(404).json({ error: "Diagnostic not found" });
+    }
     const row = await loadSettings(ctx.admin, ctx.tutorId);
     const s = settingsFromRow(row);
     const slots = await openTimes(ctx.admin, row);
@@ -256,7 +275,7 @@ router.post("/tutor/consultations", async (req: Request, res: Response) => {
 
     const booked = await book(ctx.admin, {
       tutorId: ctx.tutorId, start, settings, diagnosticId: d.id, email: email.email, name: prospectName(d),
-      parentEmail: parent.email, timeZone: s.timeZone, reminders,
+      parentEmail: parent.email, timeZone: s.timeZone, reminders, guestIsParent: guestIsParent(d, email.email),
     });
     if ("taken" in booked) {
       return res.status(409).json({
@@ -265,6 +284,109 @@ router.post("/tutor/consultations", async (req: Request, res: Response) => {
     }
     await notify(ctx.admin, "booked", booked.id, { tutorId: ctx.tutorId, settings, signInEmail: ctx.email });
     return res.json({ sessionId: booked.id });
+  } catch (err) {
+    return fail(res, err);
+  }
+});
+
+/**
+ * Book first: a new prospect record (a link diagnostic, with or without a
+ * test), the call, and one combined email to each ticked recipient (the
+ * primary address, then the parent's copy) with the calendar invite. Emails
+ * that fail don't undo anything; the reply says which went.
+ */
+router.post("/tutor/consultations/new", async (req: Request, res: Response) => {
+  try {
+    const ctx = await requireTutor(req, res);
+    if (!ctx) return;
+    const checked = newConsultationInput(req.body);
+    if ("error" in checked) return res.status(400).json({ error: checked.error });
+    const v = checked.ok;
+    const { admin, tutorId } = ctx;
+
+    const settings = await loadSettings(admin, tutorId);
+    const s = settingsFromRow(settings);
+    const familyBooked = (start: string | null) =>
+      res.status(409).json({ error: "This family already has a call booked.", ...(start ? { booking: { start } } : {}) });
+    const existing = await liveBooking(admin, tutorId, null, { trusted: [v.primary.email] });
+    if (existing) return familyBooked(existing.call.scheduled_at);
+
+    const snapshot = v.questionnaire === null
+      ? null
+      : snapshotFrom(v.questionnaire === "default" ? (await masterQuestionnaire(admin, tutorId)).questionnaire : v.questionnaire);
+    const t = v.test;
+    const { data: rec, error: insErr } = await admin
+      .from("diagnostic_assessments")
+      .insert({
+        tutor_id: tutorId,
+        student_name: v.studentName,
+        year_level: t?.yearLevel ?? "",
+        subjects: t?.subjects ?? [],
+        questions: t?.questions ?? [],
+        score_max: t?.scoreMax ?? 0,
+        ...(t ? await testScopeFields(admin, t.subjects) : {}),
+        questionnaire: snapshot,
+        status: "pending",
+        has_test: !!t,
+        prospect_email: v.primary.email,
+        prospect_is_parent: v.primary.isParent,
+        parent_email: v.parentCopy,
+      })
+      .select("id, token")
+      .single<{ id: string; token: string }>();
+    if (insErr || !rec) throw new Error(insErr?.message ?? "the record wasn't created");
+    // No call, no record: a refused booking leaves nothing behind.
+    const discard = async () => {
+      const { error } = await admin.from("diagnostic_assessments").delete().eq("id", rec.id).eq("tutor_id", tutorId);
+      if (error) logger.warn({ err: error, id: rec.id }, "consultations: couldn't remove the record of a refused booking");
+    };
+
+    let booked: Awaited<ReturnType<typeof book>>;
+    try {
+      booked = await book(admin, {
+        tutorId, start: v.start, settings, diagnosticId: rec.id, email: v.primary.email, name: v.studentName,
+        parentEmail: v.parentCopy, timeZone: s.timeZone, reminders: v.reminderMinutes ?? s.reminderMinutes,
+        guestIsParent: v.primary.isParent,
+      });
+    } catch (err) {
+      await discard();
+      throw err;
+    }
+    if ("taken" in booked) {
+      await discard();
+      if (booked.taken === "duplicate") {
+        const again = await liveBooking(admin, tutorId, null, { trusted: [v.primary.email] });
+        return familyBooked(again?.call.scheduled_at ?? null);
+      }
+      return res.status(409).json({ error: "That time overlaps another session." });
+    }
+
+    let sends: ConsultationSends = {};
+    try {
+      const call = await loadCall(admin, booked.id);
+      if (!call) throw new Error("call not found after booking it");
+      const tutor = await tutorContact(admin, tutorId, settings, ctx.email);
+      sends = await sendConsultationEmails({
+        kind: "booked",
+        // The wording follows who was ticked, even if marking the call failed.
+        call: { ...call, guest_is_parent: v.primary.isParent },
+        tutor,
+        questionnaireUrl: questionnaireLinkFor({ token: rec.token, questionnaire: snapshot, pre_call_form_url: null }),
+        invite: { testUrl: t ? prospectLink(rec.token) : null },
+      });
+    } catch (err) {
+      logger.error({ err, sessionId: booked.id }, "consultations: booked, but the emails failed");
+    }
+    // The test counts as sent (for its reminder and expiry) once the primary address has it.
+    if (t && sends.guest) {
+      const { error } = await admin.from("diagnostic_assessments")
+        .update({ sent_at: new Date().toISOString(), reminded_at: null }).eq("id", rec.id);
+      if (error) logger.error({ err: error, id: rec.id }, "consultations: emailed the test but couldn't record it");
+    }
+    const emailed = v.primary.isParent
+      ? { parent: !!sends.guest }
+      : { student: !!sends.guest, ...(v.parentCopy ? { parent: !!sends.parent } : {}) };
+    return res.json({ diagnosticId: rec.id, sessionId: booked.id, start: new Date(v.start).toISOString(), emailed });
   } catch (err) {
     return fail(res, err);
   }
@@ -451,7 +573,7 @@ router.post("/consultation/:token/book", async (req: Request, res: Response) => 
 
     const booked = await book(admin, {
       tutorId: d.tutor_id, start, settings, diagnosticId: d.id, email: email.email, name, parentEmail: parent.email,
-      timeZone: guestTimeZone(body.timeZone, s.timeZone), reminders: s.reminderMinutes,
+      timeZone: guestTimeZone(body.timeZone, s.timeZone), reminders: s.reminderMinutes, guestIsParent: guestIsParent(d, email.email),
     });
     if ("taken" in booked) {
       if (booked.taken === "duplicate") {

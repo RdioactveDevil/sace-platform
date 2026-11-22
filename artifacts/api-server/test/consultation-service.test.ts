@@ -83,6 +83,69 @@ test("a cancellation sends METHOD:CANCEL invites", async () => {
   }
 });
 
+// ── A parent as the guest; the new-consultation combined email ─────────────
+
+const parentOnly: CallRow = { ...call, guest_email: "parent@example.com", guest_parent_email: null, guest_is_parent: true };
+
+test("a parent as the guest gets the parent wording on booked, moved and cancelled emails", async () => {
+  for (const kind of ["booked", "changed", "cancelled"] as const) {
+    const { resend, sent } = fakeResend();
+    await sendConsultationEmails({ kind, call: parentOnly, tutor, previousStart: "2026-11-30T05:00:00.000Z", resend });
+    assert.deepEqual(sent.map((p) => p.to[0]), ["parent@example.com", "jane@gmail.example"], kind);
+    assert.match(sent[0].text, /Hi,/, kind);
+    assert.match(sent[0].text, /Sam Lee's consultation call with Jane Smith/, kind);
+    assert.equal(sent[0].replyTo, "jane@signin.example");
+  }
+});
+
+test("a student guest keeps the student wording", async () => {
+  const { resend, sent } = fakeResend();
+  await sendConsultationEmails({ kind: "booked", call: { ...call, guest_parent_email: null }, tutor, resend });
+  assert.match(sent[0].text, /Your consultation call with Jane Smith/);
+  assert.doesNotMatch(sent[0].text, /Hi,/);
+});
+
+test("the combined invite: one email each with both links, the .ics and Reply-To; results per recipient", async () => {
+  const { resend, sent } = fakeResend();
+  const r = await sendConsultationEmails({
+    kind: "booked", call, tutor, questionnaireUrl: "https://app.example/questionnaire/x", invite: { testUrl: "https://app.example/diagnostic/x" }, resend,
+  });
+  assert.deepEqual(r, { guest: true, parent: true, tutor: true });
+  assert.deepEqual(sent.map((p) => p.to[0]), ["sam@example.com", "parent@example.com", "jane@gmail.example"]);
+  // Student: asked to do them. Parent: asked to pass them on.
+  assert.match(sent[0].text, /would appreciate it if you could fill in the short questionnaire and do the diagnostic test/);
+  assert.match(sent[1].text, /Please pass these links on to them/);
+  for (const p of sent.slice(0, 2)) {
+    assert.ok(p.text.includes("https://app.example/questionnaire/x") && p.text.includes("https://app.example/diagnostic/x"));
+    assert.equal(p.attachments[0].filename, "invite.ics");
+    assert.equal(p.replyTo, "jane@signin.example");
+    assert.doesNotMatch(p.text, /your tutor/i);
+  }
+  // The tutor's own copy has no prospect links.
+  assert.equal(sent[2].text.includes("https://app.example/diagnostic/x"), false);
+});
+
+test("the combined invite to a parent-only call speaks to the parent", async () => {
+  const { resend, sent } = fakeResend();
+  await sendConsultationEmails({ kind: "booked", call: parentOnly, tutor, questionnaireUrl: null, invite: { testUrl: "https://app.example/diagnostic/x" }, resend });
+  assert.equal(sent[0].to[0], "parent@example.com");
+  assert.match(sent[0].text, /Sam Lee has a diagnostic test\. Please pass this link on to them/);
+});
+
+test("a failed send is reported for that recipient only", async () => {
+  const sent: string[] = [];
+  const resend = {
+    emails: {
+      send: async (p: Record<string, any>) => {
+        sent.push(p.to[0]);
+        return p.to[0] === "parent@example.com" ? { data: null, error: { message: "nope", name: "x" } } : { data: { id: "1" }, error: null };
+      },
+    },
+  } as unknown as Resend;
+  const r = await sendConsultationEmails({ kind: "booked", call, tutor, invite: { testUrl: null }, resend });
+  assert.deepEqual(r, { guest: true, parent: false, tutor: true });
+});
+
 // ── After the booking is written, nothing may fail the request ──────────────
 
 function steps(over: Partial<Parameters<typeof notifyAfterWrite>[0]> = {}) {

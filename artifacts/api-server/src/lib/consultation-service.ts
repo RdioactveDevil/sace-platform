@@ -14,6 +14,7 @@ import {
   consultationBookedEmail,
   consultationCancelledEmail,
   consultationChangedEmail,
+  consultationInviteEmail,
 } from "./consultation-emails";
 import { SETTINGS_COLUMNS, defaultSettingsRow, hasHours, settingsFromRow, type SettingsRow } from "./consultation-access";
 import { appUrl, EMAIL_FROM, getResend, sendEmail } from "./email";
@@ -100,7 +101,7 @@ export async function openTimes(admin: SupabaseClient, row: SettingsRow, now = D
 
 /** The columns a consultation's emails and invites need. */
 export const CALL_COLUMNS =
-  "id, tutor_id, session_type, status, scheduled_at, duration_minutes, diagnostic_id, guest_email, guest_name, guest_parent_email, guest_time_zone, guest_token, reminder_minutes, ics_sequence";
+  "id, tutor_id, session_type, status, scheduled_at, duration_minutes, diagnostic_id, guest_email, guest_name, guest_parent_email, guest_time_zone, guest_token, reminder_minutes, ics_sequence, guest_is_parent";
 
 export type CallRow = {
   id: string;
@@ -117,6 +118,8 @@ export type CallRow = {
   guest_token: string | null;
   reminder_minutes: number[] | null;
   ics_sequence: number;
+  /** guest_email is a parent's (a call booked for a parent only): they get the parent wording. */
+  guest_is_parent?: boolean | null;
 };
 
 /**
@@ -127,15 +130,18 @@ export type CallRow = {
 export async function liveBooking(
   admin: SupabaseClient,
   tutorId: string,
-  diagnosticId: string,
+  /** null: no diagnostic yet (a new consultation), so by email only. */
+  diagnosticId: string | null,
   emails: { trusted: string[]; typed?: string | null },
 ): Promise<{ call: CallRow; trusted: boolean } | null> {
   const base = () =>
     admin.from("tutoring_sessions").select(CALL_COLUMNS)
       .eq("tutor_id", tutorId).eq("session_type", "consultation").eq("status", "scheduled").limit(1);
-  const byDiagnostic = await base().eq("diagnostic_id", diagnosticId);
-  if (byDiagnostic.error) throw new Error(byDiagnostic.error.message);
-  if (byDiagnostic.data?.[0]) return { call: byDiagnostic.data[0] as CallRow, trusted: true };
+  if (diagnosticId) {
+    const byDiagnostic = await base().eq("diagnostic_id", diagnosticId);
+    if (byDiagnostic.error) throw new Error(byDiagnostic.error.message);
+    if (byDiagnostic.data?.[0]) return { call: byDiagnostic.data[0] as CallRow, trusted: true };
+  }
   const trusted = [...new Set(emails.trusted.map((e) => e.toLowerCase()))];
   const typed = emails.typed?.toLowerCase();
   for (const [email, isTrusted] of [...trusted.map((e) => [e, true] as const), ...(typed && !trusted.includes(typed) ? [[typed, false] as const] : [])]) {
@@ -196,10 +202,14 @@ export async function questionnaireUrl(admin: SupabaseClient, diagnosticId: stri
   return data ? questionnaireLinkFor(data) : null;
 }
 
+/** Which of a call's emails went (true), failed (false) or had no one to go to (left out). */
+export type ConsultationSends = Partial<Record<"guest" | "parent" | "tutor", boolean>>;
+
 /**
  * Email the guest, their parent (if any) and the tutor about a booking, a
  * move or a cancellation, each with a calendar invite (same UID; the
  * session's current ics_sequence). Failures are logged; the booking stands.
+ * A guest who is a parent (guest_is_parent) gets the parent wording.
  */
 export async function sendConsultationEmails(o: {
   kind: "booked" | "changed" | "cancelled";
@@ -207,18 +217,24 @@ export async function sendConsultationEmails(o: {
   tutor: TutorContact;
   previousStart?: string;
   questionnaireUrl?: string | null;
+  /**
+   * A new consultation (booked by the tutor with what to send ticked): the
+   * guest and parent get the one combined email instead of the booking
+   * confirmation, with the diagnostic link when a test was included.
+   */
+  invite?: { testUrl: string | null };
   /** Default: the configured Resend client. */
   resend?: Resend | null;
-}): Promise<void> {
+}): Promise<ConsultationSends> {
   const resend = o.resend === undefined ? getResend() : o.resend;
   if (!resend) {
     logger.warn({ sessionId: o.call.id }, "consultations: email isn't set up; no invites sent");
-    return;
+    return {};
   }
   const { call, tutor } = o;
   if (!call.guest_token || !call.guest_email) {
     logger.error({ sessionId: call.id }, "consultations: booking has no guest email or token");
-    return;
+    return {};
   }
   const studentName = call.guest_name?.trim() || "";
   const guestZone = call.guest_time_zone || tutor.timeZone;
@@ -250,9 +266,17 @@ export async function sendConsultationEmails(o: {
   const guestUrl = guestJoinUrl(call.guest_token);
   const tutorUrl = tutorJoinUrl(call.id);
   const reportUrl = `${appUrl()}/tutor?tab=diagnostic`;
-  const forWho = (to: "guest" | "parent" | "tutor") => {
+  const forWho = (who: "guest" | "parent" | "tutor") => {
+    const to = who === "guest" && call.guest_is_parent ? "parent" : who;
     const tz = to === "tutor" ? tutor.timeZone : guestZone;
     const joinUrl = to === "tutor" ? tutorUrl : guestUrl;
+    if (o.invite && o.kind === "booked" && to !== "tutor") {
+      return consultationInviteEmail({
+        audience: to === "parent" ? "parent" : "student",
+        tutorName: tutor.name, studentName, start: call.scheduled_at, timeZone: tz, minutes: call.duration_minutes,
+        joinUrl, questionnaireUrl: o.questionnaireUrl ?? null, testUrl: o.invite.testUrl,
+      });
+    }
     const common = { to, tutorName: tutor.name, studentName, start: call.scheduled_at, timeZone: tz };
     if (o.kind === "cancelled") return consultationCancelledEmail(common);
     const booked = {
@@ -274,23 +298,26 @@ export async function sendConsultationEmails(o: {
     { who: "parent", to: call.guest_parent_email },
     { who: "tutor", to: tutor.inviteEmail },
   ];
+  const result: ConsultationSends = {};
   for (const { who, to } of sends) {
     if (!to) continue;
     const { subject, content } = forWho(who);
     const toTutor = who === "tutor";
-    const result = await sendEmail(resend, {
+    const sent = await sendEmail(resend, {
       to,
       subject,
       content,
-      idempotencyKey: `consultation-${o.kind}:${call.id}:${call.ics_sequence}:${who}`,
+      idempotencyKey: `consultation-${o.invite ? "invite" : o.kind}:${call.id}:${call.ics_sequence}:${who}`,
       // Replies from the prospect or parent reach the tutor.
       ...(!toTutor && tutor.signInEmail ? { replyTo: tutor.signInEmail } : {}),
       attachments: [
         toTutor ? invite(tutorSummary, tutorUrl, [{ name: tutor.name, email: to }, ...guests]) : invite(guestSummary, guestUrl, guests),
       ],
     }).catch((err: unknown) => ({ id: null, error: err instanceof Error ? err.message : String(err) }));
-    if (result.error) logger.warn({ sessionId: call.id, who, kind: o.kind, err: result.error }, "consultations: email not sent");
+    if (sent.error) logger.warn({ sessionId: call.id, who, kind: o.kind, err: sent.error }, "consultations: email not sent");
+    result[who] = !sent.error;
   }
+  return result;
 }
 
 /**
@@ -306,7 +333,7 @@ export async function notifyAfterWrite(o: {
   loadCall: () => Promise<CallRow | null>;
   loadTutor: () => Promise<TutorContact>;
   loadQuestionnaire: (diagnosticId: string | null) => Promise<string | null>;
-  send?: typeof sendConsultationEmails;
+  send?: (x: Parameters<typeof sendConsultationEmails>[0]) => Promise<unknown>;
   log?: (err: unknown, msg: string) => void;
 }): Promise<boolean> {
   const log = o.log ?? ((err: unknown, msg: string) => logger.error({ err, sessionId: o.sessionId, kind: o.kind }, msg));

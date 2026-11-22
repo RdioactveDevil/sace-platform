@@ -9,7 +9,8 @@ import { requireTutorPlan } from "../lib/tutor-plan";
 import { diagnosticScope, studentSummary, type ScopeTopic } from "../lib/student-diagnostic";
 import { scopeOutline, subtopicFieldHint } from "../lib/diagnostic-outline";
 import { signupState } from "../lib/prospect-signup";
-import { DIAGNOSTIC_LIST_COLUMNS, PROSPECT_COLUMNS, canResend, diagnosticStatus, forViewer, normaliseProspectEmail, unavailableReason, type ProspectRow } from "../lib/prospect-status";
+import { DIAGNOSTIC_LIST_COLUMNS, PROSPECT_COLUMNS, canResend, diagnosticStatus, forViewer, hasNoTest, normaliseProspectEmail, unavailableReason, type ProspectRow } from "../lib/prospect-status";
+import { testInput } from "../lib/new-consultation";
 import { prospectDiagnosticEmail, prospectLink, prospectSenderName } from "../lib/prospect-emails";
 import { getResend, sendEmail } from "../lib/email";
 import { DEFAULT_QUESTIONNAIRE, countRedFlags, questionnaireLinkFor, questionnaireStatus, snapshotFrom, validateQuestionnaire, type Answers, type Questionnaire } from "../lib/questionnaire";
@@ -81,6 +82,11 @@ interface DiagnosticAssessment {
   started_at: string | null;
   reminded_at: string | null;
   cancelled_at: string | null;
+  // A consultation's record (lib/new-consultation.ts): false until a test is added.
+  has_test: boolean;
+  // prospect_email is a parent's: emails to it use the parent wording.
+  prospect_is_parent: boolean;
+  parent_email: string | null;
 }
 
 interface QuestionResult {
@@ -205,7 +211,7 @@ function extractJson(text: string): unknown {
   return null;
 }
 
-export async function requireTutor(req: Request, res: Response): Promise<{ admin: AdminClient; tutorId: string; tutorName: string; displayName: string | null } | null> {
+export async function requireTutor(req: Request, res: Response): Promise<{ admin: AdminClient; tutorId: string; tutorName: string; displayName: string | null; email: string | null } | null> {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith("Bearer ")) {
     res.status(401).json({ error: "Unauthorized" });
@@ -232,7 +238,10 @@ export async function requireTutor(req: Request, res: Response): Promise<{ admin
   }
   if (!(await requireTutorPlan(admin, res, userData.user.id, !!profile.is_admin))) return null;
 
-  return { admin, tutorId: userData.user.id, tutorName: profile.display_name ?? "Your tutor", displayName: profile.display_name?.trim() || null };
+  return {
+    admin, tutorId: userData.user.id, tutorName: profile.display_name ?? "Your tutor", displayName: profile.display_name?.trim() || null,
+    email: userData.user.email ?? null,
+  };
 }
 
 function performanceBand(pct: number): string {
@@ -653,23 +662,51 @@ const linkFor = (req: Request, token: string) =>
 /**
  * Email a link diagnostic to the prospect and record when. The sender is named
  * in full and never called their tutor: they aren't, until after the call.
+ * When the prospect's address is a parent's (prospect_is_parent), or for the
+ * parent's copy, the email names the student and asks them to pass it on.
  */
 async function emailProspect(
   admin: AdminClient,
-  d: { id: string; token: string; prospect_email: string; subjects: SubjectConfig[] | null },
+  d: { id: string; token: string; prospect_email: string; subjects: SubjectConfig[] | null; prospect_is_parent?: boolean | null; student_name?: string | null },
   displayName: string | null,
-): Promise<{ error?: string }> {
+  o: { parentCopy?: string | null; replyTo?: string | null } = {},
+): Promise<{ error?: string; parent?: boolean }> {
   const resend = getResend();
-  if (!resend) return { error: "Email isn't set up on this server." };
-  const { subject, content } = prospectDiagnosticEmail({
+  if (!resend) return { error: "Email isn't set up on this server.", ...(o.parentCopy ? { parent: false } : {}) };
+  const base = {
     senderName: prospectSenderName(displayName), subject: d.subjects?.[0]?.name || "your subject", link: prospectLink(d.token),
-  });
+    studentName: d.student_name?.trim() || undefined,
+  };
+  const { subject, content } = prospectDiagnosticEmail({ ...base, ...(d.prospect_is_parent ? { audience: "parent" as const } : {}) });
   const sentAt = new Date().toISOString();
-  const result = await sendEmail(resend, { to: d.prospect_email, subject, content, idempotencyKey: `prospect-diagnostic:${d.id}:${sentAt}` });
-  if (result.error) return { error: result.blocked ? "That address can't receive our emails (it bounced or reported spam before)." : "The email couldn't be sent. Try Resend." };
+  const replyTo = o.replyTo ? { replyTo: o.replyTo } : {};
+  const result = await sendEmail(resend, { to: d.prospect_email, subject, content, idempotencyKey: `prospect-diagnostic:${d.id}:${sentAt}`, ...replyTo });
+  let parent: boolean | undefined;
+  if (o.parentCopy) {
+    const copy = prospectDiagnosticEmail({ ...base, audience: "parent" });
+    const r = await sendEmail(resend, { to: o.parentCopy, ...copy, idempotencyKey: `prospect-diagnostic:${d.id}:${sentAt}:parent`, ...replyTo });
+    if (r.error) logger.warn({ id: d.id, err: r.error }, "diagnostic: the parent's copy wasn't sent");
+    parent = !r.error;
+  }
+  const withParent = parent === undefined ? {} : { parent };
+  if (result.error) return { error: result.blocked ? "That address can't receive our emails (it bounced or reported spam before)." : "The email couldn't be sent. Try Resend.", ...withParent };
   const { error } = await admin.from("diagnostic_assessments").update({ sent_at: sentAt, reminded_at: null }).eq("id", d.id);
   if (error) logger.error({ err: error, id: d.id }, "diagnostic: emailed a prospect but couldn't record it");
-  return {};
+  return withParent;
+}
+
+/**
+ * A curriculum subject's test keeps its scope (only subtopics of that
+ * curriculum), so it can follow the student later. Columns to store; none for
+ * a test that isn't from a curriculum.
+ */
+export async function testScopeFields(
+  admin: SupabaseClient, subjects: Array<{ curriculumId?: string; subtopicIds?: string[] }>,
+): Promise<{ curriculum_id?: string; subtopic_ids?: string[] }> {
+  const curriculumId = Array.isArray(subjects) ? subjects[0]?.curriculumId : undefined;
+  if (!curriculumId) return {};
+  const scope = await diagnosticScope(admin, curriculumId, subjects[0].subtopicIds ?? []);
+  return { curriculum_id: curriculumId, subtopic_ids: scope.subtopicIds };
 }
 
 /** POST /tutor/diagnostic/create — Save a generated assessment and return the unique link */
@@ -679,10 +716,7 @@ router.post("/tutor/diagnostic/create", async (req: Request, res: Response) => {
     if (!ctx) return;
     const { admin, tutorId } = ctx;
 
-    const { yearLevel, subjects, questions, studentName, preCallFormUrl, prospectEmail, parentEmail, questionnaire } = req.body as {
-      yearLevel: string;
-      subjects: SubjectConfig[];
-      questions: DiagnosticQuestion[];
+    const { studentName, preCallFormUrl, prospectEmail, parentEmail, questionnaire } = req.body as {
       studentName?: string;
       preCallFormUrl?: string;
       prospectEmail?: string;
@@ -690,8 +724,9 @@ router.post("/tutor/diagnostic/create", async (req: Request, res: Response) => {
       questionnaire?: unknown;
     };
 
-    if (!yearLevel?.trim()) return res.status(400).json({ error: "yearLevel is required" });
-    if (!Array.isArray(questions) || questions.length === 0) return res.status(400).json({ error: "questions are required" });
+    const test = testInput(req.body);
+    if ("error" in test) return res.status(400).json({ error: test.error });
+    const subjects = test.subjects as unknown as SubjectConfig[];
     const checked = normaliseProspectEmail(prospectEmail);
     if ("error" in checked) return res.status(400).json({ error: checked.error });
     // Optional: a parent gets copies of the consultation call's emails.
@@ -709,23 +744,19 @@ router.post("/tutor/diagnostic/create", async (req: Request, res: Response) => {
       snapshot = snapshotFrom((await masterQuestionnaire(admin, tutorId)).questionnaire);
     }
 
-    // A curriculum subject keeps its scope (only subtopics of that curriculum), so it can follow the student later.
-    const curriculumId = Array.isArray(subjects) ? subjects[0]?.curriculumId : undefined;
-    const scope = curriculumId ? await diagnosticScope(admin, curriculumId, subjects[0].subtopicIds ?? []) : null;
-
     const { data, error } = await admin
       .from("diagnostic_assessments")
       .insert({
         tutor_id:          tutorId,
-        year_level:        yearLevel.trim(),
+        year_level:        test.yearLevel,
         subjects:          subjects,
-        questions:         questions,
+        questions:         test.questions,
         student_name:      studentName?.trim() || null,
         pre_call_form_url: preCallFormUrl?.trim() || null,
         questionnaire:     snapshot,
         status:            "pending",
-        score_max:         questions.reduce((s, q) => s + q.marks, 0),
-        ...(curriculumId && scope ? { curriculum_id: curriculumId, subtopic_ids: scope.subtopicIds } : {}),
+        score_max:         test.scoreMax,
+        ...(await testScopeFields(admin, subjects)),
         prospect_email:    checked.email,
         parent_email:      parent.email,
       })
@@ -865,13 +896,14 @@ router.get("/tutor/diagnostic/list", async (req: Request, res: Response) => {
   }
 });
 
-/** A link diagnostic this tutor sent, with what resend and cancel need; null if it isn't theirs. */
+/** A link diagnostic this tutor sent, with what resend, cancel and add-test need; null if it isn't theirs. */
 async function ownLinkDiagnostic(admin: AdminClient, tutorId: string, id: string) {
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
   const { data, error } = await admin
     .from("diagnostic_assessments")
-    .select(`id, token, tutor_id, subjects, ${PROSPECT_COLUMNS}`)
+    .select(`id, token, tutor_id, subjects, student_name, parent_email, prospect_is_parent, ${PROSPECT_COLUMNS}`)
     .eq("id", id)
-    .maybeSingle<Pick<DiagnosticAssessment, "id" | "token" | "tutor_id" | "subjects"> & ProspectRow>();
+    .maybeSingle<Pick<DiagnosticAssessment, "id" | "token" | "tutor_id" | "subjects" | "student_name" | "parent_email" | "prospect_is_parent"> & ProspectRow>();
   if (error) throw new Error(error.message);
   return data && data.tutor_id === tutorId && !data.student_id ? data : null;
 }
@@ -887,6 +919,56 @@ router.post("/tutor/diagnostic/:id/resend", async (req: Request, res: Response) 
     const sent = await emailProspect(ctx.admin, { ...d, prospect_email: d.prospect_email }, ctx.displayName);
     if (sent.error) return res.status(502).json({ error: sent.error });
     return res.json({ ok: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
+/**
+ * POST /tutor/diagnostic/:id/add-test — a consultation's record that went out
+ * without a test gets one: stored, then the diagnostic link is emailed to the
+ * primary address (parent wording when it's a parent's) and the parent's copy.
+ */
+router.post("/tutor/diagnostic/:id/add-test", async (req: Request, res: Response) => {
+  try {
+    const ctx = await requireTutor(req, res);
+    if (!ctx) return;
+    const d = await ownLinkDiagnostic(ctx.admin, ctx.tutorId, String(req.params.id));
+    if (!d) return res.status(404).json({ error: "Diagnostic not found" });
+    if (!hasNoTest(d)) return res.status(409).json({ error: "This already has a test." });
+    if (d.cancelled_at || d.status !== "pending") return res.status(409).json({ error: "This was cancelled." });
+    const test = testInput(req.body);
+    if ("error" in test) return res.status(400).json({ error: test.error });
+
+    const { data: stored, error } = await ctx.admin
+      .from("diagnostic_assessments")
+      .update({
+        year_level: test.yearLevel,
+        subjects: test.subjects,
+        questions: test.questions,
+        score_max: test.scoreMax,
+        has_test: true,
+        ...(await testScopeFields(ctx.admin, test.subjects)),
+      })
+      .eq("id", d.id).eq("tutor_id", ctx.tutorId).eq("has_test", false).eq("status", "pending").is("cancelled_at", null)
+      .select("id");
+    if (error) throw new Error(error.message);
+    if (!stored?.length) return res.status(409).json({ error: "This already has a test." });
+
+    if (!d.prospect_email) return res.json({ emailed: {} });
+    // sent_at is recorded once the primary address has it (a failed send leaves it to Resend).
+    const sent = await emailProspect(
+      ctx.admin,
+      { ...d, prospect_email: d.prospect_email, subjects: test.subjects as unknown as SubjectConfig[] },
+      ctx.displayName,
+      { parentCopy: d.prospect_is_parent ? null : d.parent_email, replyTo: ctx.email },
+    );
+    const primary = !sent.error;
+    const emailed = d.prospect_is_parent
+      ? { parent: primary }
+      : { student: primary, ...(sent.parent === undefined ? {} : { parent: sent.parent }) };
+    return res.json({ emailed, ...(sent.error ? { emailError: sent.error } : {}) });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";
     return res.status(500).json({ error: message });
@@ -958,7 +1040,8 @@ router.get("/diagnostic/:token", async (req: Request, res: Response) => {
       .eq("token", token)
       .single<Pick<DiagnosticAssessment, "id" | "token" | "year_level" | "subjects" | "questions" | "student_name" | "score_max" | "pre_call_form_url" | "completed_at" | "questions_ready_at" | "report" | "tutor_id"> & ProspectRow & { questionnaire: Questionnaire | null }>();
 
-    if (error || !data) return res.status(404).json({ error: "Assessment not found" });
+    // A consultation's record with no test yet: nothing to take.
+    if (error || !data || hasNoTest(data)) return res.status(404).json({ error: "Assessment not found" });
     const unavailable = unavailableReason(data, new Date());
     if (unavailable) return res.status(410).json({ error: unavailable });
     // A prospect's link: note the first time it's opened.
@@ -968,7 +1051,7 @@ router.get("/diagnostic/:token", async (req: Request, res: Response) => {
       if (openErr) logger.warn({ err: openErr, id: data.id }, "diagnostic: couldn't record opened_at");
     }
 
-    const { student_id, questions_ready_at, report, tutor_id, questionnaire, prospect_email: _pe, created_at: _ca, sent_at: _sa, opened_at: _oa, started_at: _st, reminded_at: _ra, cancelled_at: _cx, ...rest } = data;
+    const { student_id, questions_ready_at, report, tutor_id, questionnaire, prospect_email: _pe, created_at: _ca, sent_at: _sa, opened_at: _oa, started_at: _st, reminded_at: _ra, cancelled_at: _cx, has_test: _ht, ...rest } = data;
     // The tutor's display name, so the page can say who it goes to.
     let tutor_name: string | null = null;
     if (tutor_id) {
@@ -1005,7 +1088,7 @@ router.post("/diagnostic/:token/start", async (req: Request, res: Response) => {
     const { data, error } = await admin
       .from("diagnostic_assessments").select(`id, ${PROSPECT_COLUMNS}`)
       .eq("token", req.params.token).maybeSingle<{ id: string } & ProspectRow>();
-    if (error || !data) return res.status(404).json({ error: "Assessment not found" });
+    if (error || !data || hasNoTest(data)) return res.status(404).json({ error: "Assessment not found" });
     const unavailable = unavailableReason(data, new Date());
     if (unavailable) return res.status(410).json({ error: unavailable });
     if (!data.student_id && data.status === "pending" && !data.started_at) {
@@ -1038,7 +1121,7 @@ router.post("/diagnostic/:token/submit", async (req: Request, res: Response) => 
       .eq("token", token)
       .single<DiagnosticAssessment>();
 
-    if (error || !data) return res.status(404).json({ error: "Assessment not found" });
+    if (error || !data || hasNoTest(data)) return res.status(404).json({ error: "Assessment not found" });
     if (data.status === "completed") {
       return res.status(400).json({ error: "This assessment has already been submitted." });
     }
