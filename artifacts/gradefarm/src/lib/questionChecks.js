@@ -94,6 +94,10 @@ export function checkQuestion(q) {
   if (q.set_key) {
     if (!q.shared_info && !q.shared_image_url) add('set_no_info', '', 'This question is in a set, but the set has no shared information or figure. Add it on the set\'s first question, or break up the set.')
     if (lead) add('set_sentence_left', '', 'The question still starts with "Use the following information…". The exam prints that line itself with its own numbers, so take it out of the question.')
+    // The reading sometimes gives a later question the next question's figure.
+    if (Number(q.set_position) > 1 && q.image_url && q.shared_image_url && q.image_url !== q.shared_image_url) {
+      add('set_own_figure', '', "This question has a figure of its own as well as the set's shared figure. Check against the paper that it belongs to this question and isn't the next question's; remove it if it doesn't.")
+    }
   } else if (lead) {
     add('set_not_linked', '', `This question says it shares information with Questions ${lead.numbers.join(', ')}, but they aren't linked as a set. Link them so they stay together.`)
   }

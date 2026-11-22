@@ -5,6 +5,7 @@ import { confirmDialog } from '../lib/dialog'
 import { ui, btn, note, FONT_B } from '../lib/adminUi'
 import { groupLoadedPapers } from '../lib/examPapers'
 import { reviewSummary, paperStatus } from '../lib/questionChecks'
+import { fillShared } from '../lib/questionSets'
 import { orderPapers, paperPath } from '../lib/paperPage'
 import { fetchLoadedPaperQuestions, bulkEditQuestions, reviewQuestions, fetchReviewerNames } from '../lib/adminDb'
 
@@ -37,7 +38,8 @@ export default function AdminLoadedPapers({ curriculumId }) {
   const load = useCallback(async () => {
     try {
       const list = groupLoadedPapers(await fetchLoadedPaperQuestions(curriculumId)).map(p => {
-        const all = [...p.a, ...p.b]
+        // Checked as the paper page checks them: each set's members with its shared information.
+        const all = fillShared([...p.a, ...p.b])
         return { ...p, status: paperStatus(all), sum: reviewSummary(all) }
       })
       setPapers(list)

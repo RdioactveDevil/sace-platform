@@ -49,6 +49,7 @@ import sharp from "sharp";
 import { snapToInk, pctToPx, grow, crop, type Page, type PxBox } from "./lib/figure-crop";
 import { readPages, findPage, renderPage, maskedPage, locateFigure, figureAtTop, hintLine, cropBox, type PageText } from "./lib/figure-find";
 import { planBatch } from "./lib/batch-plan";
+import { staleQuestionIds, type OldQuestion } from "./lib/reload";
 import { sameWords, inkAtEdges, cropCheckPrompt, cropLookSchema, cropFlags, type CropLook, type Flag } from "./lib/question-review";
 
 const SUPABASE_URL = "https://pslpxawrfpcuwnupdfbs.supabase.co";
@@ -743,14 +744,18 @@ async function ingestOne(admin: any, client: Anthropic, args: Args): Promise<Out
   if (error) throw new Error(`Save failed: ${error.message}`);
   console.log(`Saved ${(saved || []).length} question(s) from ${source}, waiting for review in Admin → Exam papers → Loaded papers before students see them.`);
   // Loaded again: questions saved last time that this reading didn't find
-  // (numbered differently, or from another paper that was given the same
-  // label) are taken away from students. Rejected, not deleted, so an admin
-  // can bring one back. Not on a --limit test run, which reads only some.
+  // (numbered differently, from another paper that was given the same label,
+  // or an older copy saved under another label's ids) are taken away from
+  // students (lib/reload.ts). Not on a --limit test run, which reads only some.
   if (!args.limit) {
     const keep = new Set(rows.map((r) => r.id as string));
-    const { data: old, error: oldErr } = await admin.from("questions").select("id, review_status").like("id", `ep_${sourceId}_%`);
+    const [byId, byLabel] = await Promise.all([
+      admin.from("questions").select("id, review_status").like("id", `ep_${sourceId}_%`),
+      admin.from("questions").select("id, review_status").eq("subject", args.subject).eq("source", source).like("id", "ep\\_%"),
+    ]);
+    const oldErr = byId.error || byLabel.error;
     if (oldErr) console.warn(`  couldn't check for old questions: ${oldErr.message}`);
-    const stale = ((old || []) as { id: string; review_status: string | null }[]).filter((r) => !keep.has(r.id) && r.review_status !== "rejected").map((r) => r.id);
+    const stale = staleQuestionIds([...(byId.data || []), ...(byLabel.data || [])] as OldQuestion[], keep);
     if (stale.length) {
       const { error: rej } = await admin.from("questions").update({
         review_status: "rejected",

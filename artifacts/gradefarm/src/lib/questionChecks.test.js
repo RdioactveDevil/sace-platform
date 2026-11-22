@@ -131,3 +131,14 @@ test('question sets: no shared information, a leftover lead sentence, or a lead 
   // Not linked: say so, instead of the general "refers to another question".
   assert.deepEqual(codes(mc({ question: 'Use the following information to answer Questions 3 and 4.\nA titration.\nWhich?' })), ['set_not_linked'])
 })
+
+test('a later question in a set with its own figure as well as the shared one is flagged (Access 2024 Q4 had Q5\'s molecule)', () => {
+  const mc = (extra) => ({ question_type: 'mcq', exam_section: 'A', question: 'This molecule is an example of', options: ['a', 'b', 'c', 'd'], answer_index: 0, ...extra })
+  const shared = { set_key: 's', shared_image_url: 'https://x/set.png' }
+  assert.deepEqual(codes(mc({ ...shared, set_position: 2, image_url: 'https://x/A4.png' })), ['set_own_figure'])
+  // The set's first question, or a later one without a figure of its own: nothing to say.
+  assert.deepEqual(codes(mc({ ...shared, set_position: 1, image_url: 'https://x/A3.png' })), [])
+  assert.deepEqual(codes(mc({ ...shared, set_position: 2 })), [])
+  // A set that shares only words: its questions' own figures are expected.
+  assert.deepEqual(codes(mc({ set_key: 's', set_position: 2, shared_info: 'A titration.', image_url: 'https://x/A4.png' })), [])
+})
