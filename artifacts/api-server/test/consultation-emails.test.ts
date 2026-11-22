@@ -4,6 +4,7 @@ import {
   bookYourCallEmail,
   consultationBookedEmail,
   consultationCancelledEmail,
+  consultationInviteEmail,
   consultationChangedEmail,
   consultationReminderEmail,
   formatCallTime,
@@ -96,4 +97,49 @@ test("parent booked email asks them to pass the questionnaire to the student, no
   assert.match(f.content.paragraphs.find((x) => x.includes("https://q/x"))!, /Your child has a short questionnaire/);
   const g = consultationBookedEmail({ ...base, to: "guest", questionnaireUrl: "https://q/x" });
   assert.ok(g.content.paragraphs.includes("If you have a few minutes beforehand, Sam Tutor would appreciate it if you filled in this short questionnaire: https://q/x"));
+});
+
+const inv = { tutorName: "Sam Tutor", studentName: "Sam Lee", start: base.start, timeZone: base.timeZone, minutes: 45, joinUrl: base.joinUrl };
+const Q = "https://app/q/tok";
+const T = "https://app/diagnostic/tok";
+
+test("invite email to a student: date, join button, and fill-in/do wording", () => {
+  const e = consultationInviteEmail({ ...inv, audience: "student", questionnaireUrl: Q, testUrl: T });
+  assert.ok(e.subject.includes("Sam Tutor"));
+  assert.ok(text(e).includes(formatCallTime(inv.start, inv.timeZone)));
+  assert.equal(e.content.cta?.url, inv.joinUrl);
+  const t = text(e);
+  assert.match(t, /Before the call/);
+  assert.ok(t.includes(Q) && t.includes(T));
+  assert.match(t, /fill in/i);
+  assert.match(t, /\bdo\b/i);
+  assert.doesNotMatch(t, /your tutor/i);
+});
+
+test("invite email to a parent names the student and asks them to pass the links on", () => {
+  const e = consultationInviteEmail({ ...inv, audience: "parent", questionnaireUrl: Q, testUrl: T });
+  const t = text(e);
+  assert.ok(t.includes("Sam Lee"));
+  assert.match(t, /pass (these|this) links? on to them/i);
+  assert.ok(t.includes(Q) && t.includes(T));
+  assert.doesNotMatch(t, /fill in this|you filled in|your tutor/i);
+  assert.ok(t.includes(formatCallTime(inv.start, inv.timeZone)));
+});
+
+test("invite email to a parent without a student name says 'your child'", () => {
+  const e = consultationInviteEmail({ ...inv, studentName: " ", audience: "parent", testUrl: T });
+  assert.match(text(e), /your child/i);
+  assert.match(text(e), /pass/i);
+  assert.doesNotMatch(text(e), /your tutor/i);
+});
+
+test("invite email lists only the links it is given", () => {
+  const onlyQ = text(consultationInviteEmail({ ...inv, audience: "student", questionnaireUrl: Q }));
+  assert.ok(onlyQ.includes(Q) && !onlyQ.includes(T));
+  const onlyT = text(consultationInviteEmail({ ...inv, audience: "parent", testUrl: T, questionnaireUrl: null }));
+  assert.ok(onlyT.includes(T) && !onlyT.includes(Q));
+  for (const audience of ["student", "parent"] as const) {
+    const none = text(consultationInviteEmail({ ...inv, audience }));
+    assert.doesNotMatch(none, /Before the call|https:\/\/app\/(q|diagnostic)/);
+  }
 });

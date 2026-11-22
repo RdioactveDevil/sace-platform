@@ -59,3 +59,29 @@ test("the sender is named by their display name, or gradefarm. — never a place
   assert.equal(prospectSenderName(""), "gradefarm.");
   assert.equal(prospectSenderName(null), "gradefarm.");
 });
+
+test("parent diagnostic email names the student and asks to pass the link on", () => {
+  const e = prospectDiagnosticEmail({ ...o, audience: "parent", studentName: "Sam Lee" });
+  const t = allText(e);
+  assert.ok(t.includes("Sam Lee"));
+  assert.match(t, /pass (this|the) link on to them/i);
+  assert.doesNotMatch(t, /your tutor|tutoring with|you filled in|do it on your own/i);
+  assert.ok(e.subject.includes("Sam Tutor"));
+  assert.equal(e.content.cta?.url, o.link);
+  assert.match(allText(prospectDiagnosticEmail({ ...o, audience: "parent" })), /your child/i);
+});
+
+test("parent reminder names the student and asks to pass the link on", () => {
+  const e = prospectReminderEmail({ ...o, audience: "parent", studentName: "Sam Lee" });
+  const t = allText(e);
+  assert.ok(t.includes("Sam Lee"));
+  assert.match(t, /pass (this|the) link on to them/i);
+  assert.doesNotMatch(t, /your tutor|tutoring with/i);
+  assert.ok(e.content.footer.includes("This is the only reminder"));
+  assert.match(allText(prospectReminderEmail({ ...o, audience: "parent", studentName: "" })), /your child/i);
+});
+
+test("student audience is identical to the default", () => {
+  assert.deepEqual(prospectDiagnosticEmail({ ...o, audience: "student", studentName: "Sam Lee" }), prospectDiagnosticEmail(o));
+  assert.deepEqual(prospectReminderEmail({ ...o, audience: "student", studentName: "Sam Lee" }), prospectReminderEmail(o));
+});

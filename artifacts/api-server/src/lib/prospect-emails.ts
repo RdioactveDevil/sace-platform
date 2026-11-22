@@ -24,8 +24,33 @@ export function prospectSenderName(displayName: string | null | undefined): stri
   return displayName?.trim() || "gradefarm.";
 }
 
+type Audience = "student" | "parent";
+type DiagOpts = { senderName: string; subject: string; link: string; audience?: Audience; studentName?: string };
+
+/** "Sam Lee" for a parent's wording, else "your child"; and the pronoun to match. */
+const childOf = (studentName?: string) => {
+  const n = studentName?.trim();
+  return n ? { name: n, them: "them" } : { name: "your child", them: "your child" };
+};
+
 /** Sent when the tutor creates (or resends) the diagnostic. */
-export function prospectDiagnosticEmail(o: { senderName: string; subject: string; link: string }): Email {
+export function prospectDiagnosticEmail(o: DiagOpts): Email {
+  if (o.audience === "parent") {
+    const c = childOf(o.studentName);
+    return {
+      subject: `${o.senderName} has sent ${c.name === "your child" ? "your child" : c.name} a diagnostic test: ${o.subject}`,
+      content: {
+        heading: "A diagnostic test to pass on",
+        paragraphs: [
+          "Hi,",
+          `${o.senderName} has sent ${c.name} a diagnostic test for ${o.subject}. It takes about 30–45 minutes, and the results will be gone through on the consultation call.`,
+          `Please pass this link on to ${c.them}. It's best done alone, in one sitting, and it's fine to be unsure. There's no time limit.`,
+        ],
+        cta: { label: "Open the diagnostic", url: o.link },
+        footer: `You're receiving this because ${o.senderName} entered your email address on gradefarm. If you don't know them, you can ignore this email.`,
+      },
+    };
+  }
   return {
     subject: `${o.senderName} has sent you a diagnostic test: ${o.subject}`,
     content: {
@@ -41,7 +66,23 @@ export function prospectDiagnosticEmail(o: { senderName: string; subject: string
 }
 
 /** The one reminder, if they haven't started a couple of days later. */
-export function prospectReminderEmail(o: { senderName: string; subject: string; link: string }): Email {
+export function prospectReminderEmail(o: DiagOpts): Email {
+  if (o.audience === "parent") {
+    const c = childOf(o.studentName);
+    return {
+      subject: `Reminder: ${c.name === "your child" ? "your child's" : `${c.name}'s`} ${o.subject} diagnostic from ${o.senderName}`,
+      content: {
+        heading: "A diagnostic is waiting",
+        paragraphs: [
+          "Hi,",
+          `${o.senderName} sent ${c.name} a diagnostic test for ${o.subject} a couple of days ago and it hasn't been started yet.`,
+          `It takes about 30–45 minutes, and the results will be gone through on the consultation call. Please pass this link on to ${c.them}.`,
+        ],
+        cta: { label: "Open the diagnostic", url: o.link },
+        footer: `You're receiving this because ${o.senderName} entered your email address on gradefarm. This is the only reminder we'll send. If you don't know them, you can ignore this email.`,
+      },
+    };
+  }
   return {
     subject: `Reminder: your ${o.subject} diagnostic from ${o.senderName}`,
     content: {

@@ -102,6 +102,65 @@ export function consultationBookedEmail(o: Booked): Email {
   };
 }
 
+/**
+ * One email for a consultation booked by the tutor: the call time and join
+ * button, plus a "Before the call" list of whichever of the questionnaire and
+ * the diagnostic test were set up. Parents are asked to pass the links on.
+ */
+export function consultationInviteEmail(o: {
+  audience: "student" | "parent";
+  tutorName: string;
+  studentName: string;
+  start: string;
+  timeZone: string;
+  minutes: number;
+  joinUrl: string;
+  questionnaireUrl?: string | null;
+  testUrl?: string | null;
+}): Email {
+  const parent = o.audience === "parent";
+  const when = formatCallTime(o.start, o.timeZone);
+  const name = o.studentName.trim();
+  const what = parent ? callWith(o.studentName, o.tutorName) : `Your consultation call with ${o.tutorName}`;
+  const paragraphs = [
+    ...(parent ? ["Hi,"] : []),
+    `${what} is booked for ${when}. It runs for about ${o.minutes} minutes.`,
+    "When it's time, use the button below to join. You can do it from a phone or a computer, and you don't need an account.",
+  ];
+  const items: string[] = [];
+  if (o.questionnaireUrl) items.push(`A short questionnaire: ${o.questionnaireUrl}`);
+  if (o.testUrl) items.push(`A diagnostic test (about 30–45 minutes): ${o.testUrl}`);
+  if (items.length) {
+    const what2 = o.questionnaireUrl && o.testUrl ? "a short questionnaire and a diagnostic test" : o.testUrl ? "a diagnostic test" : "a short questionnaire";
+    const todo =
+      o.questionnaireUrl && o.testUrl
+        ? "fill in the short questionnaire and do the diagnostic test below"
+        : o.testUrl
+          ? "do the diagnostic test below"
+          : "fill in the short questionnaire below";
+    paragraphs.push(
+      parent
+        ? `Before the call, ${name || "your child"} has ${what2}. Please pass ${items.length > 1 ? "these links" : "this link"} on to ${name ? "them" : "your child"}.`
+        : `Before the call, ${o.tutorName} would appreciate it if you could ${todo}.`,
+      ...items,
+    );
+  }
+  return {
+    subject: `Your consultation call with ${o.tutorName}: ${when}`,
+    content: {
+      heading: parent ? "The consultation call is booked" : "Your consultation call is booked",
+      paragraphs,
+      details: [
+        ["With", o.tutorName],
+        ["When", when],
+        ["Length", `${o.minutes} minutes`],
+      ],
+      cta: { label: "Join the call", url: o.joinUrl },
+      footer: footerFor(parent ? "parent" : "guest", o),
+    },
+  };
+}
+
 export function consultationChangedEmail(o: Booked & { previousStart: string }): Email {
   const when = formatCallTime(o.start, o.timeZone);
   const was = formatCallTime(o.previousStart, o.timeZone);
