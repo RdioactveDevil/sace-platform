@@ -59,3 +59,9 @@ export function whoWasEmailed(emailed) {
   const e = emailed || {}
   return [e.student ? 'student' : '', e.parent ? 'parent' : ''].filter(Boolean).join(', ')
 }
+
+/** The ticked recipients whose email did not go (a key present and false). */
+export function whoNotEmailed(emailed) {
+  const e = emailed || {}
+  return [e.student === false ? 'student' : '', e.parent === false ? 'parent' : ''].filter(Boolean).join(', ')
+}

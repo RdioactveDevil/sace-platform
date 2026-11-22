@@ -1,12 +1,12 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Calendar } from 'lucide-react'
 import { THEMES } from '../lib/theme'
-import SegmentedToggle from './SegmentedToggle'
 import InfinityLoader from './InfinityLoader'
 import ReminderEditor from './ReminderEditor'
-import { fetchConsultationSlots, fetchBookingSettings, bookConsultation, updateConsultation } from '../lib/db'
-import { groupSlotsByDay, formatWhen, zonedToIso, ZONES } from '../lib/bookingFormat'
+import { TimeChooser, useConsultationTimes } from './ConsultationTimes'
+import { bookConsultation, updateConsultation } from '../lib/db'
+import { formatWhen } from '../lib/bookingFormat'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -27,52 +27,13 @@ export default function ConsultationModal({ mode, diagnostic, session, theme, on
   const booking = mode === 'book'
   const diagnosticId = booking ? diagnostic.id : session.diagnostic_id
 
-  const [loading, setLoading] = useState(!!diagnosticId)
-  const [slots, setSlots] = useState([])
-  const [zone, setZone] = useState(null)          // the tutor's own zone, from their settings; null until known
-  const [zoneError, setZoneError] = useState('')
-  const [callMinutes, setCallMinutes] = useState(null)
-  const [noHours, setNoHours] = useState(false)
-  const [loadError, setLoadError] = useState('')
-
-  const [how, setHow] = useState('offered')            // offered | any
-  const [chosen, setChosen] = useState('')             // ISO of a chosen offered time
-  const [date, setDate] = useState('')
-  const [time, setTime] = useState('16:00')
+  const times = useConsultationTimes({ diagnosticId })
+  const { loading, zoneError, zone, zoneReady, startIso, how } = times
   const [email, setEmail] = useState(booking ? diagnostic.prospect_email || '' : '')
   const [parentEmail, setParentEmail] = useState(booking ? diagnostic.parent_email || '' : '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  useEffect(() => {
-    let cancelled = false
-    fetchBookingSettings()
-      .then(s => { if (!cancelled) { if (s?.timeZone) setZone(s.timeZone); else setZoneError("Couldn't find your time zone.") } })
-      .catch(e => { if (!cancelled) setZoneError(e.message || "Couldn't load your time zone.") })
-    return () => { cancelled = true }
-  }, [])
-
-  useEffect(() => {
-    if (!diagnosticId) { setHow('any'); return undefined }
-    let cancelled = false
-    fetchConsultationSlots(diagnosticId)
-      .then(r => {
-        if (cancelled) return
-        setSlots(r.slots || [])
-        setCallMinutes(r.callMinutes ?? null)
-        setNoHours(!!r.noHours)
-        if (!(r.slots || []).length) setHow('any')
-      })
-      .catch(e => { if (!cancelled) { setLoadError(e.message || "Couldn't load your open times."); setHow('any') } })
-      .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
-  }, [diagnosticId])
-
-  const days = useMemo(() => (zone ? groupSlotsByDay(slots, zone) : []), [slots, zone])
-  const zoneLabel = ZONES.find(z => z.value === zone)?.label || zone
-  const zoneReady = !!zone
-  const anyIso = zoneReady ? zonedToIso(date, time, zone) : null
-  const startIso = how === 'offered' ? chosen : anyIso
   const current = !booking ? session.scheduled_at : null
 
   const submit = async (e) => {
@@ -128,77 +89,20 @@ export default function ConsultationModal({ mode, diagnostic, session, theme, on
           </div>
         ) : (
           <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {booking && noHours && (
-              <div style={{ fontSize: 13, color: t.text, padding: '10px 14px', borderRadius: 8, background: 'var(--t-bgSubtle)', border: '1px solid var(--t-border)' }}>
-                Set your consultation hours in Lessons first, so open times can be offered.{' '}
-                {onOpenSettings && (
-                  <button type="button" onClick={onOpenSettings} style={{ border: 'none', background: 'transparent', padding: 0, color: t.goldText, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT_B, textDecoration: 'underline' }}>
-                    Open consultation settings
-                  </button>
-                )}
-              </div>
-            )}
-            {zoneError && <p role="alert" style={{ color: t.danger, fontSize: 13, margin: 0 }}>{zoneError} Times can't be set until it loads. Close this and try again.</p>}
-            {loadError && <p role="alert" style={{ color: t.danger, fontSize: 13, margin: 0 }}>{loadError}</p>}
-
-            {booking && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14 }}>
-                <div>
-                  <label style={labelStyle}>Prospect's email</label>
-                  <input className="td-input-gold" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="e.g. sarah@example.com" style={inputStyle} />
+            <TimeChooser times={times} theme={theme} formatWhen={formatWhen} onOpenSettings={onOpenSettings} showNoHours={booking} labelStyle={labelStyle} inputStyle={inputStyle}>
+              {booking && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14 }}>
+                  <div>
+                    <label htmlFor="consult-email" style={labelStyle}>Prospect's email</label>
+                    <input id="consult-email" className="td-input-gold" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="e.g. sarah@example.com" style={inputStyle} />
+                  </div>
+                  <div>
+                    <label htmlFor="consult-parent-email" style={labelStyle}>Parent's email <span style={{ fontWeight: 400, color: t.textFaint }}>(optional)</span></label>
+                    <input id="consult-parent-email" className="td-input-gold" type="email" value={parentEmail} onChange={e => setParentEmail(e.target.value)} placeholder="e.g. parent@example.com" style={inputStyle} />
+                  </div>
                 </div>
-                <div>
-                  <label style={labelStyle}>Parent's email <span style={{ fontWeight: 400, color: t.textFaint }}>(optional)</span></label>
-                  <input className="td-input-gold" type="email" value={parentEmail} onChange={e => setParentEmail(e.target.value)} placeholder="e.g. parent@example.com" style={inputStyle} />
-                </div>
-              </div>
-            )}
-
-            {slots.length > 0 && (
-              <SegmentedToggle size="sm" label="How to choose the time" value={how} onChange={setHow} options={[
-                { value: 'offered', label: 'Open times' },
-                { value: 'any', label: 'Pick any time', disabled: !zoneReady },
-              ]} />
-            )}
-
-            {how === 'offered' && zoneReady ? (
-              <div>
-                <label style={labelStyle}>Times shown in {zoneLabel} time{callMinutes ? ` · ${callMinutes} minute call` : ''}</label>
-                <div style={{ maxHeight: 280, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14, paddingRight: 4 }}>
-                  {days.map(g => (
-                    <div key={g.day}>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: t.text, marginBottom: 6 }}>{g.day}</div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                        {g.times.map(({ iso, label }) => {
-                          const sel = chosen === iso
-                          return (
-                            <button
-                              key={iso} type="button" aria-pressed={sel} onClick={() => setChosen(iso)}
-                              style={{ padding: '6px 13px', borderRadius: 12, border: `1px solid ${sel ? 'var(--t-text)' : t.border}`, background: sel ? 'var(--t-bgSubtle)' : 'transparent', color: sel ? t.text : t.textMuted, fontSize: 12, fontWeight: sel ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B, transition: 'all 0.15s' }}
-                            >{label}</button>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : how === 'offered' ? null : (
-              <div>
-                {slots.length === 0 && !loadError && !noHours && (
-                  <p style={{ margin: '0 0 10px', fontSize: 13, color: t.textMuted }}>No open times in the next few weeks. Pick a time yourself.</p>
-                )}
-                <label style={labelStyle}>Date and time{zoneReady ? ` in ${zoneLabel} time` : ''}</label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <input className="td-input-gold" type="date" aria-label="Date" disabled={!zoneReady} value={date} onChange={e => setDate(e.target.value)} style={inputStyle} />
-                  <input className="td-input-gold" type="time" aria-label="Time" disabled={!zoneReady} value={time} onChange={e => setTime(e.target.value)} style={inputStyle} />
-                </div>
-                <div style={{ fontSize: 11, color: t.textFaint, marginTop: 6 }}>
-                  Any future time that doesn't overlap another of your sessions.
-                  {anyIso && <> Call set for {formatWhen(anyIso, zone)}.</>}
-                </div>
-              </div>
-            )}
+              )}
+            </TimeChooser>
 
             {booking && <div style={{ fontSize: 12, color: t.textMuted }}>Reminders follow your defaults. You can change them for this call afterwards in Lessons.</div>}
 

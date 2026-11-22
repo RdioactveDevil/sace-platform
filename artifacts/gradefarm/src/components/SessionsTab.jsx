@@ -2,12 +2,14 @@ import { confirmDialog } from '../lib/dialog'
 import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Calendar, Mail, User, Users, Repeat, Link, Timer, Video, TriangleAlert, CircleCheck, Play, Inbox } from 'lucide-react'
+import { Calendar, CalendarPlus, Mail, User, Users, Repeat, Link, Timer, Video, TriangleAlert, CircleCheck, Play, Inbox } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 import InfinityLoader from './InfinityLoader'
 import SegmentedToggle from './SegmentedToggle'
 import ConsultationSettings from './ConsultationSettings'
 import ConsultationModal, { RemindersModal } from './ConsultationModal'
+import NewConsultationModal from './NewConsultationModal'
+import { whoWasEmailed, whoNotEmailed } from '../lib/newConsultation'
 import { reminderLabel, formatWhen } from '../lib/bookingFormat'
 import {
   fetchRoster,
@@ -636,6 +638,8 @@ export default function SessionsTab({ profile, theme }) {
   const [tutorZone, setTutorZone] = useState(null)   // null until known: times then show without a zone label
   const [moving, setMoving] = useState(null)       // consultation being rescheduled
   const [editingReminders, setEditingReminders] = useState(null)
+  const [newConsult, setNewConsult] = useState(false)   // the New consultation form is open
+  const [booked, setBooked] = useState(null)             // summary of the consultation just booked
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -730,7 +734,30 @@ export default function SessionsTab({ profile, theme }) {
         </button>
       </div>
 
-      {view === 'sessions' && <ConsultationSettings theme={theme} defaultOpen={openSettings} />}
+      {view === 'sessions' && (
+        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 320px', minWidth: 0 }}>
+            <ConsultationSettings theme={theme} defaultOpen={openSettings} />
+          </div>
+          <button
+            type="button"
+            onClick={() => { setBooked(null); setNewConsult(true) }}
+            style={{ background: 'var(--t-accent)', color: 'var(--t-onAccent)', border: 'none', borderRadius: 9, padding: '8px 14px', fontSize: 13, fontWeight: 800, fontFamily: FONT_B, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}
+          >
+            <CalendarPlus size={15} aria-hidden="true" />New consultation
+          </button>
+        </div>
+      )}
+      {view === 'sessions' && booked && (
+        <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 20, padding: '10px 14px', borderRadius: 8, background: t.successBg, border: `1px solid ${t.success}59`, fontSize: 13, color: t.text }}>
+          <CircleCheck size={16} color={t.success} aria-hidden="true" />
+          <span style={{ flex: 1, minWidth: 200 }}>
+            Booked for {formatWhen(booked.start, tutorZone)}.{booked.sent ? ` Emailed: ${booked.sent}.` : ''}
+            {booked.failed && <span style={{ color: t.danger }}> The email to the {booked.failed} didn't send. The call is still booked.</span>}
+          </span>
+          <button type="button" onClick={() => setBooked(null)} aria-label="Dismiss" style={{ border: 'none', background: 'transparent', color: t.textMuted, cursor: 'pointer', fontSize: 16, lineHeight: 1, fontFamily: FONT_B }}>×</button>
+        </div>
+      )}
 
       {/* Recurring series view */}
       {view === 'recurring' && (
@@ -794,6 +821,14 @@ export default function SessionsTab({ profile, theme }) {
       )}
 
       {moving && <ConsultationModal mode="reschedule" session={moving} theme={theme} onClose={() => setMoving(null)} onDone={load} />}
+      {newConsult && (
+        <NewConsultationModal
+          theme={theme}
+          onClose={() => setNewConsult(false)}
+          onDone={async (r) => { setBooked({ start: r.start, sent: whoWasEmailed(r.emailed), failed: whoNotEmailed(r.emailed) }); await load() }}
+          onOpenSettings={() => { setNewConsult(false); navigate('/tutor/sessions?consultation=settings') }}
+        />
+      )}
       {editingReminders && <RemindersModal session={editingReminders} theme={theme} onClose={() => setEditingReminders(null)} onDone={load} />}
 
       {showModal && (

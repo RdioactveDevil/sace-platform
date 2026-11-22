@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { recipientsError, newConsultationBody, newConsultationError, whoWasEmailed, emptyNewConsultation } from './newConsultation.js'
+import { recipientsError, newConsultationBody, newConsultationError, whoWasEmailed, whoNotEmailed, emptyNewConsultation } from './newConsultation.js'
 
 const q = [{ id: 1, question: 'Solve x + 1 = 3', marks: 2 }]
 const subjects = [{ name: 'Mathematics', topics: ['Algebra'] }]
@@ -84,4 +84,12 @@ test('whoWasEmailed: a readable list', () => {
   assert.equal(whoWasEmailed({ student: true }), 'student')
   assert.equal(whoWasEmailed({}), '')
   assert.equal(whoWasEmailed(undefined), '')
+})
+
+test('whoNotEmailed: ticked recipients whose email did not go', () => {
+  assert.equal(whoNotEmailed({ student: true, parent: false }), 'parent')
+  assert.equal(whoNotEmailed({ student: false, parent: false }), 'student, parent')
+  assert.equal(whoNotEmailed({ student: true, parent: true }), '')
+  assert.equal(whoNotEmailed({ parent: true }), '')
+  assert.equal(whoNotEmailed(undefined), '')
 })

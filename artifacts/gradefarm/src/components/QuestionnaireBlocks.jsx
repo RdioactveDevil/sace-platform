@@ -131,14 +131,14 @@ function TailorModal({ initial, theme, onCancel, onDone }) {
  * The create form's "Pre-call questionnaire" section. `master` is the tutor's own
  * (null until loaded); `tailored` is a copy edited for this student, or null.
  */
-export function QuestionnaireSection({ master, masterError, tailored, onTailor, theme, labelStyle }) {
+export function QuestionnaireSection({ master, masterError, tailored, onTailor, theme, labelStyle, label = 'Pre-call questionnaire', hint = 'Sent to the student after they book a call. Edit your own in the "Pre-call questionnaire" tab.' }) {
   const t = THEMES[theme]
   const s = styles(t, theme)
   const [open, setOpen] = useState(false)
   const shown = tailored || master
   return (
     <div>
-      <div style={labelStyle}>Pre-call questionnaire</div>
+      {label && <div style={labelStyle}>{label}</div>}
       <div style={{ background: 'var(--t-bgSubtle)', border: '1px solid var(--t-border)', borderRadius: 10, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 180, fontSize: 13, color: t.text, fontWeight: 600 }}>
           {shown
@@ -152,7 +152,7 @@ export function QuestionnaireSection({ master, masterError, tailored, onTailor, 
           </button>
         </div>
       </div>
-      <div style={{ fontSize: 11, color: t.textFaint, marginTop: 4 }}>Sent to the student after they book a call. Edit your own in the "Pre-call questionnaire" tab.</div>
+      {hint && <div style={{ fontSize: 11, color: t.textFaint, marginTop: 4 }}>{hint}</div>}
       {open && <TailorModal initial={shown} theme={theme} onCancel={() => setOpen(false)} onDone={q => { onTailor(q); setOpen(false) }} />}
     </div>
   )

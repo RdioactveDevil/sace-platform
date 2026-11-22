@@ -21,11 +21,14 @@ export default function SignUpModal({ row, theme, onClose, onDone }) {
   const t = THEMES[theme]
   const dark = theme === 'dark'
 
+  // A consultation booked with a parent (the record holds the parent's address) opens in parent mode,
+  // with that address and the student's first name.
+  const start = signUpDefaults(row, {})
   const [includable, setIncludable] = useState(null) // null while loading
-  const [toParent, setToParent] = useState(false)
-  const [studentEmail, setStudentEmail] = useState(row.prospect_email || '')
-  const [parentEmail, setParentEmail] = useState('')
-  const [childName, setChildName] = useState('')
+  const [toParent, setToParent] = useState(!!start.parentMode)
+  const [studentEmail, setStudentEmail] = useState(start.email)
+  const [parentEmail, setParentEmail] = useState(start.parentMode ? start.parentEmail || '' : '')
+  const [childName, setChildName] = useState(start.parentMode ? start.childName : '')
   const [subjects, setSubjects] = useState([])
   const [scope, setScope] = useState({})
   const [saving, setSaving] = useState(false)

@@ -5,7 +5,7 @@ import { LayoutDashboard, Users, School, ClipboardList, Video, Folder, ChartColu
 import SessionsTab from './SessionsTab'
 import ResourcesTab from './ResourcesTab'
 import StudentsTab from './StudentsTab'
-import DiagnosticScopePicker from './DiagnosticScopePicker'
+import { useTestScope, TestScopeFields, TestQuestionList, DIFF_LABEL } from './TestBuilder'
 import TutorToday from './TutorToday'
 import { reportPortalBadges } from '../lib/portalNav'
 import MessagesView from './MessagesView'
@@ -56,8 +56,7 @@ import {
   fetchTutoringSessions,
   fetchUnreadMessageCount,
 } from '../lib/db'
-import { fetchLiveCurricula, loadCurriculumMacroGroups } from '../lib/curriculaDb'
-import { dbDiagnosticSubject } from '../lib/diagnosticSubjects'
+import { loadCurriculumMacroGroups } from '../lib/curriculaDb'
 import { statusChip, questionnaireChip } from '../lib/diagnosticStatus'
 import { QuestionnaireTab, QuestionnaireSection, QuestionnaireAnswers } from './QuestionnaireBlocks'
 import { ASSIGNMENT_DIFFICULTIES, assignmentGoalLabel } from '../lib/engine'
@@ -65,6 +64,7 @@ import { WEEKDAYS, defaultDueDays, describeDue, describeRepeat, localYmd } from 
 import SegmentedToggle from './SegmentedToggle'
 import ConsultationModal from './ConsultationModal'
 import SignUpModal from './SignUpModal'
+import SendTestModal from './SendTestModal'
 import { signUpChip } from '../lib/signUp'
 import PresentReport from './PresentReport'
 import { formatWhen } from '../lib/bookingFormat'
@@ -1493,195 +1493,15 @@ function ClassesTab({ profile, theme, allTutors = false }) {
 
 // ── DiagnosticTab ─────────────────────────────────────────────────────────────
 
-const YEAR_LEVEL_GROUPS = [
-  { label: 'Primary',  levels: ['Year 3', 'Year 4', 'Year 5', 'Year 6'] },
-  { label: 'Junior Secondary', levels: ['Year 7', 'Year 8', 'Year 9', 'Year 10'] },
-  { label: 'Senior Secondary', levels: ['Year 11 / Stage 1', 'Year 12 / Stage 2'] },
-]
-const YEAR_LEVELS = YEAR_LEVEL_GROUPS.flatMap(g => g.levels)
-
-// All subjects, keyed by id, with topics and which year groups they appear in
-const ALL_DIAGNOSTIC_SUBJECTS = [
-  // ── Primary ────────────────────────────────────────────────────────────────
-  {
-    id: 'maths_primary', name: 'Mathematics',
-    yearGroups: ['primary'],
-    topics: ['Number & Place Value', 'Fractions & Decimals', 'Money & Financial Maths', 'Patterns & Algebra', 'Measurement', 'Geometry & Shape', 'Location & Transformation', 'Data & Graphs', 'Chance & Probability', 'Problem Solving'],
-  },
-  {
-    id: 'english_primary', name: 'English',
-    yearGroups: ['primary'], isWriting: true,
-    topics: ['Reading Comprehension', 'Narrative Writing', 'Persuasive Writing', 'Grammar & Punctuation', 'Vocabulary', 'Spelling', 'Sentence Structure', 'Handwriting & Presentation'],
-  },
-  {
-    id: 'science_primary', name: 'Science',
-    yearGroups: ['primary'],
-    topics: ['Biological Sciences', 'Chemical Sciences', 'Earth & Space Sciences', 'Physical Sciences', 'Science Inquiry'],
-  },
-  // ── Junior Secondary (Year 7–10) ───────────────────────────────────────────
-  {
-    id: 'science_y7', name: 'Science',
-    yearGroups: ['junior'],
-    topics: ['Cells & Living Things', 'Body Systems', 'Ecosystems & Ecology', 'Mixtures & Substances', 'Chemical Reactions', 'Forces & Motion', 'Energy Forms & Transfers', 'Waves — Light & Sound', 'Electricity & Magnetism', 'Earth & Space', 'Geology', 'Science Inquiry Skills'],
-  },
-  {
-    id: 'history_y7', name: 'History',
-    yearGroups: ['junior'],
-    topics: ['Ancient Civilisations', 'The Mediterranean World', 'The Asian World', 'The Americas', 'Medieval Europe', 'Renaissance & Reformation', 'Age of Exploration', 'Industrial Revolution', 'Australian History', 'Source Analysis & Historical Skills'],
-  },
-  {
-    id: 'geography_y7', name: 'Geography',
-    yearGroups: ['junior'],
-    topics: ['Landforms & Landscapes', 'Water in the World', 'Place & Liveability', 'Interconnections', 'Changing Nations', 'Environmental Change & Management', 'Geographies of Interconnections', 'Geographical Inquiry Skills'],
-  },
-  // ── Stage 1 (Year 11) ──────────────────────────────────────────────────────
-  {
-    id: 'maths_methods_s1', name: 'Mathematical Methods',
-    yearGroups: ['stage1'],
-    topics: ['Functions and graphs', 'Polynomials', 'Trigonometry', 'Counting and statistics', 'Growth and decay', 'Introduction to differential calculus', 'Arithmetic and geometric sequences', 'The logarithmic function', 'Exponential functions'],
-  },
-  {
-    id: 'maths_specialist_s1', name: 'Specialist Mathematics',
-    yearGroups: ['stage1'],
-    topics: ['Arithmetic and geometric sequences and series', 'Geometry', 'Vectors in the plane', 'Further trigonometry', 'Matrices', 'Real and complex numbers', 'Proof', 'Logic'],
-  },
-  {
-    id: 'maths_general_s1', name: 'General Mathematics',
-    yearGroups: ['stage1'],
-    topics: ['Investing and borrowing', 'Measurement', 'Statistical investigation', 'Applications of trigonometry', 'Linear functions and graphs', 'Exponential functions and graphs', 'Matrices and networks', 'Financial decisions'],
-  },
-  {
-    id: 'biology_s1', name: 'Biology',
-    yearGroups: ['stage1'],
-    topics: ['Cells and microorganisms', 'Multicellular organisms', 'Nervous and endocrine systems', 'Biodiversity and evolution', 'Ecosystem dynamics', 'DNA and inheritance', 'Reproduction', 'Adaptations'],
-  },
-  {
-    id: 'physics_s1', name: 'Physics',
-    yearGroups: ['stage1'],
-    topics: ['Linear motion', 'Forces and Newton\'s laws', 'Energy and momentum', 'Electricity — circuits and charge', 'Magnetism and electromagnetic induction', 'Waves — mechanical and sound', 'Light and optics', 'Nuclear physics', 'Thermodynamics'],
-  },
-  {
-    id: 'english_literary_s1', name: 'English Literary Studies',
-    yearGroups: ['stage1'], isWriting: true,
-    topics: ['Close reading and analysis', 'Essay writing — analytical', 'Essay writing — comparative', 'Narrative and authorial technique', 'Intertextuality', 'Themes and ideas', 'Character and context', 'Genre conventions', 'Creative writing — responding to texts'],
-  },
-  {
-    id: 'english_s1', name: 'English',
-    yearGroups: ['stage1'], isWriting: true,
-    topics: ['Reading and responding to texts', 'Analytical essay writing', 'Creative and imaginative writing', 'Multimodal and media texts', 'Language features and techniques', 'Context and purpose', 'Argument and persuasion'],
-  },
-  {
-    id: 'history_modern_s1', name: 'Modern History',
-    yearGroups: ['stage1'],
-    topics: ['The making of the modern world (1750–1918)', 'World War I', 'The Russian Revolution', 'The Interwar period', 'World War II', 'The Cold War', 'Decolonisation', 'Historical inquiry and source analysis'],
-  },
-  {
-    id: 'geography_s1', name: 'Geography',
-    yearGroups: ['stage1'],
-    topics: ['Landscapes and landforms', 'Interconnections', 'Hazards and disasters', 'Population and urbanisation', 'Global resource use', 'Environmental sustainability', 'Geographical inquiry skills'],
-  },
-  {
-    id: 'economics_s1', name: 'Economics',
-    yearGroups: ['stage1'],
-    topics: ['Microeconomics — supply and demand', 'Market structures', 'Macroeconomics — GDP and growth', 'Unemployment', 'Inflation', 'Government policy — fiscal', 'Government policy — monetary', 'International trade', 'Economic indicators'],
-  },
-  {
-    id: 'business_s1', name: 'Business Studies',
-    yearGroups: ['stage1'],
-    topics: ['Business planning and structure', 'Marketing', 'Human resource management', 'Financial management', 'Operations', 'Business ethics and social responsibility', 'Legal obligations'],
-  },
-  // ── Stage 2 (Year 12) ──────────────────────────────────────────────────────
-  {
-    id: 'maths_specialist_s2', name: 'Specialist Mathematics',
-    yearGroups: ['stage2'],
-    topics: ['Mathematical induction', 'Complex numbers', 'Functions and sketching graphs', 'Vectors in three dimensions', 'Integration techniques and applications', 'Rates of change and differential equations', 'Statistical inference'],
-  },
-  {
-    id: 'maths_general_s2', name: 'General Mathematics',
-    yearGroups: ['stage2'],
-    topics: ['Modelling with linear relationships', 'Modelling with matrices', 'Statistical models', 'Financial models', 'Discrete models — networks and graph theory', 'Bivariate data', 'Modelling with trigonometry'],
-  },
-  {
-    id: 'biology_s2', name: 'Biology',
-    yearGroups: ['stage2'],
-    topics: ['DNA and proteins', 'Gene expression and regulation', 'Continuity of life — reproduction and inheritance', 'Humans and disease', 'Immune response', 'Managing ecosystem change', 'Biotechnology', 'Evolution and natural selection'],
-  },
-  {
-    id: 'physics_s2', name: 'Physics',
-    yearGroups: ['stage2'],
-    topics: ['Motion and relativity', 'Electricity and magnetism', 'Light and matter', 'Thermal physics', 'Gravitational fields', 'Electric and magnetic fields', 'Quantum physics', 'Nuclear and particle physics'],
-  },
-  {
-    id: 'english_literary_s2', name: 'English Literary Studies',
-    yearGroups: ['stage2'], isWriting: true,
-    topics: ['Close analysis of texts', 'Comparative essay writing', 'Creating literary texts', 'Intertextual connections', 'Authorial choices and techniques', 'Themes, values and context', 'Genre and form', 'Oral communication'],
-  },
-  {
-    id: 'english_s2', name: 'English',
-    yearGroups: ['stage2'], isWriting: true,
-    topics: ['Responding to and analysing texts', 'Crafting analytical writing', 'Creating texts for audience and purpose', 'Multimodal texts', 'Oral presentation', 'Language and stylistic choices', 'Argument and rhetoric'],
-  },
-  {
-    id: 'history_modern_s2', name: 'Modern History',
-    yearGroups: ['stage2'],
-    topics: ['Power and people (1750–1918)', 'The twentieth century world (1919–2000)', 'Historical significance and causation', 'Source analysis and evaluation', 'Historical essay writing', 'In-depth case study — Revolution or Conflict', 'Contemporary issues'],
-  },
-  {
-    id: 'geography_s2', name: 'Geography',
-    yearGroups: ['stage2'],
-    topics: ['Geographies of human wellbeing', 'Geographies of interconnections', 'Environmental change and sustainability', 'Natural hazards and disasters', 'Global population dynamics', 'Geographical inquiry and research', 'Data analysis and spatial technology'],
-  },
-  {
-    id: 'economics_s2', name: 'Economics',
-    yearGroups: ['stage2'],
-    topics: ['Markets and pricing', 'Competition and market failure', 'Macroeconomic performance', 'Economic policies and their effects', 'Global economy and trade', 'Distribution of income and wealth', 'Evaluating economic outcomes', 'Extended research and analysis'],
-  },
-  {
-    id: 'business_s2', name: 'Business Studies',
-    yearGroups: ['stage2'],
-    topics: ['Strategic management', 'Marketing strategy', 'Financial analysis and planning', 'Human resource strategy', 'Operations and supply chain', 'Stakeholders and corporate governance', 'Innovation and entrepreneurship'],
-  },
-]
-
-function getSubjectsForYearLevel(yearLevel, subjectList = ALL_DIAGNOSTIC_SUBJECTS) {
-  if (!yearLevel) return []
-  const lower = yearLevel.toLowerCase()
-  if (lower.includes('stage 2') || lower.includes('year 12')) return subjectList.filter(s => s.yearGroups.includes('stage2'))
-  if (lower.includes('stage 1') || lower.includes('year 11')) return subjectList.filter(s => s.yearGroups.includes('stage1'))
-  if (['year 7', 'year 8', 'year 9', 'year 10'].some(y => lower.includes(y))) return subjectList.filter(s => s.yearGroups.includes('junior'))
-  return subjectList.filter(s => s.yearGroups.includes('primary'))
-}
-
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 function DiagnosticTab({ profile, theme }) {
   const t = THEMES[theme]
   const navigate = useNavigate()
 
-  // ── Dynamic subjects from DB (merged with static fallback) ──
-  const [mergedSubjects, setMergedSubjects] = useState(ALL_DIAGNOSTIC_SUBJECTS)
-  useEffect(() => {
-    let cancelled = false
-    fetchLiveCurricula()
-      .then(curricula => {
-        if (cancelled) return
-        const builtInNames = new Set(ALL_DIAGNOSTIC_SUBJECTS.map(s => s.name.toLowerCase()))
-        const dynamic = curricula
-          .filter(c => !builtInNames.has(c.name.toLowerCase()))
-          .map(dbDiagnosticSubject)
-        setMergedSubjects([...ALL_DIAGNOSTIC_SUBJECTS, ...dynamic])
-      })
-      .catch(() => { /* fall back to static list already set */ })
-    return () => { cancelled = true }
-  }, [])
-
   // ── Form state ──
   const [step, setStep] = useState('form')  // form | preview | created | list | report
-  const [yearLevel, setYearLevel] = useState('')
-  const [selectedSubjectId, setSelectedSubjectId] = useState('')
-  const [selectedTopics, setSelectedTopics] = useState([])
-  const [selectedSubtopicIds, setSelectedSubtopicIds] = useState([]) // database subjects; none = whole subject
-  const [writingType, setWritingType] = useState('paragraph')
+  const scope = useTestScope()
   const [studentName, setStudentName] = useState('')
   const [prospectEmail, setProspectEmail] = useState('')
   const [parentEmail, setParentEmail] = useState('')
@@ -1709,6 +1529,7 @@ function DiagnosticTab({ profile, theme }) {
   // ── Consultation calls: the row being booked or moved, and the tutor's zone for showing times ──
   const [callModal, setCallModal] = useState(null) // { mode: 'book' | 'reschedule', diagnostic?, session? }
   const [signUpRow, setSignUpRow] = useState(null) // the finished diagnostic being signed up
+  const [sendTestRow, setSendTestRow] = useState(null) // the test-less consultation record being given a test
   const [tutorZone, setTutorZone] = useState(null) // null until known: times then show without a zone label
   useEffect(() => {
     let cancelled = false
@@ -1726,9 +1547,6 @@ function DiagnosticTab({ profile, theme }) {
   }, [])
   const [reportLoading, setReportLoading] = useState(false)
   const [reportError, setReportError] = useState('')
-
-  const availableSubjects = getSubjectsForYearLevel(yearLevel, mergedSubjects)
-  const selectedSubject = availableSubjects.find(s => s.id === selectedSubjectId)
 
   const loadList = useCallback(async () => {
     setListLoading(true)
@@ -1751,31 +1569,18 @@ function DiagnosticTab({ profile, theme }) {
     return () => { cancelled = true }
   }, [step])
 
-  const toggleTopic = (topic) => {
-    setSelectedTopics(prev =>
-      prev.includes(topic) ? prev.filter(t => t !== topic) : [...prev, topic]
-    )
-  }
-
-  // What the test covers, as sent to the server. A database subject sends its
-  // curriculum and the chosen subtopics (none = the whole subject).
-  const buildSubjectConfig = () => selectedSubject.fromDb
-    ? { name: selectedSubject.name, topics: selectedSubject.topics, curriculumId: selectedSubject.curriculumId, subtopicIds: selectedSubtopicIds }
-    : { name: selectedSubject.name, topics: selectedTopics, ...(selectedSubject.isWriting ? { writingType } : {}) }
-
   const handleGenerate = async () => {
     setGenError('')
-    if (!yearLevel) { setGenError('Please select a year level.'); return }
-    if (!selectedSubjectId) { setGenError('Please select a subject.'); return }
-    if (!selectedSubject.fromDb && selectedTopics.length === 0) { setGenError('Please select at least one topic.'); return }
+    const scopeProblem = scope.validate()
+    if (scopeProblem) { setGenError(scopeProblem); return }
     if (prospectEmail.trim() && !EMAIL_RE.test(prospectEmail.trim())) { setGenError("Enter a valid email address for the student, or leave it blank."); return }
     if (parentEmail.trim() && !EMAIL_RE.test(parentEmail.trim())) { setGenError("Enter a valid email address for the parent, or leave it blank."); return }
-    const subjectConfig = buildSubjectConfig()
+    const subjectConfig = scope.buildConfig()
 
 
     setGenerating(true)
     try {
-      const json = await generateDiagnosticQuestions({ yearLevel, subjects: [subjectConfig] })
+      const json = await generateDiagnosticQuestions({ yearLevel: scope.yearLevel, subjects: [subjectConfig] })
       setQuestions(json.questions || [])
       setStep('preview')
     } catch (err) {
@@ -1787,10 +1592,10 @@ function DiagnosticTab({ profile, theme }) {
   const handleCreate = async () => {
     setSaveError('')
     setSaving(true)
-    const subjectConfig = buildSubjectConfig()
+    const subjectConfig = scope.buildConfig()
     try {
       const json = await createDiagnosticAssessment({
-        yearLevel,
+        yearLevel: scope.yearLevel,
         subjects: [subjectConfig],
         questions,
         studentName: studentName.trim() || null,
@@ -1862,11 +1667,7 @@ function DiagnosticTab({ profile, theme }) {
 
   const resetForm = () => {
     setStep('form')
-    setYearLevel('')
-    setSelectedSubjectId('')
-    setSelectedTopics([])
-    setSelectedSubtopicIds([])
-    setWritingType('paragraph')
+    scope.reset()
     setStudentName('')
     setProspectEmail('')
     setParentEmail('')
@@ -1882,12 +1683,6 @@ function DiagnosticTab({ profile, theme }) {
   const inputStyle = { width: '100%', padding: '10px 14px', borderRadius: 9, border: theme === 'dark' ? '1px solid var(--t-border)' : `1px solid ${t.border}`, background: theme === 'dark' ? 'var(--t-bgSubtle)' : t.bg, color: t.text, fontFamily: FONT_B, fontSize: 13, outline: 'none', boxSizing: 'border-box' }
   const labelStyle = { fontSize: 12, fontWeight: 700, color: t.textMuted, display: 'block', marginBottom: 6 }
   const sectionHdr = { padding: '14px 20px', borderBottom: '1px solid var(--t-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }
-
-  // Difficulty totals for preview
-  const easyMarks = questions.filter(q => q.difficulty === 'easy').reduce((s, q) => s + q.marks, 0)
-  const modMarks  = questions.filter(q => q.difficulty === 'moderate').reduce((s, q) => s + q.marks, 0)
-  const examMarks = questions.filter(q => q.difficulty === 'exam').reduce((s, q) => s + q.marks, 0)
-  const totalMarks = questions.reduce((s, q) => s + q.marks, 0)
 
   return (
     <div>
@@ -1925,80 +1720,7 @@ function DiagnosticTab({ profile, theme }) {
               </div>
             </div>
             <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 18 }}>
-              {/* Year level */}
-              <div>
-                <label style={labelStyle}>Year level</label>
-                <select className="td-input-gold" value={yearLevel} onChange={e => { setYearLevel(e.target.value); setSelectedSubjectId(''); setSelectedTopics([]); setSelectedSubtopicIds([]) }} style={inputStyle}>
-                  <option value="">Select year level…</option>
-                  {YEAR_LEVEL_GROUPS.map(g => (
-                    <optgroup key={g.label} label={g.label}>
-                      {g.levels.map(y => <option key={y} value={y}>{y}</option>)}
-                    </optgroup>
-                  ))}
-                </select>
-              </div>
-
-              {/* Subject */}
-              <div>
-                <label style={labelStyle}>Subject</label>
-                <select className="td-input-gold" value={selectedSubjectId} onChange={e => { setSelectedSubjectId(e.target.value); setSelectedTopics([]); setSelectedSubtopicIds([]) }} style={inputStyle} disabled={!yearLevel}>
-                  <option value="">{yearLevel ? 'Select subject…' : 'Select a year level first…'}</option>
-                  {availableSubjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-              </div>
-
-              {/* Topics */}
-              {selectedSubject?.fromDb && (
-                <div>
-                  <label style={labelStyle}>Topics / Subtopics <span style={{ color: t.textFaint, fontWeight: 400, textTransform: 'none' }}>— tick topics or single subtopics, or leave all unticked for the whole subject</span></label>
-                  <DiagnosticScopePicker key={selectedSubject.curriculumId} subject={{ id: selectedSubject.curriculumId, label: selectedSubject.name }}
-                    selected={selectedSubtopicIds} onChange={setSelectedSubtopicIds} theme={theme} defaultOpen />
-                </div>
-              )}
-              {selectedSubject && !selectedSubject.fromDb && (
-                <div>
-                  <label style={labelStyle}>Topics / Subtopics <span style={{ color: t.textFaint, fontWeight: 400, textTransform: 'none' }}>— select all that apply</span></label>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                    {selectedSubject.topics.map(topic => {
-                      const sel = selectedTopics.includes(topic)
-                      return (
-                        <button
-                          key={topic}
-                          onClick={() => toggleTopic(topic)}
-                          style={{ padding: '6px 13px', borderRadius: 12, border: `1px solid ${sel ? 'var(--t-text)' : t.border}`, background: sel ? 'var(--t-bgSubtle)' : 'transparent', color: sel ? t.text : t.textMuted, fontSize: 12, fontWeight: sel ? 700 : 500, cursor: 'pointer', fontFamily: FONT_B, transition: 'all 0.15s' }}
-                        >
-                          {topic}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Writing type — only for English/writing subjects */}
-              {selectedSubject?.isWriting && (
-                <div>
-                  <label style={labelStyle}>Writing Task Type <span style={{ fontWeight: 400, textTransform: 'none', color: t.textFaint }}>(Section C exam task)</span></label>
-                  <div style={{ display: 'flex', gap: 10 }}>
-                    {[
-                      { value: 'paragraph', label: 'Paragraph / Short Response', desc: 'Structured paragraph or short analytical response (suited to Year 7–10)' },
-                      { value: 'essay',     label: 'Essay',     desc: 'Full analytical or creative essay with intro, body, conclusion (suited to Stage 1–2)' },
-                    ].map(opt => {
-                      const sel = writingType === opt.value
-                      return (
-                        <button
-                          key={opt.value}
-                          onClick={() => setWritingType(opt.value)}
-                          style={{ flex: 1, padding: '12px 16px', borderRadius: 10, border: `2px solid ${sel ? 'var(--t-text)' : t.border}`, background: sel ? 'var(--t-bgSubtle)' : 'transparent', color: t.text, cursor: 'pointer', fontFamily: FONT_B, textAlign: 'left' }}
-                        >
-                          <div style={{ fontSize: 13, fontWeight: 700, color: sel ? 'var(--t-text)' : t.text, marginBottom: 2 }}>{opt.label}</div>
-                          <div style={{ fontSize: 11, color: t.textMuted }}>{opt.desc}</div>
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
+              <TestScopeFields scope={scope} theme={theme} labelStyle={labelStyle} inputStyle={inputStyle} idPrefix="diag" />
 
               {/* Who it's for: name and, to email it to them, the student's own email */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
@@ -2065,59 +1787,14 @@ function DiagnosticTab({ profile, theme }) {
             <div style={sectionHdr}>
               <div>
                 <div style={{ fontSize: 15, fontWeight: 700, color: t.text }}>Check the questions</div>
-                <div style={{ fontSize: 12, color: t.textMuted }}>{questions.length} questions · {totalMarks} marks</div>
+                <div style={{ fontSize: 12, color: t.textMuted }}>{questions.length} questions · {questions.reduce((n, q) => n + q.marks, 0)} marks</div>
               </div>
               <button onClick={resetForm} style={{ padding: '6px 14px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>
                 ← Regenerate
               </button>
             </div>
 
-            {/* Mark summary */}
-            <div style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', gap: 20, flexWrap: 'wrap' }}>
-              {[
-                { label: 'Section A — Foundation', marks: easyMarks, color: t.success },
-                { label: 'Section B — Core Skills', marks: modMarks,  color: 'var(--t-goldText)' },
-                { label: 'Section C — Exam Style', marks: examMarks, color: t.danger },
-                { label: 'TOTAL', marks: totalMarks, color: t.text },
-              ].map(s => (
-                <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 11, color: t.textMuted }}>{s.label}</span>
-                  <span style={{ fontSize: 15, fontWeight: 800, color: s.color }}>{s.marks}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* Questions list */}
-            <div style={{ maxHeight: 440, overflowY: 'auto' }}>
-              {questions.map((q, i) => {
-                const dc = q.difficulty === 'easy' ? t.success : q.difficulty === 'moderate' ? t.goldText : t.danger
-                return (
-                  <div key={q.id} style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-                    <div style={{ width: 30, height: 30, borderRadius: 8, background: `${dc}15`, border: `1px solid ${dc}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: dc, flexShrink: 0 }}>
-                      Q{i + 1}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 4, alignItems: 'center' }}>
-                        <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 12, border: `1px solid ${dc}30`, background: `${dc}10`, color: dc, fontWeight: 700 }}>{DIFF_LABEL[q.difficulty] || q.difficulty}</span>
-                        <span style={{ fontSize: 11, color: t.textMuted }}>{q.marks} mark{q.marks !== 1 ? 's' : ''}</span>
-                        <span style={{ fontSize: 11, color: t.textFaint }}>{q.topic}{q.subtopic ? ` · ${q.subtopic}` : ''}</span>
-                        <span style={{ fontSize: 11, color: t.textFaint, marginLeft: 'auto' }}>{q.type?.replace(/_/g, ' ')}</span>
-                      </div>
-                      <div style={{ fontSize: 13, color: t.text, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}><MathText text={q.question} style={{ whiteSpace: 'pre-wrap' }} /></div>
-                      {q.options && (
-                        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 3 }}>
-                          {q.options.map(opt => (
-                            <div key={opt} style={{ fontSize: 12, color: opt.startsWith(q.correct_answer) ? t.success : t.textMuted, paddingLeft: 4 }}>
-                              {opt.startsWith(q.correct_answer) ? '✓ ' : '   '}<MathText text={opt} />
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
+            <TestQuestionList questions={questions} theme={theme} />
           </div>
 
           {/* Save form */}
@@ -2234,12 +1911,13 @@ function DiagnosticTab({ profile, theme }) {
                 const canBook = isProspect && completed && !d.booking
                 const canSignUp = isProspect && completed && !d.signup
                 const suChip = signUpChip(d.signup)
+                const canSendTest = isProspect && d.status_label === 'no_test'
                 const rowName = d.submitted_by_name || d.student_name || null
                 return (
                   <div key={d.id} style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{d.year_level} · {subjectNames}</span>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: t.text }}>{d.status_label === 'no_test' ? 'Consultation call' : `${d.year_level} · ${subjectNames}`}</span>
                         <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 12, border: `1px solid ${chipBorder}`, background: chipBg, color: chipColor, fontWeight: 700 }}>
                           {chip.label}
                         </span>
@@ -2250,6 +1928,7 @@ function DiagnosticTab({ profile, theme }) {
                       <div style={{ fontSize: 11, color: t.textMuted }}>
                         {d.submitted_by_name || d.student_name || 'No name yet'}
                         {d.prospect_email ? ` · ${d.prospect_email}` : ''}
+                        {d.prospect_is_parent && <span style={{ color: t.textFaint }}> · Parent contact</span>}
                         {d.set_by ? ` · Set by ${d.set_by}` : ''}
                         {completed && d.score_total != null ? ` · Score: ${d.score_total}/${d.score_max}` : ''}
                         {d.sent_at ? ` · Sent ${fmtDate(d.sent_at)}` : ` · Created ${fmtDate(d.created_at)}`}
@@ -2265,6 +1944,11 @@ function DiagnosticTab({ profile, theme }) {
                       {canBook && (
                         <button onClick={() => setCallModal({ mode: 'book', diagnostic: { id: d.id, prospect_email: d.prospect_email, parent_email: d.parent_email, name: rowName } })} disabled={busy} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.text, fontSize: 12, fontWeight: 700, cursor: busy ? 'default' : 'pointer', fontFamily: FONT_B }}>
                           Book call
+                        </button>
+                      )}
+                      {canSendTest && (
+                        <button onClick={() => setSendTestRow(d)} disabled={busy} style={{ padding: '6px 12px', borderRadius: 7, border: 'none', background: 'var(--t-accent)', color: 'var(--t-onAccent)', fontSize: 12, fontWeight: 800, cursor: busy ? 'default' : 'pointer', fontFamily: FONT_B }}>
+                          Send a test
                         </button>
                       )}
                       {canSignUp && (
@@ -2292,9 +1976,11 @@ function DiagnosticTab({ profile, theme }) {
                           Cancel
                         </button>
                       )}
-                      <button onClick={() => handleCopy(d.link)} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>
-                        Copy Link
-                      </button>
+                      {d.status_label !== 'no_test' && (
+                        <button onClick={() => handleCopy(d.link)} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: FONT_B }}>
+                          Copy Link
+                        </button>
+                      )}
                       {hasAnswers && (
                         <button onClick={() => setOpenAnswers(o => ({ ...o, [d.id]: !o[d.id] }))} aria-expanded={answersOpen} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.text, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT_B }}>
                           {answersOpen ? 'Hide answers' : 'Show answers'}
@@ -2321,6 +2007,10 @@ function DiagnosticTab({ profile, theme }) {
 
       {signUpRow && (
         <SignUpModal row={signUpRow} theme={theme} onClose={() => setSignUpRow(null)} onDone={loadList} />
+      )}
+
+      {sendTestRow && (
+        <SendTestModal row={sendTestRow} theme={theme} onClose={() => setSendTestRow(null)} onDone={loadList} />
       )}
 
       {callModal && (
@@ -2563,7 +2253,6 @@ function DiagnosticTab({ profile, theme }) {
   )
 }
 
-const DIFF_LABEL = { easy: 'Foundation', moderate: 'Core', exam: 'Exam style' }
 
 // A maths answer is the bare LaTeX the MathLive answer box gives (\frac{1}{2},
 // x^{2}, a_{n}); wrap it so MathText renders it as maths. Prose and answers
