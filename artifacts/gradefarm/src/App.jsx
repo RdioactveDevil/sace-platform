@@ -9,6 +9,7 @@ import { clearPendingInvite, pendingInvite } from './lib/pendingInvite'
 import { takePendingCheckout, startCheckout, rememberCheckoutRetry, checkoutRetry } from './lib/pendingCheckout'
 import ErrorBoundary from './components/ErrorBoundary'
 import { lazyWithReload, reloadForNewVersion } from './lib/chunkReload'
+import { emptyBank, storedBank, bankForSubject } from './lib/subjectBank'
 import { getProfile, getStruggleMap, signOut, getQuestionsForSubjectTile, getSubscriptions, chooseFreeSubject, updateProfile, hasTutoringAccess, fetchTutoringSessions, fetchUnreadMessageCount, syncCheckout, getFreeQuestionUsage, countFreeQuestion, respondToInvite, fetchMyDiagnostics, prepareDiagnostic } from './lib/db'
 import { refreshManagedTopicsCache } from './lib/adminTopics'
 import { loadManagedCurriculaTopics, fetchLiveCurricula } from './lib/curriculaDb'
@@ -1077,7 +1078,9 @@ function AppInner() {
   const [profile, setProfile]                 = useState(null)
   // Sound effects follow the signed-in account (Account → Preferences).
   useEffect(() => { applySoundsSetting(profile?.sounds_enabled) }, [profile?.sounds_enabled])
-  const [questions, setQuestions]             = useState([])
+  // The bank and the subject it belongs to (lib/subjectBank.js); `questions`
+  // below is empty until the chosen subject's own bank has loaded.
+  const [bank, setBank]                       = useState(emptyBank)
   const [struggleMap, setStruggleMap]         = useState({})
   const [loading, setLoading]                 = useState(true)
   const [bootstrapped, setBootstrapped]       = useState(false)
@@ -1088,6 +1091,10 @@ function AppInner() {
       return stored && stored.type !== 'writing' ? stored : null
     } catch { return null }
   })
+  const questions = bankForSubject(bank, selectedSubject?.id)
+  const storeBank = (subjectId, qs) => setBank(storedBank(subjectId, qs))
+  // In-place changes (answers revealed, questions added) to the bank in hand.
+  const updateQuestions = (fn) => setBank(b => ({ ...b, questions: fn(b.questions) }))
   const [showAuth, setShowAuth]               = useState(false)
   // The student's palette (lib/theme.js PALETTES); `theme` is its base mode,
   // 'dark' or 'light', which the rest of the app goes by. Before palettes the
@@ -1443,7 +1450,7 @@ function AppInner() {
           questionsLoad.current = { key: null, promise: null }
           const reload = loadQuestions(fresh)
           reload
-            .then(qs => { if (!cancelled && questionsLoad.current.promise === reload) setQuestions(qs) })
+            .then(qs => { if (!cancelled && questionsLoad.current.promise === reload) storeBank(fresh.id, qs) })
             .catch(() => {})
         }
       })
@@ -1465,25 +1472,30 @@ function AppInner() {
   }, [])
   const clearQuestions = () => {
     questionsLoad.current = { key: null, promise: null }
-    setQuestions([])
+    setBank(emptyBank())
   }
 
-  // Load the bank for a subject remembered from last time (signed in only;
-  // the question bank is not readable signed out).
+  // Load the chosen subject's bank whenever the one in hand isn't its own: a
+  // subject remembered from last time, or a switch however it happened
+  // (signed in only; the question bank is not readable signed out).
   useEffect(() => {
-    if (!user?.id || !selectedSubject || questions.length > 0) return
+    if (!user?.id || !selectedSubject || bank.subjectId === selectedSubject.id) return
     // Only the latest load for this subject wins (the tile refresh above may start a newer one).
+    const subjectId = selectedSubject.id
     const load = loadQuestions(selectedSubject)
     load
-      .then(qs => { if (questionsLoad.current.promise === load) setQuestions(qs) })
+      .then(qs => { if (questionsLoad.current.promise === load) storeBank(subjectId, qs) })
       .catch(() => {})
-  }, [user?.id, selectedSubject?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user?.id, selectedSubject?.id, bank.subjectId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSelectSubject = async (subject) => {
     setSelectedSubject(subject)
     localStorage.setItem('gf-subject', JSON.stringify(subject))
-    const qs = await loadQuestions(subject)
-    setQuestions(qs)
+    try {
+      const qs = await loadQuestions(subject)
+      // A quicker second choice wins.
+      if (questionsLoad.current.key === subject.id) storeBank(subject.id, qs)
+    } catch { /* the bank stays empty, never another subject's */ }
     navigate('/home')
   }
 
@@ -1605,7 +1617,7 @@ function AppInner() {
     try {
       const qs = await loadQuestions(subject)
       // A quicker second switch wins.
-      if (questionsLoad.current.key === subject.id) setQuestions(qs)
+      if (questionsLoad.current.key === subject.id) storeBank(subject.id, qs)
     } catch {}
   }
 
@@ -2073,7 +2085,7 @@ function AppInner() {
               }}
               onBankQuestionsAdded={(newQs) => {
                 if (!Array.isArray(newQs) || newQs.length === 0) return
-                setQuestions(prev => {
+                updateQuestions(prev => {
                   const existingIds = new Set(prev.map(q => q.id))
                   const existingTexts = new Set(prev.map(q => (q.question || '').trim().toLowerCase()))
                   const fresh = newQs.filter(q =>
@@ -2086,7 +2098,7 @@ function AppInner() {
               onAnswersRevealed={(reveals) => {
                 // The server sends a question's answer and solution once it's answered.
                 if (!reveals || !Object.keys(reveals).length) return
-                setQuestions(prev => prev.map(q => (reveals[q.id] ? { ...q, ...reveals[q.id] } : q)))
+                updateQuestions(prev => prev.map(q => (reveals[q.id] ? { ...q, ...reveals[q.id] } : q)))
               }}
               onGoToStudyPlan={() => navigate('/my-progress')} />
             </div>
@@ -2188,7 +2200,7 @@ function AppInner() {
                 setSelectedSubject(matchingSubject)
                 localStorage.setItem('gf-subject', JSON.stringify(matchingSubject))
                 const qs = await loadQuestions(matchingSubject)
-                setQuestions(qs)
+                storeBank(matchingSubject.id, qs)
                 activeQuestions = qs
                 activeSubject = matchingSubject
               }
