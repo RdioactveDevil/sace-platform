@@ -15,9 +15,11 @@ export type ProspectRow = {
   started_at: string | null;
   reminded_at: string | null;
   cancelled_at: string | null;
+  /** false: a consultation's record with no test yet (left out or null: it has one, as every older row). */
+  has_test?: boolean | null;
 };
 
-export type DiagnosticStatus = "finished" | "cancelled" | "expired" | "in_progress" | "opened" | "sent" | "link";
+export type DiagnosticStatus = "finished" | "cancelled" | "no_test" | "expired" | "in_progress" | "opened" | "sent" | "link";
 
 const DAY_MS = 24 * 3_600_000;
 /** A link diagnostic's link works for this long after it was (last) sent, or created. */
@@ -26,6 +28,8 @@ export const PROSPECT_TTL_MS = 30 * DAY_MS;
 export const PROSPECT_REMINDER_AFTER_MS = 2 * DAY_MS;
 
 const isProspect = (r: ProspectRow) => !r.student_id;
+/** A consultation's record with no test (yet): nothing to take, send or remind about. */
+export const hasNoTest = (r: { has_test?: boolean | null }) => r.has_test === false;
 
 function expired(r: ProspectRow, now: Date): boolean {
   if (!isProspect(r) || r.status === "completed") return false;
@@ -35,6 +39,7 @@ function expired(r: ProspectRow, now: Date): boolean {
 export function diagnosticStatus(r: ProspectRow, now: Date): DiagnosticStatus {
   if (r.status === "completed") return "finished";
   if (r.cancelled_at) return "cancelled";
+  if (hasNoTest(r)) return "no_test";
   if (expired(r, now)) return "expired";
   if (r.started_at) return "in_progress";
   if (r.opened_at) return "opened";
@@ -56,7 +61,7 @@ export function canResend(r: ProspectRow, now: Date): boolean {
 }
 
 export function dueForProspectReminder(r: ProspectRow, now: Date): boolean {
-  if (!isProspect(r) || !r.prospect_email || !r.sent_at) return false;
+  if (!isProspect(r) || !r.prospect_email || !r.sent_at || hasNoTest(r)) return false;
   if (r.status !== "pending" || r.reminded_at || r.started_at || r.cancelled_at || expired(r, now)) return false;
   return now.getTime() - Date.parse(r.sent_at) >= PROSPECT_REMINDER_AFTER_MS;
 }
@@ -83,14 +88,14 @@ export function doneRecipients(setterId: string, studentId: string | null, roste
 }
 
 /** Columns that tell where a diagnostic is up to (shared by the list and the sign-up flow). */
-export const PROSPECT_COLUMNS = "status, student_id, prospect_email, created_at, sent_at, opened_at, started_at, reminded_at, cancelled_at";
+export const PROSPECT_COLUMNS = "status, student_id, prospect_email, created_at, sent_at, opened_at, started_at, reminded_at, cancelled_at, has_test";
 
 /** What GET /tutor/diagnostic/list selects. The client reads curriculum_id to pre-tick the sign-up subject. */
-export const DIAGNOSTIC_LIST_COLUMNS = `id, token, tutor_id, year_level, subjects, curriculum_id, student_name, submitted_by_name, score_total, score_max, completed_at, pre_call_form_url, parent_email, questionnaire, questionnaire_answers, questionnaire_submitted_at, ${PROSPECT_COLUMNS}`;
+export const DIAGNOSTIC_LIST_COLUMNS = `id, token, tutor_id, year_level, subjects, curriculum_id, student_name, submitted_by_name, score_total, score_max, completed_at, pre_call_form_url, parent_email, questionnaire, questionnaire_answers, questionnaire_submitted_at, prospect_is_parent, ${PROSPECT_COLUMNS}`;
 
 const PRIVATE_FIELDS = [
   "questionnaire", "questionnaire_answers", "questionnaire_submitted_at", "questionnaire_reminded_at",
-  "prospect_email", "parent_email", "questionnaire_status", "red_flags",
+  "prospect_email", "parent_email", "prospect_is_parent", "questionnaire_status", "red_flags",
 ] as const;
 
 /**
