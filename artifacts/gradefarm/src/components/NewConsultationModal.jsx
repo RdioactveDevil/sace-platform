@@ -10,6 +10,7 @@ import { TestBuilder } from './TestBuilder'
 import { QuestionnaireSection } from './QuestionnaireBlocks'
 import { createNewConsultation, fetchQuestionnaire } from '../lib/db'
 import { formatWhen } from '../lib/bookingFormat'
+import { blocksImplicitSubmit } from '../lib/implicitSubmit'
 import { emptyNewConsultation, newConsultationBody, newConsultationError, recipientsError } from '../lib/newConsultation'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
@@ -69,11 +70,14 @@ export default function NewConsultationModal({ theme, onClose, onDone, onOpenSet
     set({ [which === 'student' ? 'sendToStudent' : 'sendToParent']: on })
   }
 
-  const requestClose = async () => {
-    if (saving) return
-    if (dirty && !(await confirmDialog("Discard this consultation? Nothing has been booked or sent.", { confirm: 'Discard', cancel: 'Keep editing', danger: true }))) return
-    onClose()
+  // Resolves true when it is fine to leave: nothing entered, or the tutor confirmed the discard.
+  const confirmLeave = async () => {
+    if (saving) return false
+    if (dirty && !(await confirmDialog("Discard this consultation? Nothing has been booked or sent.", { confirm: 'Discard', cancel: 'Keep editing', danger: true }))) return false
+    return true
   }
+  const requestClose = async () => { if (await confirmLeave()) onClose() }
+  const openSettings = async () => { if (await confirmLeave()) onOpenSettings?.() }
 
   const submit = async (e) => {
     e.preventDefault()
@@ -119,7 +123,7 @@ export default function NewConsultationModal({ theme, onClose, onDone, onOpenSet
           Loading your open times…
         </div>
       ) : (
-        <form onSubmit={submit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <form onSubmit={submit} onKeyDown={e => { if (blocksImplicitSubmit(e)) e.preventDefault() }} noValidate style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Who */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <h3 style={sectionTitle}>Who</h3>
@@ -162,7 +166,7 @@ export default function NewConsultationModal({ theme, onClose, onDone, onOpenSet
           {/* When */}
           <div style={section}>
             <h3 style={sectionTitle}>When</h3>
-            <TimeChooser times={times} theme={theme} formatWhen={formatWhen} onOpenSettings={onOpenSettings} showNoHours labelStyle={labelStyle} inputStyle={inputStyle} />
+            <TimeChooser times={times} theme={theme} formatWhen={formatWhen} onOpenSettings={openSettings} showNoHours labelStyle={labelStyle} inputStyle={inputStyle} />
             {reminders && (
               <div>
                 <div style={labelStyle}>Reminders before the call</div>
