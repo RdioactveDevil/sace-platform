@@ -52,7 +52,7 @@ import { freeAllowance, studentWelcomeEmail, tutorWelcomeEmail } from "./welcome
 import { subjectLabel } from "./included-subject";
 import { studentSummary } from "./student-diagnostic";
 import { rosterTutorIds } from "./student-tutors";
-import { doneRecipients, dueForProspectReminder, PROSPECT_TTL_MS, type ProspectRow } from "./prospect-status";
+import { doneRecipients, dueForProspectReminder, hasNoTest, PROSPECT_TTL_MS, type ProspectRow } from "./prospect-status";
 import { prospectFinishedEmail, prospectLink, prospectReminderEmail, prospectSenderName } from "./prospect-emails";
 import { dueBookYourCall, dueConsultationReminders, BOOK_YOUR_CALL_AFTER_MS, BOOK_YOUR_CALL_UNTIL_MS } from "./consultation-reminders";
 import { bookYourCallEmail, consultationReminderEmail } from "./consultation-emails";
@@ -827,6 +827,7 @@ type DoneRow = Omit<DiagnosticRow, "student_id"> & {
   submitted_by_name: string | null;
   student_name: string | null;
   prospect_email: string | null;
+  has_test?: boolean | null;
 };
 
 const diagnosticSubject = (d: DiagnosticRow) => d.subjects?.[0]?.name || "your subject";
@@ -873,12 +874,13 @@ async function runDiagnosticReminders(job: Job) {
 async function runDiagnosticDone(job: Job) {
   const { data, error } = await job.admin
     .from("diagnostic_assessments")
-    .select("id, token, tutor_id, student_id, subjects, created_at, completed_at, report, submitted_by_name, student_name, prospect_email")
+    .select("id, token, tutor_id, student_id, subjects, created_at, completed_at, report, submitted_by_name, student_name, prospect_email, has_test")
     .eq("status", "completed")
     .gte("completed_at", new Date(job.now.getTime() - DIAGNOSTIC_DONE_LOOKBACK).toISOString())
     .limit(500);
   if (error) throw new Error(`diagnostic_assessments: ${error.message}`);
-  const rows = ((data ?? []) as DoneRow[]).filter((d) => d.report);
+  // A consultation's record without a test has nothing to report.
+  const rows = ((data ?? []) as DoneRow[]).filter((d) => d.report && !hasNoTest(d));
   if (rows.length === 0) return;
 
   // A roster student's: the tutor who set it and every other tutor with the
@@ -937,7 +939,10 @@ async function runDiagnosticDone(job: Job) {
 
 // ── Prospects' diagnostics ──────────────────────────────────────────────────
 
-type ProspectReminderRow = ProspectRow & { id: string; token: string; tutor_id: string; subjects: { name?: string }[] | null };
+type ProspectReminderRow = ProspectRow & {
+  id: string; token: string; tutor_id: string; subjects: { name?: string }[] | null;
+  student_name: string | null; prospect_is_parent: boolean | null;
+};
 
 /** Once, a couple of days after a prospect was emailed a diagnostic they haven't started. */
 async function runProspectReminders(job: Job) {
@@ -945,7 +950,7 @@ async function runProspectReminders(job: Job) {
   const nowMs = job.now.getTime();
   const { data, error } = await job.admin
     .from("diagnostic_assessments")
-    .select("id, token, tutor_id, subjects, status, student_id, prospect_email, created_at, sent_at, opened_at, started_at, reminded_at, cancelled_at")
+    .select("id, token, tutor_id, subjects, status, student_id, prospect_email, created_at, sent_at, opened_at, started_at, reminded_at, cancelled_at, has_test, student_name, prospect_is_parent")
     .is("student_id", null)
     .not("prospect_email", "is", null)
     .eq("status", "pending")
@@ -975,6 +980,8 @@ async function runProspectReminders(job: Job) {
       senderName: prospectSenderName(displayNames.get(d.tutor_id)),
       subject: d.subjects?.[0]?.name || "your subject",
       link: prospectLink(d.token),
+      // The primary address may be a parent's (a consultation booked for a parent only).
+      ...(d.prospect_is_parent ? { audience: "parent" as const, studentName: d.student_name ?? undefined } : {}),
     });
     if (job.dryRun) {
       job.summary.planned!.push({ kind: "prospect_reminder", to: d.prospect_email!, subject });
@@ -1007,6 +1014,8 @@ type ConsultationRow = {
   guest_email: string | null; guest_name: string | null; guest_parent_email: string | null;
   guest_time_zone: string | null; guest_token: string | null; reminder_minutes: number[] | null;
   ics_sequence: number | null;
+  /** The guest address is a parent's: they get the parent wording. */
+  guest_is_parent?: boolean | null;
 };
 
 /** The tutors' own display names (as prospects see them) and booking settings. */
@@ -1027,7 +1036,7 @@ async function runConsultationReminders(job: Job) {
   const nowMs = job.now.getTime();
   const { data, error } = await job.admin
     .from("tutoring_sessions")
-    .select("id, tutor_id, scheduled_at, duration_minutes, created_at, guest_email, guest_name, guest_parent_email, guest_time_zone, guest_token, reminder_minutes, ics_sequence")
+    .select("id, tutor_id, scheduled_at, duration_minutes, created_at, guest_email, guest_name, guest_parent_email, guest_time_zone, guest_token, reminder_minutes, ics_sequence, guest_is_parent")
     .eq("session_type", "consultation")
     .eq("status", "scheduled")
     .gt("scheduled_at", job.now.toISOString())
@@ -1086,7 +1095,7 @@ async function runConsultationReminders(job: Job) {
       const joinUrl = isTutor ? tutorJoinUrl(c.id) : c.guest_token ? guestJoinUrl(c.guest_token) : null;
       if (!joinUrl) continue;
       const { subject, content } = consultationReminderEmail({
-        to: recipient as "guest" | "parent" | "tutor",
+        to: recipient === "guest" && c.guest_is_parent ? "parent" : (recipient as "guest" | "parent" | "tutor"),
         tutorName,
         studentName: c.guest_name?.trim() || "",
         start: c.scheduled_at,
@@ -1230,14 +1239,14 @@ async function runQuestionnaireReminders(job: Job) {
   // …but the live call is the latest scheduled one, wherever it starts.
   const { data: callData, error: callErr } = await job.admin
     .from("tutoring_sessions")
-    .select("id, diagnostic_id, tutor_id, scheduled_at, created_at, guest_email, guest_name, guest_parent_email, guest_time_zone")
+    .select("id, diagnostic_id, tutor_id, scheduled_at, created_at, guest_email, guest_name, guest_parent_email, guest_time_zone, guest_is_parent")
     .eq("session_type", "consultation")
     .eq("status", "scheduled")
     .in("diagnostic_id", candidateIds)
     .order("scheduled_at", { ascending: true })
     .limit(2000);
   if (callErr) throw new Error(`tutoring_sessions: ${callErr.message}`);
-  type Call = { id: string; diagnostic_id: string; tutor_id: string; scheduled_at: string; created_at: string; guest_email: string | null; guest_name: string | null; guest_parent_email: string | null; guest_time_zone: string | null };
+  type Call = { id: string; diagnostic_id: string; tutor_id: string; scheduled_at: string; created_at: string; guest_email: string | null; guest_name: string | null; guest_parent_email: string | null; guest_time_zone: string | null; guest_is_parent?: boolean | null };
   const byDiagnostic = new Map<string, Call[]>();
   for (const c of (callData ?? []) as Call[]) byDiagnostic.set(c.diagnostic_id, [...(byDiagnostic.get(c.diagnostic_id) ?? []), c]);
   const latest = new Map([...byDiagnostic].map(([id, calls]) => [id, latestByStart(calls)]));
@@ -1276,7 +1285,8 @@ async function runQuestionnaireReminders(job: Job) {
     }
     const built = targets.map((t) => ({
       ...t,
-      ...questionnaireReminderEmail({ to: t.who, tutorName, studentName: call.guest_name?.trim() || "", start: call.scheduled_at, timeZone, url }),
+      // A parent as the guest gets the parent wording; the claim key stays "guest".
+      ...questionnaireReminderEmail({ to: t.who === "guest" && call.guest_is_parent ? "parent" : t.who, tutorName, studentName: call.guest_name?.trim() || "", start: call.scheduled_at, timeZone, url }),
     }));
     if (job.dryRun) {
       for (const b of built) job.summary.planned!.push({ kind: "questionnaire_reminder", to: b.to, subject: b.subject });
