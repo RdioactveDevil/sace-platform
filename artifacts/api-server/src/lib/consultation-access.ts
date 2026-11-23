@@ -102,6 +102,16 @@ export function guestTimeZone(raw: unknown, fallback: string): string {
   }
 }
 
+/**
+ * Where the student is, as the tutor picked it when booking or moving a call
+ * (a real IANA zone), or null when nothing usable was sent. The student's and
+ * parent's emails give the call's time in this zone.
+ */
+export function chosenGuestZone(raw: unknown): string | null {
+  const zone = guestTimeZone(raw, "");
+  return zone || null;
+}
+
 export const DEFAULT_REMINDERS = [1440, 60];
 
 /** Reminder offsets in minutes before the call: 1–5 of them, each 5 minutes to 7 days. Largest first, no repeats. */

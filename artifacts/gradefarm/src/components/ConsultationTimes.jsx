@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { THEMES } from '../lib/theme'
 import SegmentedToggle from './SegmentedToggle'
 import { fetchConsultationSlots, fetchBookingSettings } from '../lib/db'
-import { groupSlotsByDay, zonedToIso, ZONES } from '../lib/bookingFormat'
+import { groupSlotsByDay, zonedToIso, ZONES, STUDENT_LOCATIONS } from '../lib/bookingFormat'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
 
@@ -13,12 +13,14 @@ const FONT_B = "'Plus Jakarta Sans', sans-serif"
  * open times are loaded only then unless `always`); `always`: load the
  * tutor's open times with no record (a new consultation).
  */
-export function useConsultationTimes({ diagnosticId = null, always = false } = {}) {
+export function useConsultationTimes({ diagnosticId = null, always = false, studentZone: initialStudentZone = null } = {}) {
   const wantSlots = !!diagnosticId || always
   const [loading, setLoading] = useState(wantSlots)
   const [slots, setSlots] = useState([])
   const [zone, setZone] = useState(null)          // the tutor's own zone, from their settings; null until known
   const [zoneError, setZoneError] = useState('')
+  // Where the student is (their emails give the call's time there); until chosen, the tutor's zone.
+  const [studentZoneChoice, setStudentZone] = useState(initialStudentZone)
   const [defaultReminders, setDefaultReminders] = useState(null) // the tutor's reminder defaults, once known
   const [callMinutes, setCallMinutes] = useState(null)
   const [noHours, setNoHours] = useState(false)
@@ -62,10 +64,11 @@ export function useConsultationTimes({ diagnosticId = null, always = false } = {
   const zoneReady = !!zone
   const anyIso = zoneReady ? zonedToIso(date, time, zone) : null
   const startIso = how === 'offered' ? chosen : anyIso
+  const studentZone = studentZoneChoice || zone
 
   return {
     loading, slots, zone, zoneError, zoneLabel, zoneReady, defaultReminders, callMinutes, noHours, loadError, days,
-    how, setHow, chosen, setChosen, date, setDate, time, setTime, anyIso, startIso,
+    how, setHow, chosen, setChosen, date, setDate, time, setTime, anyIso, startIso, studentZone, setStudentZone,
   }
 }
 
@@ -75,7 +78,7 @@ export function useConsultationTimes({ diagnosticId = null, always = false } = {
  */
 export function TimeChooser({ times, theme, formatWhen, onOpenSettings, showNoHours = false, labelStyle, inputStyle, children }) {
   const t = THEMES[theme]
-  const { slots, zone, zoneError, zoneLabel, zoneReady, callMinutes, noHours, loadError, days, how, setHow, chosen, setChosen, date, setDate, time, setTime, anyIso } = times
+  const { slots, zone, zoneError, zoneLabel, zoneReady, callMinutes, noHours, loadError, days, how, setHow, chosen, setChosen, date, setDate, time, setTime, anyIso, startIso, studentZone, setStudentZone } = times
   return (
     <>
       {showNoHours && noHours && (
@@ -92,6 +95,18 @@ export function TimeChooser({ times, theme, formatWhen, onOpenSettings, showNoHo
       {loadError && <p role="alert" style={{ color: t.danger, fontSize: 13, margin: 0 }}>{loadError}</p>}
 
       {children}
+
+      <div>
+        <label htmlFor="consult-student-zone" style={labelStyle}>Student's location</label>
+        <select id="consult-student-zone" className="td-input-gold" disabled={!zoneReady} value={studentZone || ''} onChange={e => setStudentZone(e.target.value)} style={inputStyle}>
+          {!zoneReady && <option value="">Loading…</option>}
+          {STUDENT_LOCATIONS.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
+        </select>
+        <div style={{ fontSize: 11, color: t.textFaint, marginTop: 4 }}>
+          Their emails and reminders give the call's time here.
+          {startIso && studentZone && studentZone !== zone && <> That's <strong style={{ color: t.textMuted }}>{formatWhen(startIso, studentZone)}</strong> for them.</>}
+        </div>
+      </div>
 
       {slots.length > 0 && (
         <SegmentedToggle size="sm" label="How to choose the time" value={how} onChange={setHow} options={[

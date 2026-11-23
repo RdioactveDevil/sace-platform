@@ -48,6 +48,7 @@ export function newConsultationBody(form) {
     parentEmail: form.sendToParent ? String(form.parentEmail || '').trim().toLowerCase() : '',
     sendToParent: !!form.sendToParent,
     start: form.startIso,
+    ...(form.timeZone ? { timeZone: form.timeZone } : {}),
     ...(Array.isArray(form.reminderMinutes) && form.reminderMinutes.length ? { reminderMinutes: form.reminderMinutes } : {}),
     questionnaire: form.sendQuestionnaire ? (form.tailored || 'default') : null,
     test: t ? { yearLevel: t.yearLevel, subjects: t.subjects, questions: t.questions } : null,

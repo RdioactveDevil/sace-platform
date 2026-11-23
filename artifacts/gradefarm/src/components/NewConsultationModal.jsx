@@ -28,7 +28,7 @@ export default function NewConsultationModal({ theme, onClose, onDone, onOpenSet
   const t = THEMES[theme]
   const dark = theme === 'dark'
   const times = useConsultationTimes({ always: true })
-  const { loading, zone, zoneReady, startIso, defaultReminders } = times
+  const { loading, zone, zoneReady, startIso, defaultReminders, studentZone } = times
 
   const [form, setForm] = useState(emptyNewConsultation)
   const [touched, setTouched] = useState({ student: false, parent: false }) // a tick the tutor set by hand stays as set
@@ -53,7 +53,7 @@ export default function NewConsultationModal({ theme, onClose, onDone, onOpenSet
   useEffect(() => { if (!loading) nameRef.current?.focus() }, [loading])
 
   const reminders = form.reminderMinutes ?? defaultReminders
-  const full = { ...form, startIso: startIso || '', reminderMinutes: reminders }
+  const full = { ...form, startIso: startIso || '', reminderMinutes: reminders, timeZone: studentZone }
   const blocker = zoneReady ? newConsultationError(full) : 'Still loading your time zone.'
   const recipientsProblem = recipientsError(form)
   const dirty = !!(form.studentName || form.studentEmail || form.parentEmail || form.test || form.tailored || startIso)
