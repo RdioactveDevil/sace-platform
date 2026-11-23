@@ -3,7 +3,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { latexPromptRule } from "../lib/math-prompt";
 import { logger } from "../lib/logger";
 import { callClaude, extractJson } from "../lib/diagnostic-claude";
-import { markAndStore, markAssessment, storeTimedSubmission, timedAnswers, type DiagnosticReport } from "../lib/diagnostic-marking";
+import { markAndStore, markAssessment, storeTimedSubmission, submitUnavailableReason, timedAnswers, type DiagnosticReport } from "../lib/diagnostic-marking";
 import { waitUntil } from "@vercel/functions";
 import { requireUser } from "../lib/auth";
 import { requireTutorPlan } from "../lib/tutor-plan";
@@ -943,7 +943,8 @@ router.post("/diagnostic/:token/submit", async (req: Request, res: Response) => 
       return res.status(400).json({ error: "This assessment has already been submitted." });
     }
     if (!data.questions?.length) return res.status(409).json({ error: "This diagnostic isn't ready yet." });
-    const unavailable = unavailableReason(data, new Date());
+    // A started timed test is accepted even after its link expires.
+    const unavailable = submitUnavailableReason(data, new Date());
     if (unavailable) return res.status(410).json({ error: unavailable });
 
     const questionnaireUrl = questionnaireLinkFor({ token: data.token, questionnaire: (data as { questionnaire?: unknown }).questionnaire ?? null, pre_call_form_url: null });

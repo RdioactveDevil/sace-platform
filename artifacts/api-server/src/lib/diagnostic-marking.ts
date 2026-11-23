@@ -12,6 +12,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { callClaude, extractJson } from "./diagnostic-claude";
 import { logger } from "./logger";
+import { unavailableReason, type ProspectRow } from "./prospect-status";
 import { MAX_RESPONSE_CHARS, markAnswer, type MarkableQuestion, type MarkingResult, type PointResult } from "./marking";
 import { MAX_MARKING_ATTEMPTS, REMARK_AFTER_MS, type DiagnosticQuestion } from "./timed-diagnostic";
 
@@ -312,6 +313,16 @@ export async function storeTimedSubmission(
   return data?.length ? "stored" : "already_submitted";
 }
 
+/**
+ * Why a submit is refused, or null. As unavailableReason(), except that a timed
+ * test the student has started is still accepted after its link expires (a lost
+ * connection mustn't lose the test); a cancelled one is still refused.
+ */
+export function submitUnavailableReason(r: ProspectRow & { time_limit_minutes: number | null }, now: Date): string | null {
+  if (r.time_limit_minutes != null && !r.student_id && r.started_at && !r.cancelled_at) return null;
+  return unavailableReason(r, now);
+}
+
 export interface MarkingStateRow {
   time_limit_minutes: number | null;
   status: string;
@@ -376,10 +387,23 @@ export async function markAndStore(admin: SupabaseClient, id: string, deps: Mark
   }
 }
 
-const REMARK_BATCH = 5;
+/** The cron re-marks at most this many diagnostics a run (each is several model calls). */
+const REMARK_BATCH = 2;
+/** It starts no new one once this long has passed since the cron handler began (the function has 300 s). */
+export const REMARK_BUDGET_MS = 90_000;
 
-/** The cron's safety net: mark up to 5 timed diagnostics whose marking never finished, one at a time. */
-export async function remarkStaleDiagnostics(admin: SupabaseClient, now: Date, deps: MarkingDeps = DEFAULT_DEPS): Promise<{ marked: number }> {
+/**
+ * The cron's safety net: mark up to 2 timed diagnostics whose marking never
+ * finished, one at a time, starting none once REMARK_BUDGET_MS has passed
+ * since `startedAt` (the cron handler's start; default: now).
+ */
+export async function remarkStaleDiagnostics(
+  admin: SupabaseClient,
+  now: Date,
+  opts: { startedAt?: number; clock?: () => number; deps?: MarkingDeps } = {},
+): Promise<{ marked: number }> {
+  const clock = opts.clock ?? Date.now;
+  const startedAt = opts.startedAt ?? clock();
   const { data, error } = await admin
     .from("diagnostic_assessments")
     .select("id, time_limit_minutes, status, report, marking_started_at, marking_attempts")
@@ -393,7 +417,8 @@ export async function remarkStaleDiagnostics(admin: SupabaseClient, now: Date, d
   const due = ((data ?? []) as (MarkingStateRow & { id: string })[]).filter((r) => needsRemark(r, now)).slice(0, REMARK_BATCH);
   let marked = 0;
   for (const r of due) {
-    if (await markAndStore(admin, r.id, deps)) marked++;
+    if (clock() - startedAt >= REMARK_BUDGET_MS) break;
+    if (await markAndStore(admin, r.id, opts.deps)) marked++;
   }
   return { marked };
 }

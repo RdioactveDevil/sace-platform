@@ -18,9 +18,9 @@ const router = Router();
 // Called every 15 minutes by .github/workflows/automated-emails.yml with
 // `Authorization: Bearer $CRON_SECRET` (the same header Vercel Cron sends).
 // ?dry_run=1 lists what would be sent without sending; ?max=N caps the run.
-// A real run first re-marks timed diagnostics whose marking stalled (so the
-// "diagnostic done" email can go out in the same run), then sets the day's
-// recurring assignments, so their emails go out in the same run.
+// A real run first sets the day's recurring assignments, so their emails go
+// out in the same run, and last re-marks timed diagnostics whose background
+// marking stalled (lib/diagnostic-marking.ts), within a 90 s budget.
 
 function isCronCaller(req: Request): boolean {
   const secret = process.env.CRON_SECRET ?? "";
@@ -45,18 +45,11 @@ async function handleCron(req: Request, res: Response) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
+  const startedAt = Date.now();
   const dryRun = ["1", "true"].includes(String(req.query.dry_run ?? ""));
   const max = Number(req.query.max);
-  let remark: { marked: number } | { error: string } | undefined;
   let recurring: IssueSummary | { error: string } | undefined;
   if (!dryRun) {
-    // Timed diagnostics whose background marking stalled or failed.
-    try {
-      remark = await remarkStaleDiagnostics(getServiceClient(), new Date());
-    } catch (err) {
-      logger.error({ err }, "diagnostic re-marking: run failed");
-      remark = { error: err instanceof Error ? err.message : "Diagnostic re-marking failed" };
-    }
     try {
       recurring = await runRecurringAssignments(getServiceClient());
     } catch (err) {
@@ -64,19 +57,34 @@ async function handleCron(req: Request, res: Response) {
       recurring = { error: err instanceof Error ? err.message : "Recurring assignments failed" };
     }
   }
+  let summary: Awaited<ReturnType<typeof runAutomatedEmails>> | undefined;
+  let emailError: { message: string; summary?: unknown } | undefined;
   try {
-    const summary = await runAutomatedEmails(getServiceClient(), getResend(), {
+    summary = await runAutomatedEmails(getServiceClient(), getResend(), {
       dryRun,
       maxEmails: Number.isFinite(max) && max > 0 ? Math.floor(max) : undefined,
     });
     logger.info({ summary: { ...summary, planned: summary.planned?.length } }, "emails: cron run finished");
-    // The response lands in GitHub Actions logs, so don't print addresses.
-    res.json({ ...summary, planned: summary.planned?.map((p) => ({ ...p, to: maskEmail(p.to) })), recurring, remark });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Email run failed";
-    const summary = (err as { summary?: unknown }).summary;
-    res.status(500).json({ error: message, ...(summary ? { summary } : {}), recurring, remark });
+    emailError = { message: err instanceof Error ? err.message : "Email run failed", summary: (err as { summary?: unknown }).summary };
   }
+  // Last, so it never holds up the emails: timed diagnostics whose background
+  // marking stalled or failed, within what's left of the run's time.
+  let remark: { marked: number } | { error: string } | undefined;
+  if (!dryRun) {
+    try {
+      remark = await remarkStaleDiagnostics(getServiceClient(), new Date(), { startedAt });
+    } catch (err) {
+      logger.error({ err }, "diagnostic re-marking: run failed");
+      remark = { error: err instanceof Error ? err.message : "Diagnostic re-marking failed" };
+    }
+  }
+  if (emailError || !summary) {
+    res.status(500).json({ error: emailError?.message ?? "Email run failed", ...(emailError?.summary ? { summary: emailError.summary } : {}), recurring, remark });
+    return;
+  }
+  // The response lands in GitHub Actions logs, so don't print addresses.
+  res.json({ ...summary, planned: summary.planned?.map((p) => ({ ...p, to: maskEmail(p.to) })), recurring, remark });
 }
 
 router.get("/cron/emails", handleCron);

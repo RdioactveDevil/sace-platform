@@ -9,7 +9,9 @@ import {
   needsRemark,
   remarkStaleDiagnostics,
   storeTimedSubmission,
+  submitUnavailableReason,
   timedAnswers,
+  REMARK_BUDGET_MS,
   type MarkingDeps,
 } from "../src/lib/diagnostic-marking";
 
@@ -247,7 +249,7 @@ test("markAndStore gives up after the last attempt", async () => {
   assert.equal(db.tables.diagnostic_assessments[0].marking_attempts, 3);
 });
 
-test("remarkStaleDiagnostics marks only stale, unmarked timed rows, at most 5", async () => {
+function remarkDb() {
   const stale = Array.from({ length: 7 }, (_, i) =>
     completedTimedRow({ id: `s${i}`, token: `t${i}`, marking_started_at: minsAgo(20 + i), marking_attempts: 1 }));
   const others = [
@@ -257,11 +259,75 @@ test("remarkStaleDiagnostics marks only stale, unmarked timed rows, at most 5", 
     completedTimedRow({ id: "gaveup", marking_attempts: 3, marking_started_at: minsAgo(60) }),
     completedTimedRow({ id: "pending", status: "pending" }),
   ];
-  const db: FakeDb = { tables: { diagnostic_assessments: [...stale, ...others] } };
+  return { tables: { diagnostic_assessments: [...stale, ...others] } } as FakeDb;
+}
+
+test("remarkStaleDiagnostics marks only stale, unmarked timed rows, at most 2 a run", async () => {
+  const db = remarkDb();
   const calls: { q: MarkableQuestion; answer: string }[] = [];
-  const result = await remarkStaleDiagnostics(fakeSupabase(db), NOW, stubMarker(calls, fourOfFour));
-  assert.deepEqual(result, { marked: 5 });
+  const result = await remarkStaleDiagnostics(fakeSupabase(db), NOW, { deps: stubMarker(calls, fourOfFour) });
+  assert.deepEqual(result, { marked: 2 });
   const byId = Object.fromEntries(db.tables.diagnostic_assessments.map((r) => [r.id, r]));
-  assert.equal(db.tables.diagnostic_assessments.filter((r) => String(r.id).startsWith("s") && r.report).length, 5);
+  assert.equal(db.tables.diagnostic_assessments.filter((r) => String(r.id).startsWith("s") && r.report).length, 2);
   for (const id of ["fresh", "untimed", "gaveup", "pending"]) assert.equal(byId[id].report, null, id);
+});
+
+test("remarkStaleDiagnostics starts no new row once the 90 s budget is spent", async () => {
+  assert.equal(REMARK_BUDGET_MS, 90_000);
+  const start = 1_000_000;
+  // The first row is started inside the budget; marking it takes the clock past 90 s.
+  let t = start;
+  const clock = () => t;
+  const calls: { q: MarkableQuestion; answer: string }[] = [];
+  const deps: MarkingDeps = {
+    markAnswer: async (q, a) => { calls.push({ q, answer: a }); t = start + REMARK_BUDGET_MS; return fourOfFour(); },
+    narrate: async () => narrative,
+  };
+  const db = remarkDb();
+  assert.deepEqual(await remarkStaleDiagnostics(fakeSupabase(db), NOW, { startedAt: start, clock, deps }), { marked: 1 });
+  assert.equal(calls.length, 1);
+
+  // Already over budget when it begins (the email run took it): nothing started.
+  t = start + REMARK_BUDGET_MS + 1;
+  const db2 = remarkDb();
+  const calls2: { q: MarkableQuestion; answer: string }[] = [];
+  assert.deepEqual(await remarkStaleDiagnostics(fakeSupabase(db2), NOW, { startedAt: start, clock, deps: stubMarker(calls2, fourOfFour) }), { marked: 0 });
+  assert.equal(calls2.length, 0);
+  assert.equal(db2.tables.diagnostic_assessments.filter((r) => r.report).length, 1); // only "done"
+});
+
+// ── Submitting after the link's expiry ─────────────────────────────────────
+
+const DAY = 24 * 3_600_000;
+function linkRow(over: Record<string, unknown> = {}) {
+  return {
+    status: "pending" as const,
+    student_id: null,
+    prospect_email: "p@example.com",
+    created_at: new Date(NOW.getTime() - 40 * DAY).toISOString(),
+    sent_at: new Date(NOW.getTime() - 31 * DAY).toISOString(), // past the 30-day expiry
+    opened_at: null,
+    started_at: null,
+    reminded_at: null,
+    cancelled_at: null,
+    has_test: true,
+    time_limit_minutes: 50 as number | null,
+    ...over,
+  };
+}
+
+test("submitUnavailableReason: timed, started, expired → accepted", () => {
+  assert.equal(submitUnavailableReason(linkRow({ started_at: minsAgo(60) }), NOW), null);
+});
+test("submitUnavailableReason: timed, not started, expired → expired", () => {
+  assert.match(submitUnavailableReason(linkRow(), NOW) ?? "", /expired/);
+});
+test("submitUnavailableReason: untimed, started, expired → expired (as today)", () => {
+  assert.match(submitUnavailableReason(linkRow({ time_limit_minutes: null, started_at: minsAgo(60) }), NOW) ?? "", /expired/);
+});
+test("submitUnavailableReason: cancelled blocks even a started timed test", () => {
+  assert.match(submitUnavailableReason(linkRow({ started_at: minsAgo(60), cancelled_at: minsAgo(5) }), NOW) ?? "", /cancelled/);
+});
+test("submitUnavailableReason: a link still in date is open", () => {
+  assert.equal(submitUnavailableReason(linkRow({ sent_at: new Date(NOW.getTime() - DAY).toISOString() }), NOW), null);
 });
