@@ -2100,6 +2100,11 @@ export async function resendDiagnostic(assessmentId) {
   return tutorFetch(`/api/tutor/diagnostic/${encodeURIComponent(assessmentId)}/resend`, { method: 'POST' })
 }
 
+/** Mark a timed diagnostic's answers again (after background marking gave up). Resolves { ok, marked }. */
+export async function markDiagnosticAgain(assessmentId) {
+  return tutorFetch(`/api/tutor/diagnostic/${encodeURIComponent(assessmentId)}/mark`, { method: 'POST' })
+}
+
 /** Cancel a sent diagnostic: its link stops working. */
 export async function cancelDiagnostic(assessmentId) {
   return tutorFetch(`/api/tutor/diagnostic/${encodeURIComponent(assessmentId)}/cancel`, { method: 'POST' })

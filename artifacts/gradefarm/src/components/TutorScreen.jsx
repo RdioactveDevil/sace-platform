@@ -51,6 +51,7 @@ import {
   fetchBookingSettings,
   fetchDiagnosticAssessments,
   fetchDiagnosticReport,
+  markDiagnosticAgain,
   fetchQuestionnaire,
   fetchTutorResources,
   fetchTutoringSessions,
@@ -58,6 +59,8 @@ import {
 } from '../lib/db'
 import { loadCurriculumMacroGroups } from '../lib/curriculaDb'
 import { statusChip, questionnaireChip } from '../lib/diagnosticStatus'
+import { markedResult, partScores, timeTakenMinutes } from '../lib/timedReport'
+import { MarkedAnswer, MarkPoints } from './questions/WrittenAnswer'
 import { QuestionnaireTab, QuestionnaireSection, QuestionnaireAnswers } from './QuestionnaireBlocks'
 import { ASSIGNMENT_DIFFICULTIES, assignmentGoalLabel } from '../lib/engine'
 import { WEEKDAYS, defaultDueDays, describeDue, describeRepeat, localYmd } from '../lib/recurring'
@@ -1632,6 +1635,7 @@ function DiagnosticTab({ profile, theme }) {
       setRowBusy('')
     }
   }
+  const handleMarkAgain = (d) => runRowAction(d.id, () => markDiagnosticAgain(d.id))
   const handleResend = (d) => runRowAction(d.id, () => resendDiagnostic(d.id))
   const handleCancel = async (d) => {
     const ok = await confirmDialog(`Cancel this diagnostic? The link stops working${d.prospect_email ? ` for ${d.prospect_email}` : ''}, and you can't undo this.`, { confirm: 'Cancel diagnostic', cancel: 'Keep it', danger: true })
@@ -1907,7 +1911,8 @@ function DiagnosticTab({ profile, theme }) {
                 const completed = d.status === 'completed'
                 const subjectNames = (d.subjects || []).map(s => s.name).join(', ')
                 // A prospect's (link) diagnostic shows where it's up to; a roster student's keeps Pending / Completed.
-                const chip = d.student_id
+                const marking = d.status_label === 'marking' || d.status_label === 'marking_failed'
+                const chip = d.student_id && !marking
                   ? { label: completed ? 'Completed' : 'Pending', tone: completed ? 'success' : 'gold' }
                   : statusChip(d.status_label)
                 const chipColor = { success: t.success, gold: t.goldText, danger: t.danger, muted: t.textMuted }[chip.tone]
@@ -1921,7 +1926,7 @@ function DiagnosticTab({ profile, theme }) {
                 // A finished prospect's diagnostic can have a call booked; a roster student's can't.
                 const isProspect = !d.student_id && d.tutor_id === profile.id
                 const canBook = isProspect && completed && !d.booking
-                const canSignUp = isProspect && completed && !d.signup
+                const canSignUp = isProspect && completed && !marking && !d.signup
                 const suChip = signUpChip(d.signup)
                 const canSendTest = isProspect && d.status_label === 'no_test'
                 const rowName = d.submitted_by_name || d.student_name || null
@@ -1998,8 +2003,13 @@ function DiagnosticTab({ profile, theme }) {
                           {answersOpen ? 'Hide answers' : 'Show answers'}
                         </button>
                       )}
+                      {d.status_label === 'marking_failed' && d.tutor_id === profile.id && (
+                        <button onClick={() => handleMarkAgain(d)} disabled={busy} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.text, fontSize: 12, fontWeight: 700, cursor: busy ? 'default' : 'pointer', fontFamily: FONT_B }}>
+                          {busy ? 'Marking…' : 'Mark again'}
+                        </button>
+                      )}
                       {completed && (
-                        <button onClick={() => handleViewReport(d)} style={{ padding: '6px 12px', borderRadius: 7, border: 'none', background: 'var(--t-accent)', color: 'var(--t-onAccent)', fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
+                        <button onClick={() => handleViewReport(d)} disabled={marking} title={marking ? 'Not marked yet' : undefined} style={{ padding: '6px 12px', borderRadius: 7, border: 'none', background: 'var(--t-accent)', color: 'var(--t-onAccent)', fontSize: 12, fontWeight: 800, cursor: marking ? 'default' : 'pointer', opacity: marking ? 0.45 : 1, fontFamily: FONT_B }}>
                           View Report
                         </button>
                       )}
@@ -2075,6 +2085,16 @@ function DiagnosticTab({ profile, theme }) {
                         {a.submitted_by_name || a.student_name || 'Student'} — Diagnostic Report
                       </div>
                       <div style={{ fontSize: 13, color: t.textMuted }}>{a.year_level} · {(a.subjects || []).map(s => s.name).join(', ')} · {fmtDate(a.completed_at)}</div>
+                      {a.time_limit_minutes != null && (() => {
+                        const ps = partScores(a.questions, r.question_results)
+                        const mins = timeTakenMinutes(a.started_at, a.completed_at)
+                        return (
+                          <div style={{ fontSize: 13, color: t.textMuted, marginTop: 4 }}>
+                            Part 1: {ps.part1}/{ps.part1Max} · Part 2: {ps.part2}/{ps.part2Max}
+                            {mins != null && ` · Time taken: ${mins} min`}
+                          </div>
+                        )
+                      })()}
                     </div>
                     <div style={{ textAlign: 'center' }}>
                       <div style={{ fontSize: 32, fontWeight: 900, color: t.text }}>{r.total_score}<span style={{ fontSize: 18, color: t.textMuted }}>/{r.max_score}</span></div>
@@ -2191,6 +2211,7 @@ function DiagnosticTab({ profile, theme }) {
                         const studentAnswer = qr.student_answer || a.student_answers?.[String(qr.id)] || ''
                         const correctAnswer = q?.correct_answer ?? qr.correct_answer
                         const isMcq = q?.type === 'multiple_choice' && q.options?.length > 0
+                        const marked = q?.type === 'marked' ? markedResult(qr) : null
                         const label = { fontSize: 11, fontWeight: 700, color: t.textFaint, marginBottom: 4 }
                         const answerBox = (c) => ({ fontSize: 13, color: t.text, lineHeight: 1.55, padding: '8px 12px', borderRadius: 8, background: `${c}10`, border: `1px solid ${c}30`, whiteSpace: 'pre-wrap', overflowX: 'auto' })
                         return (
@@ -2221,6 +2242,13 @@ function DiagnosticTab({ profile, theme }) {
                                   })}
                                   {!studentAnswer && <div style={{ fontSize: 12, color: t.textFaint }}>Not answered</div>}
                                 </div>
+                              ) : marked ? (
+                                <>
+                                  {studentAnswer
+                                    ? <MarkedAnswer answer={studentAnswer} result={marked} theme={theme} />
+                                    : <div style={{ fontSize: 12, color: t.textFaint }}>Not answered</div>}
+                                  <MarkPoints question={q} result={marked} theme={theme} />
+                                </>
                               ) : (
                                 <>
                                   <div>
@@ -2237,7 +2265,7 @@ function DiagnosticTab({ profile, theme }) {
                                   )}
                                 </>
                               )}
-                              {qr.feedback && (
+                              {qr.feedback && !marked && (
                                 <div>
                                   <div style={label}>Feedback</div>
                                   <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.55 }}><MathText text={qr.feedback} /></div>

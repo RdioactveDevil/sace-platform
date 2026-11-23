@@ -818,6 +818,11 @@ router.get("/tutor/diagnostic/:id/report", async (req: Request, res: Response) =
       if (!rostered) return res.status(404).json({ error: "Assessment not found" });
     }
 
+    // Timed and submitted but not marked yet: nothing to show.
+    if (data.status === "completed" && !data.report) {
+      return res.status(409).json({ error: "Still marking. Try again in a minute." });
+    }
+
     // The questions come back too (with answers and solution notes), so the
     // report can show each question in full beside the student's answer.
     return res.json({ assessment: forViewer(data, tutorId), report: data.report });

@@ -17,11 +17,18 @@ export type ProspectRow = {
   cancelled_at: string | null;
   /** false: a consultation's record with no test yet (left out or null: it has one, as every older row). */
   has_test?: boolean | null;
+  /** Timed diagnostics only (50): marked in the background after the student submits. */
+  time_limit_minutes?: number | null;
+  score_total?: number | null;
+  marking_attempts?: number | null;
 };
 
-export type DiagnosticStatus = "finished" | "cancelled" | "no_test" | "expired" | "in_progress" | "opened" | "sent" | "link";
+export type DiagnosticStatus = "finished" | "marking" | "marking_failed" | "cancelled" | "no_test" | "expired" | "in_progress" | "opened" | "sent" | "link";
 
 const DAY_MS = 24 * 3_600_000;
+/** Background marking gives up after this many failed attempts. */
+export const MAX_MARKING_ATTEMPTS = 3;
+
 /** A link diagnostic's link works for this long after it was (last) sent, or created. */
 export const PROSPECT_TTL_MS = 30 * DAY_MS;
 /** Remind a prospect who hasn't started this long after it was sent, once. */
@@ -37,7 +44,13 @@ function expired(r: ProspectRow, now: Date): boolean {
 }
 
 export function diagnosticStatus(r: ProspectRow, now: Date): DiagnosticStatus {
-  if (r.status === "completed") return "finished";
+  if (r.status === "completed") {
+    // Only a timed row is marked after submitting; older rows always have a score.
+    if (r.time_limit_minutes != null && r.score_total == null) {
+      return (r.marking_attempts ?? 0) >= MAX_MARKING_ATTEMPTS ? "marking_failed" : "marking";
+    }
+    return "finished";
+  }
   if (r.cancelled_at) return "cancelled";
   if (hasNoTest(r)) return "no_test";
   if (expired(r, now)) return "expired";
@@ -91,7 +104,7 @@ export function doneRecipients(setterId: string, studentId: string | null, roste
 export const PROSPECT_COLUMNS = "status, student_id, prospect_email, created_at, sent_at, opened_at, started_at, reminded_at, cancelled_at, has_test";
 
 /** What GET /tutor/diagnostic/list selects. The client reads curriculum_id to pre-tick the sign-up subject. */
-export const DIAGNOSTIC_LIST_COLUMNS = `id, token, tutor_id, year_level, subjects, curriculum_id, student_name, submitted_by_name, score_total, score_max, completed_at, pre_call_form_url, parent_email, questionnaire, questionnaire_answers, questionnaire_submitted_at, prospect_is_parent, ${PROSPECT_COLUMNS}`;
+export const DIAGNOSTIC_LIST_COLUMNS = `id, token, tutor_id, year_level, subjects, curriculum_id, student_name, submitted_by_name, score_total, score_max, time_limit_minutes, marking_attempts, completed_at, pre_call_form_url, parent_email, questionnaire, questionnaire_answers, questionnaire_submitted_at, prospect_is_parent, ${PROSPECT_COLUMNS}`;
 
 const PRIVATE_FIELDS = [
   "questionnaire", "questionnaire_answers", "questionnaire_submitted_at", "questionnaire_reminded_at",
