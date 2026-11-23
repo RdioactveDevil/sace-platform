@@ -51,6 +51,12 @@ your answers" screen for 20–40 seconds after submitting.
   20 questions, untimed, marked while they wait, summary at the end.
 - Diagnostics already sent: they keep working exactly as now (30 marks,
   one page, untimed).
+- **English stays as it is** (the tutor's decision): a diagnostic whose
+  subjects are all English/Writing — the existing `isEnglishOnly` rule in
+  `generateQuestions` (name contains "english" or "writing") — keeps
+  today's format: 30 marks, one page, untimed, with its extended writing
+  task, and is created with `time_limit_minutes` null. Every other subject
+  gets the new timed format.
 - Taking short answers from the existing bank instead of writing new ones.
 - Holding the new bank questions back from practice.
 
@@ -86,7 +92,8 @@ your answers" screen for 20–40 seconds after submitting.
 ### The test, as stored
 
 `diagnostic_assessments` gains **`time_limit_minutes int null`** (migration).
-New consultation diagnostics are created with 50; null means the old,
+New consultation diagnostics are created with 50 (English/Writing ones with
+null: see Non-goals); null means the old,
 untimed format, so old rows and roster rows are untouched. The client and
 server pick the flow from this column, not from the questions.
 
