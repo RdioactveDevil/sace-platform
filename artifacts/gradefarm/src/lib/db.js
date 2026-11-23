@@ -2052,10 +2052,18 @@ export async function fetchStudentProgressForTutor(tutorId, studentId, { allTuto
 // ── DIAGNOSTIC ASSESSMENTS ────────────────────────────────────────────────────
 
 /** Generate questions from Claude AI (preview, no save). */
-export async function generateDiagnosticQuestions({ yearLevel, subjects }) {
+export async function generateDiagnosticQuestions({ yearLevel, subjects, format }) {
   return tutorFetch('/api/tutor/diagnostic/generate', {
     method: 'POST',
-    body: JSON.stringify({ yearLevel, subjects }),
+    body: JSON.stringify({ yearLevel, subjects, ...(format ? { format } : {}) }),
+  })
+}
+
+/** Bank-format short answers for a timed test: { questions, rejected }. One of subtopicId (database subjects) or topic (built-in). */
+export async function generateShortAnswers({ yearLevel, subject, subtopicId, topic, count }) {
+  return tutorFetch('/api/tutor/diagnostic/short-answers', {
+    method: 'POST',
+    body: JSON.stringify({ yearLevel, subject, ...(subtopicId ? { subtopicId } : {}), ...(topic ? { topic } : {}), count }),
   })
 }
 

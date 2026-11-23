@@ -5,7 +5,8 @@ import { LayoutDashboard, Users, School, ClipboardList, Video, Folder, ChartColu
 import SessionsTab from './SessionsTab'
 import ResourcesTab from './ResourcesTab'
 import StudentsTab from './StudentsTab'
-import { useTestScope, TestScopeFields, TestQuestionList, DIFF_LABEL } from './TestBuilder'
+import { useTestScope, TestScopeFields, TestQuestionList, GeneratingLabel, generateTestQuestions, DIFF_LABEL } from './TestBuilder'
+import { isEnglishOnly } from '../lib/timedDiagnostic'
 import TutorToday from './TutorToday'
 import { reportPortalBadges } from '../lib/portalNav'
 import MessagesView from './MessagesView'
@@ -43,7 +44,6 @@ import {
   deleteAssignmentSchedule,
   fetchTutorStudentWritingAttempts,
   downloadWritingReportPdf,
-  generateDiagnosticQuestions,
   createDiagnosticAssessment,
   resendDiagnostic,
   cancelDiagnostic,
@@ -1503,6 +1503,7 @@ function DiagnosticTab({ profile, theme }) {
   // ── Form state ──
   const [step, setStep] = useState('form')  // form | preview | created | list | report
   const scope = useTestScope()
+  const timedCopy = !(scope.selectedSubject && isEnglishOnly([scope.selectedSubject])) // English keeps the 30-mark copy
   const [studentName, setStudentName] = useState('')
   const [prospectEmail, setProspectEmail] = useState('')
   const [parentEmail, setParentEmail] = useState('')
@@ -1513,6 +1514,7 @@ function DiagnosticTab({ profile, theme }) {
 
   // ── Generated data ──
   const [generating, setGenerating]   = useState(false)
+  const [genProgress, setGenProgress] = useState(null)
   const [genError, setGenError]       = useState('')
   const [questions, setQuestions]     = useState([])
   const [saving, setSaving]           = useState(false)
@@ -1582,12 +1584,12 @@ function DiagnosticTab({ profile, theme }) {
 
     setGenerating(true)
     try {
-      const json = await generateDiagnosticQuestions({ yearLevel: scope.yearLevel, subjects: [subjectConfig] })
-      setQuestions(json.questions || [])
+      setQuestions(await generateTestQuestions(scope.yearLevel, subjectConfig, setGenProgress))
       setStep('preview')
     } catch (err) {
       setGenError(err.message || 'Generation failed. Please try again.')
     }
+    setGenProgress(null)
     setGenerating(false)
   }
 
@@ -1718,7 +1720,7 @@ function DiagnosticTab({ profile, theme }) {
             <div style={sectionHdr}>
               <div>
                 <div style={{ fontSize: 14.5, fontWeight: 800, color: t.text }}>New diagnostic test</div>
-                <div style={{ fontSize: 12, color: t.textMuted, marginTop: 3 }}>AI creates a 30-mark test tailored to your student's level and topics</div>
+                <div style={{ fontSize: 12, color: t.textMuted, marginTop: 3 }}>{timedCopy ? "A 50-mark, 50-minute test: 20 multiple-choice questions, then short answers like the question bank's" : "AI creates a 30-mark test tailored to your student's level and topics"}</div>
               </div>
             </div>
             <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -1752,7 +1754,7 @@ function DiagnosticTab({ profile, theme }) {
                 disabled={generating}
                 style={{ padding: '12px 28px', borderRadius: 10, border: 'none', background: generating ? t.border : 'var(--t-accent)', color: generating ? t.textMuted : 'var(--t-onAccent)', fontSize: 14, fontWeight: 800, cursor: generating ? 'not-allowed' : 'pointer', fontFamily: FONT_B, alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 10 }}
               >
-                {generating ? <><Bot size={17} aria-hidden="true" /> Generating questions… <span style={{ opacity: 0.6 }}>(30–60 sec)</span></> : <><Bot size={17} aria-hidden="true" /> Generate test</>}
+                {generating ? <GeneratingLabel progress={genProgress} size={17} /> : <><Bot size={17} aria-hidden="true" /> Generate test</>}
               </button>
             </div>
           </div>
@@ -1764,7 +1766,9 @@ function DiagnosticTab({ profile, theme }) {
             </div>
             <div style={{ padding: 20, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px,1fr))', gap: 16 }}>
               {[
-                { icon: Bot, title: 'A 30-mark test', desc: '10 easy + 10 moderate + 10 exam-style marks, tailored to the selected year level and topics' },
+                timedCopy
+                  ? { icon: Bot, title: 'A 50-mark, 50-minute test', desc: "A 50-mark, 50-minute test: 20 multiple-choice questions, then short answers like the question bank's" }
+                  : { icon: Bot, title: 'A 30-mark test', desc: '10 easy + 10 moderate + 10 exam-style marks, tailored to the selected year level and topics' },
                 { icon: Link, title: 'A link to share', desc: "Copy and share the link with the student's parent — the test runs entirely in the browser" },
                 { icon: ChartColumn, title: 'Marked by AI', desc: 'As soon as the student submits, AI marks every question and generates a diagnostic report' },
                 { icon: ClipboardList, title: 'A report for you', desc: 'Pain points, patterns and recommendations appear here in the tutor portal for your review' },
