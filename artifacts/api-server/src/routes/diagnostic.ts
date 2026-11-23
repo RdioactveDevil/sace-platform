@@ -1,9 +1,10 @@
 import { Router, type Request, type Response } from "express";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { CLAUDE_MODEL, CLAUDE_THINKING } from "../lib/anthropic-model";
 import { latexPromptRule } from "../lib/math-prompt";
-import { repairLatexJson } from "../lib/json-latex";
 import { logger } from "../lib/logger";
+import { callClaude, extractJson } from "../lib/diagnostic-claude";
+import { markAndStore, markAssessment, storeTimedSubmission, timedAnswers, type DiagnosticReport } from "../lib/diagnostic-marking";
+import { waitUntil } from "@vercel/functions";
 import { requireUser } from "../lib/auth";
 import { requireTutorPlan } from "../lib/tutor-plan";
 import { diagnosticScope, studentSummary, type ScopeTopic } from "../lib/student-diagnostic";
@@ -77,47 +78,8 @@ interface DiagnosticAssessment {
   // prospect_email is a parent's: emails to it use the parent wording.
   prospect_is_parent: boolean;
   parent_email: string | null;
-}
-
-interface QuestionResult {
-  id: number;
-  correct: boolean;
-  marks_awarded: number;
-  marks_possible: number;
-  student_answer: string;
-  correct_answer: string;
-  feedback: string;
-}
-
-interface TopicBreakdown {
-  topic: string;
-  marks_awarded: number;
-  marks_possible: number;
-  percentage: number;
-}
-
-interface SubtopicBreakdown extends TopicBreakdown {
-  subtopic: string;
-}
-
-interface DiagnosticReport {
-  total_score: number;
-  max_score: number;
-  percentage: number;
-  performance_band: string;
-  easy_score: number;
-  easy_max: number;
-  moderate_score: number;
-  moderate_max: number;
-  exam_score: number;
-  exam_max: number;
-  question_results: QuestionResult[];
-  topic_breakdown: TopicBreakdown[];
-  subtopic_breakdown?: SubtopicBreakdown[];
-  pain_points: string[];
-  patterns: string[];
-  recommendations: string[];
-  summary: string;
+  // Set for a timed (50-minute) test; null for the old untimed format.
+  time_limit_minutes: number | null;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -128,77 +90,6 @@ export function getAdminClient(): AdminClient {
   return createClient(SUPABASE_URL, serviceKey, {
     auth: { persistSession: false },
   }) as AdminClient;
-}
-
-function getBaseUrl(): string {
-  return process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL || "https://api.anthropic.com";
-}
-
-function getApiKey(): string {
-  return process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || "";
-}
-
-async function callClaude(system: string, user: string, maxTokens = 4000, jsonOnly = false): Promise<string> {
-  // Claude Haiku 5.5 rejects assistant prefill, so ask for bare JSON in the
-  // user turn instead; extractJson() still strips any fences or stray prose.
-  const content = jsonOnly
-    ? `${user}\n\nRespond with ONLY the JSON object, starting with { — no markdown fences or commentary.`
-    : user;
-  const messages = [{ role: "user", content }];
-
-  const res = await fetch(`${getBaseUrl()}/v1/messages`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": getApiKey(),
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: CLAUDE_MODEL,
-      thinking: CLAUDE_THINKING,
-      max_tokens: maxTokens,
-      system,
-      messages,
-    }),
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Claude API error: ${text.slice(0, 300)}`);
-  }
-  const data = (await res.json()) as { content?: { text: string }[]; stop_reason?: string };
-  if (data?.stop_reason && data.stop_reason !== "end_turn") {
-    logger.warn({ stop_reason: data.stop_reason, maxTokens }, "diagnostic: Claude response did not finish normally");
-  }
-  return data?.content?.[0]?.text || "";
-}
-
-/** JSON.parse that first re-escapes single-backslash LaTeX (\sqrt, \frac ...) the model writes inside strings. */
-function parseLatexJson(text: string): unknown {
-  for (const candidate of [repairLatexJson(text), text]) {
-    try { return JSON.parse(candidate); } catch { /* try next */ }
-  }
-  throw new Error("unparseable JSON");
-}
-
-function extractJson(text: string): unknown {
-  try { return parseLatexJson(text); } catch { /* continue */ }
-  // Strip markdown fences
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (fenced) {
-    try { return parseLatexJson(fenced[1].trim()); } catch { /* continue */ }
-  }
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  if (start !== -1 && end > start) {
-    try { return parseLatexJson(text.slice(start, end + 1)); } catch { /* continue */ }
-  }
-  const arrStart = text.indexOf("[");
-  const arrEnd = text.lastIndexOf("]");
-  if (arrStart !== -1 && arrEnd > arrStart) {
-    try { return parseLatexJson(text.slice(arrStart, arrEnd + 1)); } catch { /* continue */ }
-  }
-  logger.warn({ length: text.length, head: text.slice(0, 300), tail: text.slice(-300) }, "diagnostic: could not parse Claude JSON");
-  return null;
 }
 
 export async function requireTutor(req: Request, res: Response): Promise<{ admin: AdminClient; tutorId: string; tutorName: string; displayName: string | null; email: string | null } | null> {
@@ -232,14 +123,6 @@ export async function requireTutor(req: Request, res: Response): Promise<{ admin
     admin, tutorId: userData.user.id, tutorName: profile.display_name ?? "Your tutor", displayName: profile.display_name?.trim() || null,
     email: userData.user.email ?? null,
   };
-}
-
-function performanceBand(pct: number): string {
-  if (pct >= 90) return "Outstanding";
-  if (pct >= 75) return "High";
-  if (pct >= 60) return "Satisfactory";
-  if (pct >= 40) return "Developing";
-  return "Beginning";
 }
 
 // ── Generate Questions (Claude) ────────────────────────────────────────────────
@@ -463,186 +346,6 @@ Return a JSON object: { "questions": [ ... ] }`;
     .map((q, i) => ({ ...q, id: i + 1 }));
   if (questions.length < 15) throw new Error("The diagnostic couldn't be written just now. Please try again.");
   return questions;
-}
-
-// ── AI Marking ────────────────────────────────────────────────────────────────
-
-async function markAssessment(
-  questions: DiagnosticQuestion[],
-  answers: Record<string, string>,
-  yearLevel: string,
-  subjects: SubjectConfig[],
-): Promise<DiagnosticReport> {
-  // Auto-mark MC questions
-  const mcResults: QuestionResult[] = [];
-  const aiMarkingQueue: { q: DiagnosticQuestion; studentAnswer: string }[] = [];
-
-  for (const q of questions) {
-    const studentAnswer = (answers[String(q.id)] || "").trim();
-    if (q.type === "multiple_choice") {
-      const correct = studentAnswer.toUpperCase() === q.correct_answer.toUpperCase();
-      mcResults.push({
-        id: q.id,
-        correct,
-        marks_awarded: correct ? q.marks : 0,
-        marks_possible: q.marks,
-        student_answer: studentAnswer,
-        correct_answer: q.correct_answer,
-        feedback: correct ? "Correct." : `Incorrect. The correct answer is ${q.correct_answer}. ${q.solution_notes || ""}`.trim(),
-      });
-    } else {
-      aiMarkingQueue.push({ q, studentAnswer });
-    }
-  }
-
-  // AI-mark short_answer and extended_response questions
-  let aiResults: QuestionResult[] = [];
-  if (aiMarkingQueue.length > 0) {
-    const markingPayload = aiMarkingQueue.map(({ q, studentAnswer }) => ({
-      id: q.id,
-      question: q.question,
-      type: q.type,
-      marks_available: q.marks,
-      difficulty: q.difficulty,
-      topic: q.topic,
-      model_answer: q.correct_answer,
-      solution_notes: q.solution_notes || "",
-      student_answer: studentAnswer,
-    }));
-
-    const system = `You are a professional Australian curriculum marker. Mark student responses fairly and accurately. Return strict JSON only — no markdown.`;
-    const user = `Mark each student response below. For each, assign marks_awarded (0 to marks_available), give a brief feedback comment (1–2 sentences), and indicate if the student clearly understood the concept.
-
-Year level: ${yearLevel}
-Subject(s): ${subjects.map((s) => s.name).join(", ")}
-
-Questions to mark:
-${JSON.stringify(markingPayload, null, 2)}
-
-Return JSON: { "results": [ { "id": <int>, "marks_awarded": <int>, "feedback": "<string>" }, ... ] }`;
-
-    const raw = await callClaude(system, user, 4000, true);
-    const parsed = extractJson(raw) as { results?: { id: number; marks_awarded: number; feedback: string }[] } | null;
-    const rawResults = parsed && typeof parsed === "object" && Array.isArray((parsed as { results?: unknown[] }).results)
-      ? (parsed as { results: { id: number; marks_awarded: number; feedback: string }[] }).results
-      : [];
-
-    aiResults = aiMarkingQueue.map(({ q, studentAnswer }) => {
-      const found = rawResults.find((r) => r.id === q.id);
-      const marksAwarded = Math.min(q.marks, Math.max(0, found?.marks_awarded ?? 0));
-      return {
-        id: q.id,
-        correct: marksAwarded >= q.marks,
-        marks_awarded: marksAwarded,
-        marks_possible: q.marks,
-        student_answer: studentAnswer,
-        correct_answer: q.correct_answer,
-        feedback: found?.feedback || (marksAwarded > 0 ? "Partially correct." : "Incorrect or incomplete response."),
-      };
-    });
-  }
-
-  const allResults = [...mcResults, ...aiResults].sort((a, b) => a.id - b.id);
-
-  // Score breakdown by difficulty
-  const easyResults   = allResults.filter((r) => questions.find((q) => q.id === r.id)?.difficulty === "easy");
-  const modResults    = allResults.filter((r) => questions.find((q) => q.id === r.id)?.difficulty === "moderate");
-  const examResults   = allResults.filter((r) => questions.find((q) => q.id === r.id)?.difficulty === "exam");
-
-  const sum = (arr: QuestionResult[], key: "marks_awarded" | "marks_possible") => arr.reduce((s, r) => s + r[key], 0);
-
-  const totalScore = sum(allResults, "marks_awarded");
-  const maxScore   = sum(allResults, "marks_possible");
-  const pct        = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0;
-
-  // Topic breakdown
-  const topicMap: Record<string, { awarded: number; possible: number }> = {};
-  for (const r of allResults) {
-    const q = questions.find((q) => q.id === r.id);
-    if (!q) continue;
-    const key = q.topic;
-    if (!topicMap[key]) topicMap[key] = { awarded: 0, possible: 0 };
-    topicMap[key].awarded  += r.marks_awarded;
-    topicMap[key].possible += r.marks_possible;
-  }
-  const topicBreakdown: TopicBreakdown[] = Object.entries(topicMap).map(([topic, { awarded, possible }]) => ({
-    topic,
-    marks_awarded: awarded,
-    marks_possible: possible,
-    percentage: possible > 0 ? Math.round((awarded / possible) * 100) : 0,
-  }));
-
-  const subtopicMap: Record<string, SubtopicBreakdown> = {};
-  for (const r of allResults) {
-    const q = questions.find((q) => q.id === r.id);
-    if (!q?.subtopic) continue;
-    const key = `${q.topic}\u0000${q.subtopic}`;
-    subtopicMap[key] ??= { topic: q.topic, subtopic: q.subtopic, marks_awarded: 0, marks_possible: 0, percentage: 0 };
-    subtopicMap[key].marks_awarded  += r.marks_awarded;
-    subtopicMap[key].marks_possible += r.marks_possible;
-  }
-  const subtopicBreakdown = Object.values(subtopicMap).map((s) => ({
-    ...s,
-    percentage: s.marks_possible > 0 ? Math.round((s.marks_awarded / s.marks_possible) * 100) : 0,
-  }));
-
-  // Generate AI report narrative
-  const weakTopics = topicBreakdown.filter((t) => t.percentage < 60).map((t) => t.topic);
-  const reportSystem = `You are an expert educational diagnostician. Write a concise, actionable diagnostic report for a tutor based on a student's assessment results. Be specific and practical.`;
-  const reportUser = `Write a diagnostic report for a ${yearLevel} student who scored ${totalScore}/${maxScore} (${pct}%) on a ${subjects.map((s) => s.name).join("/")} diagnostic assessment.
-
-Score breakdown:
-- Easy section: ${sum(easyResults, "marks_awarded")}/${sum(easyResults, "marks_possible")}
-- Moderate section: ${sum(modResults, "marks_awarded")}/${sum(modResults, "marks_possible")}
-- Exam section: ${sum(examResults, "marks_awarded")}/${sum(examResults, "marks_possible")}
-
-Topic performance: ${JSON.stringify(topicBreakdown)}
-
-Weak topics (below 60%): ${weakTopics.join(", ") || "None — student performed well across all topics"}
-
-Question results summary:
-${allResults.map((r) => {
-  const q = questions.find((qq) => qq.id === r.id);
-  return `Q${r.id} [${q?.difficulty}/${q?.topic}]: ${r.marks_awarded}/${r.marks_possible} — ${r.feedback}`;
-}).join("\n")}
-
-Return JSON with exactly these fields:
-{
-  "pain_points": ["<specific concept or topic the student struggled with>", ...],
-  "patterns": ["<observable learning pattern or gap>", ...],
-  "recommendations": ["<specific, actionable teaching recommendation>", ...],
-  "summary": "<2–3 sentence overall summary for the tutor>"
-}
-
-Be specific. Reference actual topics and marks. Limit to 4–5 items per array.`;
-
-  const reportRaw = await callClaude(reportSystem, reportUser, 2600, true);
-  const reportParsed = extractJson(reportRaw) as {
-    pain_points?: string[];
-    patterns?: string[];
-    recommendations?: string[];
-    summary?: string;
-  } | null;
-
-  return {
-    total_score: totalScore,
-    max_score: maxScore,
-    percentage: pct,
-    performance_band: performanceBand(pct),
-    easy_score:    sum(easyResults,  "marks_awarded"),
-    easy_max:      sum(easyResults,  "marks_possible"),
-    moderate_score: sum(modResults,  "marks_awarded"),
-    moderate_max:   sum(modResults,  "marks_possible"),
-    exam_score:    sum(examResults,  "marks_awarded"),
-    exam_max:      sum(examResults,  "marks_possible"),
-    question_results: allResults,
-    topic_breakdown: topicBreakdown,
-    subtopic_breakdown: subtopicBreakdown,
-    pain_points:      reportParsed?.pain_points      || weakTopics.map((t) => `Needs work on ${t}`),
-    patterns:         reportParsed?.patterns         || [],
-    recommendations:  reportParsed?.recommendations  || [],
-    summary:          reportParsed?.summary          || `Student scored ${pct}% overall.`,
-  };
 }
 
 /** A tutor's master questionnaire (their saved one, else the default). */
@@ -1065,6 +768,33 @@ router.post("/tutor/diagnostic/:id/cancel", async (req: Request, res: Response) 
   }
 });
 
+/**
+ * POST /tutor/diagnostic/:id/mark — "Mark again" for a timed diagnostic whose
+ * background marking failed: a fresh set of attempts, marked during the request.
+ */
+router.post("/tutor/diagnostic/:id/mark", async (req: Request, res: Response) => {
+  try {
+    const ctx = await requireTutor(req, res);
+    if (!ctx) return;
+    const d = await ownLinkDiagnostic(ctx.admin, ctx.tutorId, String(req.params.id));
+    if (!d) return res.status(404).json({ error: "Diagnostic not found" });
+    if (d.time_limit_minutes == null || d.status !== "completed") return res.status(409).json({ error: "This diagnostic can't be marked." });
+    const { data: reset, error } = await ctx.admin
+      .from("diagnostic_assessments").update({ marking_attempts: 0 })
+      .eq("id", d.id).eq("status", "completed").is("report", null).select("id");
+    if (error) throw new Error(error.message);
+    if (!reset?.length) return res.status(409).json({ error: "This diagnostic has already been marked." });
+    await markAndStore(ctx.admin, d.id);
+    const { data: after, error: readErr } = await ctx.admin
+      .from("diagnostic_assessments").select("report").eq("id", d.id).maybeSingle<{ report: unknown }>();
+    if (readErr) throw new Error(readErr.message);
+    return res.json({ ok: true, marked: after?.report != null });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
 /** GET /tutor/diagnostic/:id/report — Full report for a completed assessment (its tutor or any rostered tutor) */
 router.get("/tutor/diagnostic/:id/report", async (req: Request, res: Response) => {
   try {
@@ -1205,12 +935,32 @@ router.post("/diagnostic/:token/submit", async (req: Request, res: Response) => 
       .single<DiagnosticAssessment>();
 
     if (error || !data || hasNoTest(data)) return res.status(404).json({ error: "Assessment not found" });
+    // A timed (prospect) test: stored at once, marked after the response.
+    const timed = data.time_limit_minutes != null && !data.student_id;
     if (data.status === "completed") {
+      // The client treats already_submitted as success (a retry after a lost response).
+      if (timed) return res.status(409).json({ error: "already_submitted" });
       return res.status(400).json({ error: "This assessment has already been submitted." });
     }
     if (!data.questions?.length) return res.status(409).json({ error: "This diagnostic isn't ready yet." });
     const unavailable = unavailableReason(data, new Date());
     if (unavailable) return res.status(410).json({ error: unavailable });
+
+    const questionnaireUrl = questionnaireLinkFor({ token: data.token, questionnaire: (data as { questionnaire?: unknown }).questionnaire ?? null, pre_call_form_url: null });
+
+    if (timed) {
+      // Accepted even after the deadline: a lost connection mustn't lose the test.
+      const stored = await storeTimedSubmission(admin, data.token, {
+        student_answers: timedAnswers(data.questions, answers),
+        submitted_by_name: (studentName || "").trim() || data.student_name || null,
+        completed_at: new Date().toISOString(),
+      });
+      if (stored === "already_submitted") return res.status(409).json({ error: "already_submitted" });
+      res.json({ submitted: true, preCallFormUrl: data.pre_call_form_url, questionnaireUrl });
+      // markAndStore logs its own failures; the email cron re-runs a stalled one.
+      waitUntil(markAndStore(admin, data.id));
+      return;
+    }
 
     // Run AI marking
     const report = await markAssessment(data.questions, answers, data.year_level, data.subjects);
@@ -1240,7 +990,7 @@ router.post("/diagnostic/:token/submit", async (req: Request, res: Response) => 
       band:     report.performance_band,
       report,
       preCallFormUrl: data.pre_call_form_url,
-      questionnaireUrl: questionnaireLinkFor({ token: data.token, questionnaire: (data as { questionnaire?: unknown }).questionnaire ?? null, pre_call_form_url: null }),
+      questionnaireUrl,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";
