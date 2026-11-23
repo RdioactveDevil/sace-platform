@@ -85,7 +85,8 @@ describe('optionOrder', () => {
 
   test('null when an option refers to the others', () => {
     for (const last of ['All of the above', 'None of the above', 'all the above', 'None of these', 'Both of these',
-      'Neither of them', 'Both A and B', 'B or C', 'A & D', 'Both (A) and (C)', 'Any of the above', 'Neither', 'Both', 'None']) {
+      'Neither of them', 'Both A and B', 'B or C', 'A & D', 'Both (A) and (C)', 'Any of the above', 'Neither', 'Both', 'None',
+      'All are correct', 'None are correct', 'Both are correct', 'Neither is correct', 'None is correct', 'All three', 'All four of these', 'All 4']) {
       assert.equal(optionOrder(mcq({ options: ['2', '3', '4', last] }), 'k'), null, last)
     }
   })
@@ -177,6 +178,54 @@ describe('relabelLetters', () => {
       'Option Alpha is not a letter.',
       '$\\text{option } A$ inside maths stays.',
     ]) {
+      assert.equal(r(s), s, s)
+    }
+  })
+
+  test('a bracketed letter that names something else stays', () => {
+    for (const s of [
+      'Carbon (C) has four valence electrons.',
+      'Boron (B) is in group 13.',
+      'Current is measured in amperes (A).',
+      'The dominant allele (B) codes for brown eyes.',
+      'Charge is measured in coulombs (C).',
+      'Statement (A) is true.',
+      '(A) Carbon has four valence electrons.',
+      'Carbon (C) and hydrogen (H) only.',
+      'The pair (C) and (H) bond.',
+    ]) {
+      assert.equal(r(s), s, s)
+    }
+  })
+
+  test('a bracketed letter is relabelled at the start of a clause or listed with others', () => {
+    assert.equal(r('(B) forgets to divide.'), '(A) forgets to divide.')
+    assert.equal(r('It halves. (C) is incorrect.'), 'It halves. (B) is incorrect.')
+    assert.equal(r('(A) and (C) both ignore units.'), '(D) and (B) both ignore units.')
+    assert.equal(r('Both (A) and (C) ignore units.'), 'Both (D) and (B) ignore units.')
+  })
+
+  test('a letter that starts a phrase after "answer" stays', () => {
+    for (const s of [
+      'The answer is A cell that divides.',
+      'Answer: A balanced equation is needed.',
+      'Answers: A-level chemistry covers this.',
+      'An answer A student might give.',
+      'option A-level',
+    ]) {
+      assert.equal(r(s), s, s)
+    }
+    assert.equal(r('The answer is A because it balances.'), 'The answer is D because it balances.')
+    assert.equal(r('The answer is B, since it halves.'), 'The answer is A, since it halves.')
+  })
+
+  test('"right-angled" is not a verdict', () => {
+    assert.equal(r('B is right-angled.'), 'B is right-angled.')
+    assert.equal(r('B is right.'), 'A is right.')
+  })
+
+  test('letter ranges stay', () => {
+    for (const s of ['Options A–C are all metals.', 'options A-C', 'options A to C are metals', 'Choices B through D are salts.']) {
       assert.equal(r(s), s, s)
     }
   })

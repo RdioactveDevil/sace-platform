@@ -49,6 +49,8 @@ function seededRandom(seed) {
 const REFERS_TO_ALL = /\b(?:all|none|both|neither|any|either|each)\s+(?:of\s+)?(?:the\s+)?(?:above|below|these|those|them|preceding|previous|options|answers|choices)\b/i
 // An option that is just "Both", "Neither", "None" or "All".
 const BARE_REFERENCE = /^\s*(?:all|none|both|neither)\s*[.!]?\s*$/i
+// "All are correct", "Neither is correct", "All three", "All four of these".
+const VERDICT_ON_OTHERS = /\b(?:all|none|both|neither)\s+(?:is|are)\s+(?:correct|incorrect|true|false|right|wrong)\b|\ball\s+(?:two|three|four|five|2|3|4|5)\b/i
 
 /** "A and B", "B or C", "(A) & (D)", "A, C": two of this question's letters joined. */
 function refersToLetters(text, count) {
@@ -78,7 +80,7 @@ export function optionOrder(question, seedKey) {
   if (!Array.isArray(options) || options.length < 2 || options.length > LETTERS.length) return null
   if (isPastPaper(q)) return null
   const texts = options.map(o => String(o ?? ''))
-  if (texts.some(t => REFERS_TO_ALL.test(t) || BARE_REFERENCE.test(t) || refersToLetters(t, texts.length))) return null
+  if (texts.some(t => REFERS_TO_ALL.test(t) || BARE_REFERENCE.test(t) || VERDICT_ON_OTHERS.test(t) || refersToLetters(t, texts.length))) return null
   if (texts.every((t, i) => OWN_LABEL(i).test(t))) return null
 
   const rand = seededRandom(hashKey(seedKey))
@@ -104,15 +106,31 @@ export function toDisplay(order, originalIndex) {
 }
 
 // Option references in solution and tip text. Only patterns clearly about an
-// option change: "option B", "answer (C)", "the answer is D", "options A and C",
-// a standalone "(A)", and "B is incorrect" at the start of a sentence or clause.
-const ONE_LETTER = String.raw`\(?[A-H]\)?(?![\w'’])`
+// option change, and when in doubt a letter is left alone (a missed relabel is
+// better than changing "Carbon (C)" or "A cell"):
+//   "option B", "choice D"                  a letter straight after option/choice
+//   "answer (C)", "the answer is D."         after "answer" (or "option is", ":"),
+//                                            a bare letter only before the end,
+//                                            punctuation or is/because/since/as/and/or
+//   "options A and C"                        lists of letters
+//   "(B) forgets…", "(A) and (C)"            a bracketed letter starting a sentence
+//                                            or clause, before a lower-case word,
+//                                            or listed with other bracketed letters
+//   "B is incorrect"                         at the start of a sentence or clause
+// Never a letter in a range ("A–C", "A to C") or joined by a hyphen ("A-level").
+const NO_JOIN = String.raw`(?![\w'’\-–—])`
+const ONE_LETTER = String.raw`\(?[A-H]\)?${NO_JOIN}`
+const PAREN = String.raw`\([A-H]\)${NO_JOIN}`
 const JOIN = String.raw`(?:\s*,\s*(?:and\s+|or\s+)?|\s+(?:and|or|&)\s+|\s*\/\s*)`
 const NOT_MATHS = String.raw`(?!\s*[=<>+*/^])`
-const KEYWORD = String.raw`\b((?:[Oo]ptions?|[Aa]nswers?|[Cc]hoices?|[Aa]lternatives?)(?:\s+(?:is|was|are|were)\s+|\s*:\s*|\s+|(?=\()))(${ONE_LETTER}(?:${JOIN}${ONE_LETTER})*)${NOT_MATHS}`
-const STANDALONE = String.raw`(^|[\s"'“‘\[{,;:])\(([A-H])\)(?![\w(])${NOT_MATHS}`
-const VERDICT = String.raw`(^|[.;:!?]\s+|\n\s*|,\s+|\b(?:and|but|while|whereas)\s+)([A-H])(?=\s+(?:is|was)\s+(?:not\s+|also\s+)?(?:incorrect|correct|wrong|right|the\s+(?:correct\s+|right\s+|best\s+)?answer)\b)`
-const REFERENCE = new RegExp(`${KEYWORD}|${STANDALONE}|${VERDICT}`, 'g')
+const KEYWORD = String.raw`\b(?<kw>(?:[Oo]ptions?|[Aa]nswers?|[Cc]hoices?|[Aa]lternatives?)(?:\s+(?:is|was|are|were)\s+|\s*:\s*|\s+|(?=\()))(?<kwList>${ONE_LETTER}(?:${JOIN}${ONE_LETTER})*)${NOT_MATHS}`
+const PAREN_START = String.raw`(?<psPre>^|[.;:!?]\s+|\n\s*)(?<psList>${PAREN}(?:${JOIN}${PAREN})*)(?=\s+[a-z]|\s*[:,])${NOT_MATHS}`
+const PAREN_LIST = String.raw`(?<plPre>^|[^\w])(?<plList>${PAREN}(?:${JOIN}${PAREN})+)${NOT_MATHS}`
+const VERDICT = String.raw`(?<vPre>^|[.;:!?]\s+|\n\s*|,\s+|\b(?:and|but|while|whereas)\s+)(?<vLetter>[A-H])(?=\s+(?:is|was)\s+(?:not\s+|also\s+)?(?:incorrect|correct|wrong|right|the\s+(?:correct\s+|right\s+|best\s+)?answer)(?![-\w]))`
+const REFERENCE = new RegExp(`${KEYWORD}|${PAREN_START}|${PAREN_LIST}|${VERDICT}`, 'g')
+// What may follow a bare letter after "answer" / "option is" / ":".
+const AFTER_BARE = /^(?:\s*$|\s*[.,;:!?)\]]|\s+(?:is|was|are|were|because|since|as|and|or)\b)/
+const RANGE_AFTER = /^\s*(?:[-–—]|to\b|through\b)/
 // Maths ($…$, $$…$$, \(…\), \[…\]) is left as it is.
 const MATHS = /(\$\$[\s\S]*?\$\$|\$[^$\n]*\$|\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\])/
 
@@ -122,16 +140,28 @@ const MATHS = /(\$\$[\s\S]*?\$\$|\$[^$\n]*\$|\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\])/
  */
 export function relabelLetters(text, order) {
   if (typeof text !== 'string' || !text || !Array.isArray(order)) return text
-  const map = (letter) => {
-    const i = LETTERS.indexOf(letter)
-    return i >= 0 && i < order.length ? LETTERS[toDisplay(order, i)] : letter
-  }
-  return text.split(MATHS).map((part, i) => (i % 2 ? part : part.replace(REFERENCE,
-    (m, keyword, list, parenBefore, parenLetter, verdictBefore, verdictLetter) => {
-      if (list != null) return keyword + list.replace(/[A-H]/g, map)
-      if (parenLetter != null) return `${parenBefore}(${map(parenLetter)})`
-      return verdictBefore + map(verdictLetter)
-    }))).join('')
+  const inRange = (letter) => LETTERS.indexOf(letter) < order.length
+  const map = (letter) => (inRange(letter) ? LETTERS[toDisplay(order, LETTERS.indexOf(letter))] : letter)
+  const mapAll = (s) => s.replace(/[A-H]/g, map)
+  return text.split(MATHS).map((part, i) => (i % 2 ? part : part.replace(REFERENCE, (...args) => {
+    const m = args[0]
+    const g = args[args.length - 1]
+    const after = args[args.length - 2].slice(args[args.length - 3] + m.length)
+    if (g.kwList != null) {
+      if (RANGE_AFTER.test(after)) return m
+      // A bare letter straight after option/choice is clear; after "answer",
+      // "is" or ":" it could be an article ("the answer is A cell").
+      const direct = /^(?:options?|choices?|alternatives?)\s+$/i.test(g.kw)
+      if (!/\)$/.test(g.kwList) && !direct && !AFTER_BARE.test(after)) return m
+      return g.kw + mapAll(g.kwList)
+    }
+    if (g.psList != null || g.plList != null) {
+      const list = g.psList ?? g.plList
+      if (RANGE_AFTER.test(after) || !list.match(/[A-H]/g).every(inRange)) return m
+      return (g.psPre ?? g.plPre) + mapAll(list)
+    }
+    return g.vPre + map(g.vLetter)
+  }))).join('')
 }
 
 /**
