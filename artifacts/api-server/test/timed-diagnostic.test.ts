@@ -14,6 +14,7 @@ import {
   diagnosticDifficulty,
   sanitiseQuestionsForStudent,
   toDiagnosticShortAnswer,
+  shuffleOptions,
 } from "../src/lib/timed-diagnostic";
 
 const mcq = (n: number, marks = 1) =>
@@ -125,4 +126,65 @@ test("diagnosticShortAnswers keeps a subject outside a curriculum out of the ban
   assert.equal((db.tables.questions ?? []).length, 0);
   assert.equal(out.length, 1);
   assert.equal("bank_question_id" in out[0], false);
+});
+
+// ── Option shuffling (the writer puts the right answer first) ────────────────
+
+/** A seeded generator, so the shuffle tests are repeatable. */
+function seeded(seed: number): () => number {
+  let s = seed >>> 0;
+  return () => {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    return s / 2 ** 32;
+  };
+}
+
+const oneMcq = (o: Partial<{ options: string[]; correct_answer: string; solution_notes: string; type: string }> = {}) => ({
+  id: 1, question: "Solve $3x + 7 = 22$.", type: "multiple_choice", marks: 1, difficulty: "easy", topic: "Algebra",
+  options: ["A. $x = 5$", "B. $x = 3$", "C. $x = 15$", "D. $x = 29$"], correct_answer: "A",
+  solution_notes: "Subtract 7 then divide by 3.", ...o,
+});
+
+test("shuffleOptions keeps the right answer with its text and relabels A–D in order", () => {
+  for (let seed = 1; seed <= 25; seed++) {
+    const out = shuffleOptions(oneMcq(), seeded(seed));
+    assert.deepEqual(out.options.map((o: string) => o.slice(0, 3)), ["A. ", "B. ", "C. ", "D. "]);
+    assert.deepEqual([...out.options.map((o: string) => o.slice(3))].sort(), ["$x = 15$", "$x = 29$", "$x = 3$", "$x = 5$"]);
+    const i = "ABCD".indexOf(out.correct_answer);
+    assert.equal(out.options[i].slice(3), "$x = 5$");
+  }
+});
+
+test("shuffleOptions spreads answers that were all A across every letter", () => {
+  const rand = seeded(42);
+  const counts: Record<string, number> = { A: 0, B: 0, C: 0, D: 0 };
+  for (let k = 0; k < 400; k++) counts[shuffleOptions(oneMcq(), rand).correct_answer]++;
+  for (const letter of "ABCD") assert.ok(counts[letter] > 60, `${letter} came up only ${counts[letter]} times`);
+});
+
+test("shuffleOptions follows the answer letter in the solution notes", () => {
+  const rand = () => 0; // a fixed permutation; the expected letters are read off the result
+  const out = shuffleOptions(oneMcq({ solution_notes: "Option A is right; answer (C) forgets to divide." }), rand);
+  const where = (text: string) => "ABCD"[out.options.findIndex((o: string) => o.endsWith(text))];
+  assert.equal(out.solution_notes, `Option ${where("$x = 5$")} is right; answer (${where("$x = 15$")}) forgets to divide.`);
+});
+
+test("shuffleOptions leaves options that refer to each other in place", () => {
+  for (const options of [
+    ["A. 2", "B. 3", "C. 4", "D. All of the above"],
+    ["A. 2", "B. 3", "C. Both A and B", "D. 5"],
+    ["A. 2", "B. 3", "C. 4", "D. None of these"],
+  ]) {
+    const q = oneMcq({ options, correct_answer: "D" });
+    assert.deepEqual(shuffleOptions(q, seeded(7)), q);
+  }
+});
+
+test("shuffleOptions leaves anything that isn't a well-formed four-option MCQ alone", () => {
+  const sa = { ...oneMcq(), type: "short_answer", options: undefined, correct_answer: "x = 5" };
+  assert.deepEqual(shuffleOptions(sa, seeded(3)), sa);
+  const three = oneMcq({ options: ["A. 1", "B. 2", "C. 3"] });
+  assert.deepEqual(shuffleOptions(three, seeded(3)), three);
+  const badKey = oneMcq({ correct_answer: "E" });
+  assert.deepEqual(shuffleOptions(badKey, seeded(3)), badKey);
 });

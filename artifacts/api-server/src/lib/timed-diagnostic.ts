@@ -101,3 +101,45 @@ export function toDiagnosticShortAnswer(
     ...(row.id ? { bank_question_id: row.id } : {}),
   };
 }
+
+const LETTERS = ["A", "B", "C", "D"] as const;
+// An option that points at the others ("All of the above", "Both A and B") has to stay where it is.
+const REFERS_TO_OTHERS = /\b(?:all|none|both|neither)\s+of\s+(?:the\s+)?(?:above|these|them)\b|\b[A-D]\s+(?:and|or|&)\s+[A-D]\b/i;
+// "Option A", "answer (B)", "choice C" in the marking notes follow the shuffle.
+const LETTER_REFERENCE = /\b(option|answer|choice)(\s*\(?)([A-D])(\)?)(?![A-Za-z])/gi;
+
+/**
+ * A multiple-choice question with its four options in random order and the
+ * answer key (and any "option X" in the notes) moved to match. The question
+ * writer tends to put the right answer first, so without this almost every
+ * answer would be A. Anything that isn't a well-formed four-option MCQ, or
+ * whose options refer to each other, comes back unchanged.
+ */
+export function shuffleOptions<T extends { type?: unknown; options?: unknown; correct_answer?: unknown; solution_notes?: unknown }>(
+  q: T, rand: () => number = Math.random,
+): T {
+  if (q.type !== "multiple_choice" || !Array.isArray(q.options) || q.options.length !== 4) return q;
+  const correct = String(q.correct_answer ?? "").trim().toUpperCase();
+  const from = LETTERS.indexOf(correct as (typeof LETTERS)[number]);
+  if (from < 0) return q;
+  const texts = (q.options as unknown[]).map((o) => String(o ?? "").replace(/^\s*[A-D]\s*[.)]\s*/i, ""));
+  if (texts.some((t) => REFERS_TO_OTHERS.test(t))) return q;
+
+  const order = [0, 1, 2, 3];
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  // order[newIndex] = oldIndex
+  const newIndexOf = (oldIndex: number) => order.indexOf(oldIndex);
+  const notes = typeof q.solution_notes === "string"
+    ? q.solution_notes.replace(LETTER_REFERENCE, (_m, word: string, open: string, letter: string, close: string) =>
+      `${word}${open}${LETTERS[newIndexOf(LETTERS.indexOf(letter.toUpperCase() as (typeof LETTERS)[number]))]}${close}`)
+    : q.solution_notes;
+  return {
+    ...q,
+    options: order.map((oldIndex, i) => `${LETTERS[i]}. ${texts[oldIndex]}`),
+    correct_answer: LETTERS[newIndexOf(from)],
+    ...(notes === undefined ? {} : { solution_notes: notes }),
+  };
+}
