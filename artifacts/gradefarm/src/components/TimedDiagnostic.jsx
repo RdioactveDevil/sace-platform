@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Check } from 'lucide-react'
 import { startDiagnostic, submitDiagnosticAnswers } from '../lib/db'
-import { sittingClock, timeLeft, timeUp, inWarning, loadAnswers, saveAnswers, clearAnswers, loadName, saveName } from '../lib/timedDiagnostic'
+import { sittingClock, timeLeft, timeUp, inWarning, loadAnswers, saveAnswers, clearAnswers, loadName, saveName, submitRetryDelay } from '../lib/timedDiagnostic'
 import { usesMathInput } from '../lib/subjects'
 import MathText from './MathText'
 import TableView from './TableView'
@@ -41,7 +41,8 @@ function QuestionCard({ q, number, answered, theme, children }) {
  * A timed diagnostic (`time_limit_minutes` set): a start page, then part 1
  * (the multiple-choice questions) and part 2 (the short answers) under one
  * clock that started when Start was first pressed. Answers save as they
- * change; at 0 they're submitted automatically. Submitting hands the result
+ * change; at 0 they're submitted automatically, and once time is up a failed
+ * submit is retried every 15 seconds while the page is open. Submitting hands the result
  * to `onSubmitted` (the page shows its usual "Submitted" screen): marking
  * happens on the server afterwards, so there's no marking screen here.
  */
@@ -64,10 +65,18 @@ export default function TimedDiagnostic({ token, assessment, title, theme, initi
   const [startError, setStartError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
+  const [retrying, setRetrying] = useState(false)
   const [confirmSubmit, setConfirmSubmit] = useState(false)
   const headingRef = useRef(null)
   const inFlight = useRef(false)
   const autoSubmitted = useRef(false)
+  const retryTimer = useRef(null)
+  const gone = useRef(false)
+  // Leaving the page (or submitting) stops any pending retry.
+  useEffect(() => {
+    gone.current = false
+    return () => { gone.current = true; clearTimeout(retryTimer.current) }
+  }, [])
 
   // Before paint, so the page doesn't flash the parts centred on a resume.
   useLayoutEffect(() => { onStage?.(stage) }, [stage, onStage])
@@ -119,7 +128,10 @@ export default function TimedDiagnostic({ token, assessment, title, theme, initi
   }
 
   const submit = async ({ auto = false } = {}) => {
+    // Never two at once: a retry or an auto-submit that lands mid-request waits for its outcome.
     if (inFlight.current) return
+    clearTimeout(retryTimer.current)
+    retryTimer.current = null
     setSubmitError('')
     const late = auto || (clock && timeUp(clock))
     if (!late && unanswered > 0 && !confirmSubmit) { setConfirmSubmit(true); return }
@@ -133,12 +145,18 @@ export default function TimedDiagnostic({ token, assessment, title, theme, initi
     } catch (err) {
       inFlight.current = false
       setSubmitting(false)
-      setSubmitError(err.message || "Your answers didn't send. Try again.")
+      // Once time is up (auto, or a manual submit that fails after 0:00), keep trying until it's in.
+      const delay = submitRetryDelay({ auto, clock })
+      setRetrying(delay != null)
+      if (delay != null && !gone.current) retryTimer.current = setTimeout(() => { retryTimer.current = null; submitRef.current({ auto: true }) }, delay)
+      setSubmitError(delay != null
+        ? `${err.message || "Your answers didn't send."} Trying again automatically every 15 seconds.`
+        : err.message || "Your answers didn't send. Try again.")
       setStage('part2')
     }
   }
 
-  // Time's up (on a tick, or already on load): submit, once.
+  // Time's up (on a tick, or already on load): submit, once; a failure retries from submit().
   const submitRef = useRef(submit)
   submitRef.current = submit
   useEffect(() => {
@@ -181,7 +199,7 @@ export default function TimedDiagnostic({ token, assessment, title, theme, initi
         part={part1 ? 'Part 1 of 2 · Multiple choice' : 'Part 2 of 2 · Short answer'}
         progress={submitting
           ? 'Submitting your answers…'
-          : submitError ? 'Not sent yet. Press Submit to try again.' : `${partAnswered} of ${shown.length} answered`}
+          : submitError ? (retrying ? 'Not sent yet. Trying again every 15 seconds.' : 'Not sent yet. Press Submit to try again.') : `${partAnswered} of ${shown.length} answered`}
       />
       <H1>{title}</H1>
       <h2 ref={headingRef} tabIndex={-1} style={{ margin: 0, fontSize: 16, fontWeight: 800, color: C.text, outline: 'none' }}>

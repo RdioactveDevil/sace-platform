@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { isEnglishOnly, shortAnswerRequests, pickShortAnswers, buildTimedTest, clockFrom, timeLeft, timeUp, inWarning, loadAnswers, saveAnswers, clearAnswers, sittingClock, loadName, saveName } from './timedDiagnostic.js'
+import { isEnglishOnly, shortAnswerRequests, pickShortAnswers, buildTimedTest, clockFrom, timeLeft, timeUp, inWarning, loadAnswers, saveAnswers, clearAnswers, sittingClock, loadName, saveName, submitRetryDelay, SUBMIT_RETRY_MS, timerAnnouncement } from './timedDiagnostic.js'
 
 const sa = (marks, topic, difficulty = 'moderate', n = Math.random()) => ({ type: 'marked', marks, topic, difficulty, question: `q${n}`, id: 0 })
 const sum = qs => qs.reduce((s, q) => s + q.marks, 0)
@@ -70,6 +70,34 @@ test('buildTimedTest throws the exact message when 30 marks never appear', async
         generateShortAnswers: async () => ({ questions: [sa(4, 'A')] }),
       }),
     { message: "Couldn't put together 30 marks of short answers. Try again." })
+})
+
+test('buildTimedTest retries a failed MCQ request once', async () => {
+  let mcqCalls = 0
+  const out = await buildTimedTest(
+    { yearLevel: 'Year 9', subject: { name: 'Maths' }, scopeTopics: ['A', 'B', 'C'] },
+    {
+      generateMcq: async () => {
+        if (++mcqCalls === 1) throw new Error('flaky')
+        return { questions: Array.from({ length: 20 }, (_, i) => mcq(i, 'easy')) }
+      },
+      generateShortAnswers: async ({ topic }) => ({ questions: [sa(4, topic, 'moderate'), sa(5, topic, 'exam'), sa(3, topic, 'moderate')] }),
+    })
+  assert.equal(mcqCalls, 2)
+  assert.equal(out.filter(q => q.type === 'multiple_choice').length, 20)
+})
+
+test('buildTimedTest fails when the MCQ request fails twice', async () => {
+  let mcqCalls = 0
+  await assert.rejects(
+    buildTimedTest(
+      { yearLevel: 'Year 9', subject: { name: 'Maths' }, scopeTopics: ['A', 'B', 'C'] },
+      {
+        generateMcq: async () => { mcqCalls++; throw new Error('down') },
+        generateShortAnswers: async ({ topic }) => ({ questions: [sa(4, topic, 'moderate'), sa(5, topic, 'exam'), sa(3, topic, 'moderate')] }),
+      }),
+    { message: 'down' })
+  assert.equal(mcqCalls, 2)
 })
 
 // ---- Clock and saved answers ----
@@ -191,4 +219,22 @@ test('the name round-trips and clearAnswers removes it too', () => {
     assert.equal(loadName('tok'), '')
     assert.doesNotThrow(() => saveName('tok', 'Sam'))
   } finally { restore2() }
+})
+
+test('a failed submit retries every 15 s once time is up, and not before', () => {
+  const clock = { deadline: at('2026-11-23T10:55:00Z') }
+  assert.equal(SUBMIT_RETRY_MS, 15000)
+  assert.equal(submitRetryDelay({ auto: true, clock, now: at('2026-11-23T10:55:00Z') }), 15000)
+  // A manual submit that fails after 0:00 retries too (time ran out while it was in flight).
+  assert.equal(submitRetryDelay({ clock, now: at('2026-11-23T10:55:01Z') }), 15000)
+  // Before 0:00 the student presses Submit again themselves.
+  assert.equal(submitRetryDelay({ clock, now: at('2026-11-23T10:50:00Z') }), null)
+  assert.equal(submitRetryDelay({ clock: null }), null)
+})
+
+test('the timer announces minutes left in the warning and "Time\'s up" at 0:00', () => {
+  assert.equal(timerAnnouncement(5 * MIN), '5 minutes left')
+  assert.equal(timerAnnouncement(4 * MIN + 1), '5 minutes left')
+  assert.equal(timerAnnouncement(30000), '1 minute left')
+  assert.equal(timerAnnouncement(0), "Time's up")
 })

@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Clock } from 'lucide-react'
 import { formatClock } from '../lib/examSitting'
+import { timerAnnouncement } from '../lib/timedDiagnostic'
 import { C } from './publicUi'
 
 const HIDDEN = { position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }
@@ -8,15 +9,24 @@ const HIDDEN = { position: 'absolute', width: 1, height: 1, overflow: 'hidden', 
 /**
  * The timed diagnostic's bar, sticky at the top of both parts: where the
  * student is on the left, the time left on the right. In the last five
- * minutes it turns the danger colour and tells screen readers once.
+ * minutes it turns the danger colour and tells screen readers once, and
+ * again ("Time's up") at 0:00.
  */
 export default function TimerBar({ left, warning, part, progress }) {
   const [announcement, setAnnouncement] = useState('')
+  // Each said once: the warning (minutes left) and, at 0:00, "Time's up".
+  const said = useRef({ warning: false, up: false })
   useEffect(() => {
-    if (!warning || announcement) return
-    const minutes = Math.max(1, Math.ceil(left / 60000))
-    setAnnouncement(`${minutes} minute${minutes === 1 ? '' : 's'} left`)
-  }, [warning, left, announcement])
+    if (left <= 0) {
+      if (said.current.up) return
+      said.current = { warning: true, up: true }
+      setAnnouncement(timerAnnouncement(left))
+      return
+    }
+    if (!warning || said.current.warning) return
+    said.current.warning = true
+    setAnnouncement(timerAnnouncement(left))
+  }, [warning, left])
 
   return (
     <div style={{ position: 'sticky', top: 0, zIndex: 20, background: C.bg, padding: '8px 0' }}>

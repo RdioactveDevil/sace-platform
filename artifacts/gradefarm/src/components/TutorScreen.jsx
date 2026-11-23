@@ -1526,6 +1526,8 @@ function DiagnosticTab({ profile, theme }) {
   const [createdSend, setCreatedSend] = useState(null) // { id, email, emailed, emailError } when an email was given
   const [rowBusy, setRowBusy] = useState('')            // diagnostic id being resent / cancelled
   const [rowError, setRowError] = useState('')
+  // "Mark again" that ran but didn't produce a report: a note on that row.
+  const [markNotice, setMarkNotice] = useState({})
   const [copied, setCopied]           = useState(false)
 
   // ── Past diagnostics list ──
@@ -1635,7 +1637,12 @@ function DiagnosticTab({ profile, theme }) {
       setRowBusy('')
     }
   }
-  const handleMarkAgain = (d) => runRowAction(d.id, () => markDiagnosticAgain(d.id))
+  const handleMarkAgain = async (d) => {
+    setMarkNotice(n => ({ ...n, [d.id]: '' }))
+    let marked = true
+    const ok = await runRowAction(d.id, async () => { marked = (await markDiagnosticAgain(d.id))?.marked !== false })
+    if (ok && !marked) setMarkNotice(n => ({ ...n, [d.id]: "Marking didn't finish. Try again in a few minutes." }))
+  }
   const handleResend = (d) => runRowAction(d.id, () => resendDiagnostic(d.id))
   const handleCancel = async (d) => {
     const ok = await confirmDialog(`Cancel this diagnostic? The link stops working${d.prospect_email ? ` for ${d.prospect_email}` : ''}, and you can't undo this.`, { confirm: 'Cancel diagnostic', cancel: 'Keep it', danger: true })
@@ -2014,6 +2021,9 @@ function DiagnosticTab({ profile, theme }) {
                         </button>
                       )}
                     </div>
+                    {markNotice[d.id] && (
+                      <div role="status" style={{ flexBasis: '100%', fontSize: 12.5, color: t.danger }}>{markNotice[d.id]}</div>
+                    )}
                     {hasAnswers && answersOpen && (
                       <div style={{ flexBasis: '100%', background: 'var(--t-bgSubtle)', border: '1px solid var(--t-border)', borderRadius: 10, padding: '14px 16px' }}>
                         <QuestionnaireAnswers questionnaire={d.questionnaire} answers={d.questionnaire_answers} submittedAt={d.questionnaire_submitted_at} theme={theme} />

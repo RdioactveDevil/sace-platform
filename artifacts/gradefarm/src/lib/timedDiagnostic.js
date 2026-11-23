@@ -101,7 +101,9 @@ export async function buildTimedTest({ yearLevel, subject, scopeTopics }, { gene
 
   report()
   const mcqPromise = (async () => {
-    const json = await generateMcq({ yearLevel, subjects: [subject], format: 'timed' })
+    const request = () => generateMcq({ yearLevel, subjects: [subject], format: 'timed' })
+    // One retry: a single failed MCQ request shouldn't throw away the short answers being written.
+    const json = await request().catch(() => request())
     progress.mcq = 'done'
     report()
     return json?.questions || []
@@ -168,6 +170,25 @@ export function timeLeft(clock, now = Date.now()) {
 /** True once no time is left. */
 export function timeUp(clock, now = Date.now()) {
   return timeLeft(clock, now) === 0
+}
+
+/** After a failed submit, retry this often while the page is open, once time is up. */
+export const SUBMIT_RETRY_MS = 15000
+
+/**
+ * Milliseconds until a failed submit is retried, or null for no retry. Once
+ * time is up (an auto-submit, or a manual one that fails after 0:00) the
+ * student can't be relied on to press Submit again, so it keeps retrying.
+ */
+export function submitRetryDelay({ auto = false, clock, now = Date.now() }) {
+  return auto || (clock && timeUp(clock, now)) ? SUBMIT_RETRY_MS : null
+}
+
+/** What the timer tells screen readers: the minutes left in the warning, or "Time's up" at 0:00. */
+export function timerAnnouncement(left) {
+  if (left <= 0) return "Time's up"
+  const minutes = Math.max(1, Math.ceil(left / 60000))
+  return `${minutes} minute${minutes === 1 ? '' : 's'} left`
 }
 
 /** True when five minutes or less remain and time is not yet up. */
