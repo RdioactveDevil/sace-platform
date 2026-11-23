@@ -5,7 +5,8 @@ import { LayoutDashboard, Users, School, ClipboardList, Video, Folder, ChartColu
 import SessionsTab from './SessionsTab'
 import ResourcesTab from './ResourcesTab'
 import StudentsTab from './StudentsTab'
-import { useTestScope, TestScopeFields, TestQuestionList, DIFF_LABEL } from './TestBuilder'
+import { useTestScope, TestScopeFields, TestQuestionList, GeneratingLabel, generateTestQuestions, DIFF_LABEL } from './TestBuilder'
+import { isEnglishOnly } from '../lib/timedDiagnostic'
 import TutorToday from './TutorToday'
 import { reportPortalBadges } from '../lib/portalNav'
 import MessagesView from './MessagesView'
@@ -43,7 +44,6 @@ import {
   deleteAssignmentSchedule,
   fetchTutorStudentWritingAttempts,
   downloadWritingReportPdf,
-  generateDiagnosticQuestions,
   createDiagnosticAssessment,
   resendDiagnostic,
   cancelDiagnostic,
@@ -51,6 +51,7 @@ import {
   fetchBookingSettings,
   fetchDiagnosticAssessments,
   fetchDiagnosticReport,
+  markDiagnosticAgain,
   fetchQuestionnaire,
   fetchTutorResources,
   fetchTutoringSessions,
@@ -58,6 +59,8 @@ import {
 } from '../lib/db'
 import { loadCurriculumMacroGroups } from '../lib/curriculaDb'
 import { statusChip, questionnaireChip } from '../lib/diagnosticStatus'
+import { markedResult, partScores, timeTakenMinutes } from '../lib/timedReport'
+import { MarkedAnswer, MarkPoints } from './questions/WrittenAnswer'
 import { QuestionnaireTab, QuestionnaireSection, QuestionnaireAnswers } from './QuestionnaireBlocks'
 import { ASSIGNMENT_DIFFICULTIES, assignmentGoalLabel } from '../lib/engine'
 import { WEEKDAYS, defaultDueDays, describeDue, describeRepeat, localYmd } from '../lib/recurring'
@@ -1503,6 +1506,7 @@ function DiagnosticTab({ profile, theme }) {
   // ── Form state ──
   const [step, setStep] = useState('form')  // form | preview | created | list | report
   const scope = useTestScope()
+  const timedCopy = !(scope.selectedSubject && isEnglishOnly([scope.selectedSubject])) // English keeps the 30-mark copy
   const [studentName, setStudentName] = useState('')
   const [prospectEmail, setProspectEmail] = useState('')
   const [parentEmail, setParentEmail] = useState('')
@@ -1513,6 +1517,7 @@ function DiagnosticTab({ profile, theme }) {
 
   // ── Generated data ──
   const [generating, setGenerating]   = useState(false)
+  const [genProgress, setGenProgress] = useState(null)
   const [genError, setGenError]       = useState('')
   const [questions, setQuestions]     = useState([])
   const [saving, setSaving]           = useState(false)
@@ -1521,6 +1526,8 @@ function DiagnosticTab({ profile, theme }) {
   const [createdSend, setCreatedSend] = useState(null) // { id, email, emailed, emailError } when an email was given
   const [rowBusy, setRowBusy] = useState('')            // diagnostic id being resent / cancelled
   const [rowError, setRowError] = useState('')
+  // "Mark again" that ran but didn't produce a report: a note on that row.
+  const [markNotice, setMarkNotice] = useState({})
   const [copied, setCopied]           = useState(false)
 
   // ── Past diagnostics list ──
@@ -1582,12 +1589,12 @@ function DiagnosticTab({ profile, theme }) {
 
     setGenerating(true)
     try {
-      const json = await generateDiagnosticQuestions({ yearLevel: scope.yearLevel, subjects: [subjectConfig] })
-      setQuestions(json.questions || [])
+      setQuestions(await generateTestQuestions(scope.yearLevel, subjectConfig, setGenProgress))
       setStep('preview')
     } catch (err) {
       setGenError(err.message || 'Generation failed. Please try again.')
     }
+    setGenProgress(null)
     setGenerating(false)
   }
 
@@ -1629,6 +1636,12 @@ function DiagnosticTab({ profile, theme }) {
     } finally {
       setRowBusy('')
     }
+  }
+  const handleMarkAgain = async (d) => {
+    setMarkNotice(n => ({ ...n, [d.id]: '' }))
+    let marked = true
+    const ok = await runRowAction(d.id, async () => { marked = (await markDiagnosticAgain(d.id))?.marked !== false })
+    if (ok && !marked) setMarkNotice(n => ({ ...n, [d.id]: "Marking didn't finish. Try again in a few minutes." }))
   }
   const handleResend = (d) => runRowAction(d.id, () => resendDiagnostic(d.id))
   const handleCancel = async (d) => {
@@ -1718,7 +1731,7 @@ function DiagnosticTab({ profile, theme }) {
             <div style={sectionHdr}>
               <div>
                 <div style={{ fontSize: 14.5, fontWeight: 800, color: t.text }}>New diagnostic test</div>
-                <div style={{ fontSize: 12, color: t.textMuted, marginTop: 3 }}>AI creates a 30-mark test tailored to your student's level and topics</div>
+                <div style={{ fontSize: 12, color: t.textMuted, marginTop: 3 }}>{timedCopy ? "A 50-mark, 50-minute test: 20 multiple-choice questions, then short answers like the question bank's" : "AI creates a 30-mark test tailored to your student's level and topics"}</div>
               </div>
             </div>
             <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -1752,7 +1765,7 @@ function DiagnosticTab({ profile, theme }) {
                 disabled={generating}
                 style={{ padding: '12px 28px', borderRadius: 10, border: 'none', background: generating ? t.border : 'var(--t-accent)', color: generating ? t.textMuted : 'var(--t-onAccent)', fontSize: 14, fontWeight: 800, cursor: generating ? 'not-allowed' : 'pointer', fontFamily: FONT_B, alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 10 }}
               >
-                {generating ? <><Bot size={17} aria-hidden="true" /> Generating questions… <span style={{ opacity: 0.6 }}>(30–60 sec)</span></> : <><Bot size={17} aria-hidden="true" /> Generate test</>}
+                {generating ? <GeneratingLabel progress={genProgress} size={17} /> : <><Bot size={17} aria-hidden="true" /> Generate test</>}
               </button>
             </div>
           </div>
@@ -1764,7 +1777,9 @@ function DiagnosticTab({ profile, theme }) {
             </div>
             <div style={{ padding: 20, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px,1fr))', gap: 16 }}>
               {[
-                { icon: Bot, title: 'A 30-mark test', desc: '10 easy + 10 moderate + 10 exam-style marks, tailored to the selected year level and topics' },
+                timedCopy
+                  ? { icon: Bot, title: 'A 50-mark, 50-minute test', desc: "A 50-mark, 50-minute test: 20 multiple-choice questions, then short answers like the question bank's" }
+                  : { icon: Bot, title: 'A 30-mark test', desc: '10 easy + 10 moderate + 10 exam-style marks, tailored to the selected year level and topics' },
                 { icon: Link, title: 'A link to share', desc: "Copy and share the link with the student's parent — the test runs entirely in the browser" },
                 { icon: ChartColumn, title: 'Marked by AI', desc: 'As soon as the student submits, AI marks every question and generates a diagnostic report' },
                 { icon: ClipboardList, title: 'A report for you', desc: 'Pain points, patterns and recommendations appear here in the tutor portal for your review' },
@@ -1903,7 +1918,8 @@ function DiagnosticTab({ profile, theme }) {
                 const completed = d.status === 'completed'
                 const subjectNames = (d.subjects || []).map(s => s.name).join(', ')
                 // A prospect's (link) diagnostic shows where it's up to; a roster student's keeps Pending / Completed.
-                const chip = d.student_id
+                const marking = d.status_label === 'marking' || d.status_label === 'marking_failed'
+                const chip = d.student_id && !marking
                   ? { label: completed ? 'Completed' : 'Pending', tone: completed ? 'success' : 'gold' }
                   : statusChip(d.status_label)
                 const chipColor = { success: t.success, gold: t.goldText, danger: t.danger, muted: t.textMuted }[chip.tone]
@@ -1917,7 +1933,7 @@ function DiagnosticTab({ profile, theme }) {
                 // A finished prospect's diagnostic can have a call booked; a roster student's can't.
                 const isProspect = !d.student_id && d.tutor_id === profile.id
                 const canBook = isProspect && completed && !d.booking
-                const canSignUp = isProspect && completed && !d.signup
+                const canSignUp = isProspect && completed && !marking && !d.signup
                 const suChip = signUpChip(d.signup)
                 const canSendTest = isProspect && d.status_label === 'no_test'
                 const rowName = d.submitted_by_name || d.student_name || null
@@ -1994,12 +2010,20 @@ function DiagnosticTab({ profile, theme }) {
                           {answersOpen ? 'Hide answers' : 'Show answers'}
                         </button>
                       )}
+                      {d.status_label === 'marking_failed' && d.tutor_id === profile.id && (
+                        <button onClick={() => handleMarkAgain(d)} disabled={busy} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.text, fontSize: 12, fontWeight: 700, cursor: busy ? 'default' : 'pointer', fontFamily: FONT_B }}>
+                          {busy ? 'Marking…' : 'Mark again'}
+                        </button>
+                      )}
                       {completed && (
-                        <button onClick={() => handleViewReport(d)} style={{ padding: '6px 12px', borderRadius: 7, border: 'none', background: 'var(--t-accent)', color: 'var(--t-onAccent)', fontSize: 12, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B }}>
+                        <button onClick={() => handleViewReport(d)} disabled={marking} title={marking ? 'Not marked yet' : undefined} style={{ padding: '6px 12px', borderRadius: 7, border: 'none', background: 'var(--t-accent)', color: 'var(--t-onAccent)', fontSize: 12, fontWeight: 800, cursor: marking ? 'default' : 'pointer', opacity: marking ? 0.45 : 1, fontFamily: FONT_B }}>
                           View Report
                         </button>
                       )}
                     </div>
+                    {markNotice[d.id] && (
+                      <div role="status" style={{ flexBasis: '100%', fontSize: 12.5, color: t.danger }}>{markNotice[d.id]}</div>
+                    )}
                     {hasAnswers && answersOpen && (
                       <div style={{ flexBasis: '100%', background: 'var(--t-bgSubtle)', border: '1px solid var(--t-border)', borderRadius: 10, padding: '14px 16px' }}>
                         <QuestionnaireAnswers questionnaire={d.questionnaire} answers={d.questionnaire_answers} submittedAt={d.questionnaire_submitted_at} theme={theme} />
@@ -2071,6 +2095,16 @@ function DiagnosticTab({ profile, theme }) {
                         {a.submitted_by_name || a.student_name || 'Student'} — Diagnostic Report
                       </div>
                       <div style={{ fontSize: 13, color: t.textMuted }}>{a.year_level} · {(a.subjects || []).map(s => s.name).join(', ')} · {fmtDate(a.completed_at)}</div>
+                      {a.time_limit_minutes != null && (() => {
+                        const ps = partScores(a.questions, r.question_results)
+                        const mins = timeTakenMinutes(a.started_at, a.completed_at)
+                        return (
+                          <div style={{ fontSize: 13, color: t.textMuted, marginTop: 4 }}>
+                            Part 1: {ps.part1}/{ps.part1Max} · Part 2: {ps.part2}/{ps.part2Max}
+                            {mins != null && ` · Time taken: ${mins} min`}
+                          </div>
+                        )
+                      })()}
                     </div>
                     <div style={{ textAlign: 'center' }}>
                       <div style={{ fontSize: 32, fontWeight: 900, color: t.text }}>{r.total_score}<span style={{ fontSize: 18, color: t.textMuted }}>/{r.max_score}</span></div>
@@ -2187,6 +2221,7 @@ function DiagnosticTab({ profile, theme }) {
                         const studentAnswer = qr.student_answer || a.student_answers?.[String(qr.id)] || ''
                         const correctAnswer = q?.correct_answer ?? qr.correct_answer
                         const isMcq = q?.type === 'multiple_choice' && q.options?.length > 0
+                        const marked = q?.type === 'marked' ? markedResult(qr) : null
                         const label = { fontSize: 11, fontWeight: 700, color: t.textFaint, marginBottom: 4 }
                         const answerBox = (c) => ({ fontSize: 13, color: t.text, lineHeight: 1.55, padding: '8px 12px', borderRadius: 8, background: `${c}10`, border: `1px solid ${c}30`, whiteSpace: 'pre-wrap', overflowX: 'auto' })
                         return (
@@ -2217,6 +2252,13 @@ function DiagnosticTab({ profile, theme }) {
                                   })}
                                   {!studentAnswer && <div style={{ fontSize: 12, color: t.textFaint }}>Not answered</div>}
                                 </div>
+                              ) : marked ? (
+                                <>
+                                  {studentAnswer
+                                    ? <MarkedAnswer answer={studentAnswer} result={marked} theme={theme} label="Student's answer" />
+                                    : <div style={{ fontSize: 12, color: t.textFaint }}>Not answered</div>}
+                                  <MarkPoints question={q} result={marked} theme={theme} />
+                                </>
                               ) : (
                                 <>
                                   <div>
@@ -2233,7 +2275,7 @@ function DiagnosticTab({ profile, theme }) {
                                   )}
                                 </>
                               )}
-                              {qr.feedback && (
+                              {qr.feedback && !marked && (
                                 <div>
                                   <div style={label}>Feedback</div>
                                   <div style={{ fontSize: 13, color: t.textMuted, lineHeight: 1.55 }}><MathText text={qr.feedback} /></div>

@@ -7,6 +7,8 @@ import { Check } from 'lucide-react'
 import { AuthLayout, Field } from './AuthLayout'
 import { FONT, C, Panel, H1, P, OkLine, btnStyle } from './publicUi'
 import BookingPicker from './BookingPicker'
+import McqQuestion from './DiagnosticMcq'
+import TimedDiagnostic from './TimedDiagnostic'
 
 // Colours come from the app's theme variables (set on <html> by App), so the
 // page and its maths input follow light and dark mode (see publicUi.jsx).
@@ -35,48 +37,6 @@ function difficultyGroups(questions) {
 }
 
 // ── Question components ────────────────────────────────────────────────────────
-
-function McqQuestion({ q, answer, onAnswer, disabled }) {
-  return (
-    <div role="radiogroup" aria-label={`Question ${q.id} options`} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {(q.options || []).map((opt, i) => {
-        const letter = String.fromCharCode(65 + i)
-        const selected = answer === letter
-        return (
-          <button
-            key={letter}
-            type="button"
-            role="radio"
-            aria-checked={selected}
-            className="dg-opt"
-            onClick={() => !disabled && onAnswer(q.id, letter)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 12,
-              padding: '11px 14px', borderRadius: 10, textAlign: 'left',
-              border: `1px solid ${selected ? C.text : C.border}`, boxShadow: selected ? `0 0 0 1px ${C.text}` : 'none',
-              background: C.card, color: C.text,
-              cursor: disabled ? 'default' : 'pointer', fontFamily: FONT, fontSize: 14.5,
-            }}
-          >
-            <span aria-hidden="true" style={{
-              width: 24, height: 24, borderRadius: 6, flexShrink: 0,
-              border: `1px solid ${selected ? C.text : C.border}`,
-              background: selected ? C.text : 'transparent',
-              color: selected ? C.bg : C.muted,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 11.5, fontWeight: 800,
-            }}>
-              {letter}
-            </span>
-            <span style={{ flex: 1, minWidth: 0, lineHeight: 1.5 }}>
-              <MathText text={opt.replace(/^[A-D]\.\s*/, '')} />
-            </span>
-          </button>
-        )
-      })}
-    </div>
-  )
-}
 
 function TextQuestion({ q, answer, onAnswer, disabled, isMath }) {
   const isExtended = q.type === 'extended_response'
@@ -291,6 +251,8 @@ export default function DiagnosticScreen({ theme = 'dark', onToggleTheme }) {
         // The name the tutor gave, filled in (they can change it).
         if (a.student_name) setStudentName(n => n || a.student_name)
         if (a.linked && !a.ready) { setPhase('preparing'); return }
+        // A timed (prospect) diagnostic has its own start page and two parts.
+        if (a.time_limit_minutes && !a.linked) { setPhase('timed'); return }
         setGroups(difficultyGroups(a.questions))
         setIsMath(detectIsMath(a.subjects || []))
         setPhase('intro')
@@ -386,6 +348,15 @@ export default function DiagnosticScreen({ theme = 'dark', onToggleTheme }) {
     }
   }
 
+  // The timed test's stage (start page centred, the parts from the top) and its instant submit.
+  const [timedStage, setTimedStage] = useState('start')
+  const handleTimedSubmitted = useCallback((res, name) => {
+    setStudentName(name)
+    setResult(res)
+    setPhase('result')
+    window.scrollTo(0, 0)
+  }, [])
+
   const handleRedirect = () => {
     if (result?.preCallFormUrl || assessment?.pre_call_form_url) {
       window.location.href = result?.preCallFormUrl || assessment?.pre_call_form_url
@@ -408,7 +379,7 @@ export default function DiagnosticScreen({ theme = 'dark', onToggleTheme }) {
 
   return (
     <div ref={topRef} style={{ paddingBottom: keyboardHeight }}>
-      <AuthLayout theme={theme} onToggleTheme={onToggleTheme} align={phase === 'test' ? 'top' : 'center'}>
+      <AuthLayout theme={theme} onToggleTheme={onToggleTheme} align={phase === 'test' || (phase === 'timed' && timedStage !== 'start') ? 'top' : 'center'}>
         <style>{`
           math-field {
             --caret-color: var(--t-text);
@@ -524,6 +495,18 @@ export default function DiagnosticScreen({ theme = 'dark', onToggleTheme }) {
               </div>
             </div>
           </div>
+        )}
+
+        {phase === 'timed' && assessment && (
+          <TimedDiagnostic
+            token={token}
+            assessment={assessment}
+            title={title}
+            theme={theme}
+            initialName={studentName}
+            onStage={setTimedStage}
+            onSubmitted={handleTimedSubmitted}
+          />
         )}
 
         {phase === 'submitting' && (

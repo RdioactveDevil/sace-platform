@@ -184,3 +184,34 @@ test("generated questions: ones without text are dropped; nothing usable is empt
   assert.deepEqual(out, [{ id: 1, question: "Keep", marks: 2, topic: "T" }]);
   assert.deepEqual(usableGeneratedQuestions([{ question: "" }, 5]), []);
 });
+
+const MCQS = (n: number) =>
+  Array.from({ length: n }, (_, i) => ({ id: i + 1, question: `M${i}`, type: "multiple_choice", marks: 1 }));
+const scheme = (marks: number) => [{ marks: 1, point: "first" }, ...(marks > 1 ? [{ marks: marks - 1, point: "rest" }] : [])];
+const MARKED = (list: number[]) => list.map((marks, i) => ({ id: 50 + i, question: `S${i}`, type: "marked", marks, marking_scheme: scheme(marks) }));
+const timed = (questions: unknown[]) => ({ ...TEST, questions });
+
+test("testInput checks the timed format only when a question is marked", () => {
+  assert.ok("error" in testInput(timed([...MCQS(18), ...MARKED([5, 5, 4, 4, 4, 4, 4])])));
+  const ok = testInput(timed([...MCQS(20), ...MARKED([5, 5, 4, 4, 4, 4, 4])]));
+  assert.ok(!("error" in ok));
+  assert.equal((ok as { scoreMax: number }).scoreMax, 50);
+  assert.ok(!("error" in testInput(TEST)));
+});
+
+test("testInput needs every marked question's scheme, adding up to its marks", () => {
+  const withSecond = (q: Record<string, unknown>) => {
+    const list: Record<string, unknown>[] = MARKED([5, 5, 4, 4, 4, 4, 4]);
+    list[1] = { ...list[1], ...q };
+    return testInput(timed([...MCQS(20), ...list]));
+  };
+  const err = (r: ReturnType<typeof testInput>) => ("error" in r ? r.error : "");
+  assert.match(err(withSecond({ marking_scheme: undefined })), /Short answer 2 needs a marking scheme that adds up to its 5 marks/);
+  assert.match(err(withSecond({ marking_scheme: [] })), /Short answer 2/);
+  assert.match(err(withSecond({ marking_scheme: [{ marks: 0, point: "nothing" }] })), /Short answer 2/);
+  assert.match(err(withSecond({ marking_scheme: [{ marks: 2, point: "a" }, { marks: 2, point: "b" }] })), /adds up to its 5 marks/);
+  assert.match(err(withSecond({ marking_scheme: [{ marks: 3, point: "a" }, { marks: 3, point: "b" }] })), /Short answer 2/);
+  assert.ok(!("error" in withSecond({ marking_scheme: [{ marks: 2, point: "a" }, { marks: 3, point: "b", guidance: "g" }] })));
+  // Untimed tests have no marked questions and need no scheme.
+  assert.ok(!("error" in testInput(TEST)));
+});

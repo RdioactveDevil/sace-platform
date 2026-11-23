@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Fragment } from 'react'
 import { Bot } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 import MathText from './MathText'
 import DiagnosticScopePicker from './DiagnosticScopePicker'
 import { fetchLiveCurricula } from '../lib/curriculaDb'
 import { dbDiagnosticSubject } from '../lib/diagnosticSubjects'
-import { generateDiagnosticQuestions } from '../lib/db'
+import { generateDiagnosticQuestions, generateShortAnswers, fetchSubjectTopics } from '../lib/db'
+import { isEnglishOnly, buildTimedTest } from '../lib/timedDiagnostic'
 import { YEAR_LEVEL_GROUPS, ALL_DIAGNOSTIC_SUBJECTS, getSubjectsForYearLevel } from '../lib/diagnosticTestScope'
 
 const FONT_B = "'Plus Jakarta Sans', sans-serif"
@@ -77,6 +78,49 @@ export function useTestScope() {
     changeYear, changeSubject, toggleTopic, setSelectedSubtopicIds, setWritingType,
     buildConfig, validate, reset,
   }
+}
+
+/**
+ * Generate a test's questions for a scope config (from `useTestScope().buildConfig()`).
+ * English-only subjects keep today's single request; everything else is a timed
+ * test: 20 multiple choice + 30 marks of short answers. `onProgress` gets the
+ * timed build's progress.
+ */
+export async function generateTestQuestions(yearLevel, config, onProgress) {
+  if (isEnglishOnly([config])) {
+    const json = await generateDiagnosticQuestions({ yearLevel, subjects: [config] })
+    const questions = json.questions || []
+    if (!questions.length) throw new Error('No questions came back. Please try again.')
+    return questions
+  }
+  let scopeTopics
+  if (config.curriculumId) {
+    // The same topic tree the scope picker shows: the ticked subtopics, or everything if none are ticked.
+    const tree = await fetchSubjectTopics(config.curriculumId)
+    const ticked = new Set(config.subtopicIds || [])
+    scopeTopics = tree
+      .map(tp => ({ topic: tp.name, subtopicIds: tp.subtopics.map(st => st.id).filter(id => !ticked.size || ticked.has(id)) }))
+      .filter(tp => tp.subtopicIds.length)
+    if (!scopeTopics.length) throw new Error('This subject has no subtopics to build a test from.')
+  } else {
+    scopeTopics = (config.topics || []).map(topic => ({ topic }))
+  }
+  return buildTimedTest(
+    { yearLevel, subject: config, scopeTopics },
+    { generateMcq: generateDiagnosticQuestions, generateShortAnswers, onProgress },
+  )
+}
+
+/** The Generate button's label: while a timed test is built it shows what is being written. */
+export function GeneratingLabel({ progress, size = 16 }) {
+  return (
+    <>
+      <Bot size={size} aria-hidden="true" />
+      {progress
+        ? <> {progress.mcq === 'done' ? 'Multiple choice done' : 'Writing multiple choice…'} · Short answers {progress.shortDone} of {progress.shortTotal}… <span style={{ opacity: 0.6 }}>(2–3 minutes)</span></>
+        : <> Generating questions… <span style={{ opacity: 0.6 }}>(30–60 sec)</span></>}
+    </>
+  )
 }
 
 /** Year level, subject, topics and (for writing subjects) the task type. */
@@ -174,16 +218,27 @@ export function TestQuestionList({ questions, theme, maxHeight = 440 }) {
   const modMarks  = questions.filter(q => q.difficulty === 'moderate').reduce((s, q) => s + q.marks, 0)
   const examMarks = questions.filter(q => q.difficulty === 'exam').reduce((s, q) => s + q.marks, 0)
   const totalMarks = questions.reduce((s, q) => s + q.marks, 0)
+  const timed = questions.some(q => q.type === 'marked')
+  const mcMarks = questions.filter(q => q.type === 'multiple_choice').reduce((s, q) => s + q.marks, 0)
+  const firstMarked = questions.findIndex(q => q.type === 'marked')
+  const summary = timed
+    ? [
+        { label: 'Part 1 — Multiple choice', marks: mcMarks, color: t.success },
+        { label: 'Part 2 — Short answer', marks: totalMarks - mcMarks, color: t.danger },
+        { label: 'TOTAL', marks: totalMarks, color: t.text },
+      ]
+    : [
+        { label: 'Section A — Foundation', marks: easyMarks, color: t.success },
+        { label: 'Section B — Core Skills', marks: modMarks,  color: 'var(--t-goldText)' },
+        { label: 'Section C — Exam Style', marks: examMarks, color: t.danger },
+        { label: 'TOTAL', marks: totalMarks, color: t.text },
+      ]
+  const partHeading = { padding: '10px 20px', fontSize: 12, fontWeight: 800, color: t.text, background: 'var(--t-bgSubtle)', borderBottom: `1px solid ${t.border}` }
   return (
     <>
       {/* Mark summary */}
       <div style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', gap: 20, flexWrap: 'wrap' }}>
-        {[
-          { label: 'Section A — Foundation', marks: easyMarks, color: t.success },
-          { label: 'Section B — Core Skills', marks: modMarks,  color: 'var(--t-goldText)' },
-          { label: 'Section C — Exam Style', marks: examMarks, color: t.danger },
-          { label: 'TOTAL', marks: totalMarks, color: t.text },
-        ].map(s => (
+        {summary.map(s => (
           <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 11, color: t.textMuted }}>{s.label}</span>
             <span style={{ fontSize: 15, fontWeight: 800, color: s.color }}>{s.marks}</span>
@@ -196,7 +251,10 @@ export function TestQuestionList({ questions, theme, maxHeight = 440 }) {
         {questions.map((q, i) => {
           const dc = q.difficulty === 'easy' ? t.success : q.difficulty === 'moderate' ? t.goldText : t.danger
           return (
-            <div key={q.id} style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+            <Fragment key={q.id}>
+            {timed && i === 0 && <div style={partHeading}>Part 1 — Multiple choice</div>}
+            {timed && i === firstMarked && <div style={partHeading}>Part 2 — Short answer</div>}
+            <div style={{ padding: '14px 20px', borderBottom: `1px solid ${t.border}`, display: 'flex', gap: 14, alignItems: 'flex-start' }}>
               <div style={{ width: 30, height: 30, borderRadius: 8, background: `${dc}15`, border: `1px solid ${dc}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: dc, flexShrink: 0 }}>
                 Q{i + 1}
               </div>
@@ -217,8 +275,27 @@ export function TestQuestionList({ questions, theme, maxHeight = 440 }) {
                     ))}
                   </div>
                 )}
+                {q.type === 'marked' && (
+                  <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {(q.marking_scheme || []).length > 0 && (
+                      <div style={{ fontSize: 12, color: t.textMuted }}>
+                        <div style={{ fontWeight: 700, marginBottom: 2 }}>Mark points</div>
+                        {q.marking_scheme.map((m, k) => (
+                          <div key={k} style={{ paddingLeft: 4 }}>{m.marks} mark{m.marks !== 1 ? 's' : ''} — <MathText text={m.point} /></div>
+                        ))}
+                      </div>
+                    )}
+                    {q.solution && (
+                      <div style={{ fontSize: 12, color: t.success }}>
+                        <div style={{ fontWeight: 700, marginBottom: 2 }}>Model answer</div>
+                        <div style={{ whiteSpace: 'pre-wrap' }}><MathText text={q.solution} style={{ whiteSpace: 'pre-wrap' }} /></div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
+            </Fragment>
           )
         })}
       </div>
@@ -236,6 +313,7 @@ export function TestBuilder({ theme, value, onChange, idPrefix = 'test', labelSt
   const t = THEMES[theme]
   const scope = useTestScope()
   const [generating, setGenerating] = useState(false)
+  const [progress, setProgress] = useState(null)
   const [error, setError] = useState('')
 
   const generate = async () => {
@@ -245,13 +323,12 @@ export function TestBuilder({ theme, value, onChange, idPrefix = 'test', labelSt
     const config = scope.buildConfig()
     setGenerating(true)
     try {
-      const json = await generateDiagnosticQuestions({ yearLevel: scope.yearLevel, subjects: [config] })
-      const questions = json.questions || []
-      if (!questions.length) setError('No questions came back. Please try again.')
-      else onChange({ yearLevel: scope.yearLevel, subjects: [config], questions })
+      const questions = await generateTestQuestions(scope.yearLevel, config, setProgress)
+      onChange({ yearLevel: scope.yearLevel, subjects: [config], questions })
     } catch (err) {
       setError(err.message || 'Generation failed. Please try again.')
     }
+    setProgress(null)
     setGenerating(false)
   }
 
@@ -283,7 +360,7 @@ export function TestBuilder({ theme, value, onChange, idPrefix = 'test', labelSt
         disabled={generating || disabled}
         style={{ padding: '10px 22px', borderRadius: 10, border: 'none', background: generating ? t.border : 'var(--t-accent)', color: generating ? t.textMuted : 'var(--t-onAccent)', fontSize: 13, fontWeight: 800, cursor: generating ? 'not-allowed' : 'pointer', fontFamily: FONT_B, alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 10 }}
       >
-        {generating ? <><Bot size={16} aria-hidden="true" /> Generating questions… <span style={{ opacity: 0.6 }}>(30–60 sec)</span></> : <><Bot size={16} aria-hidden="true" /> Generate test</>}
+        {generating ? <GeneratingLabel progress={progress} /> : <><Bot size={16} aria-hidden="true" /> Generate test</>}
       </button>
     </div>
   )

@@ -5,6 +5,7 @@
  * tutor's name already resolved (see prospectSenderName).
  */
 import type { EmailContent } from "./email";
+import { TIMED_SENTENCE } from "./prospect-emails";
 
 type Email = { subject: string; content: EmailContent };
 type Who = "guest" | "parent" | "tutor";
@@ -117,6 +118,8 @@ export function consultationInviteEmail(o: {
   joinUrl: string;
   questionnaireUrl?: string | null;
   testUrl?: string | null;
+  /** The test is the timed (50-mark, 50-minute) paper. */
+  timed?: boolean;
 }): Email {
   const parent = o.audience === "parent";
   const when = formatCallTime(o.start, o.timeZone);
@@ -129,7 +132,7 @@ export function consultationInviteEmail(o: {
   ];
   const items: string[] = [];
   if (o.questionnaireUrl) items.push(`A short questionnaire: ${o.questionnaireUrl}`);
-  if (o.testUrl) items.push(`A diagnostic test (about 30–45 minutes): ${o.testUrl}`);
+  if (o.testUrl) items.push(o.timed ? `A diagnostic test: ${o.testUrl}` : `A diagnostic test (about 30–45 minutes): ${o.testUrl}`);
   if (items.length) {
     const what2 = o.questionnaireUrl && o.testUrl ? "a short questionnaire and a diagnostic test" : o.testUrl ? "a diagnostic test" : "a short questionnaire";
     const todo =
@@ -143,6 +146,8 @@ export function consultationInviteEmail(o: {
         ? `Before the call, ${name || "your child"} has ${what2}. Please pass ${items.length > 1 ? "these links" : "this link"} on to ${name ? "them" : "your child"}.`
         : `Before the call, ${o.tutorName} would appreciate it if you could ${todo}.`,
       ...items,
+      // The test is always the last item, so "It" is the test.
+      ...(o.testUrl && o.timed ? [TIMED_SENTENCE] : []),
     );
   }
   return {

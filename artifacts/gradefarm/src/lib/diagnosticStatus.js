@@ -6,6 +6,8 @@ const CHIPS = {
   opened:      { label: 'Opened', tone: 'gold' },
   in_progress: { label: 'In progress', tone: 'gold' },
   finished:    { label: 'Finished', tone: 'success' },
+  marking:     { label: 'Marking…', tone: 'gold' },
+  marking_failed: { label: 'Marking failed', tone: 'danger' },
   expired:     { label: 'Expired', tone: 'danger' },
   cancelled:   { label: 'Cancelled', tone: 'muted' },
   no_test:     { label: 'No test', tone: 'muted' },

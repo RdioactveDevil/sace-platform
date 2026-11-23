@@ -9,6 +9,7 @@ import { subjectProfile } from "./subject-profile";
 import { latexPromptRule } from "./math-prompt";
 import { LEARNING_OBJECTIVES } from "../routes/generate-questions";
 import { buildStructures, chemDiagramColumn, chemPromptLines, describeChemDiagram, sanitizeChemFigure } from "./chem-figures";
+import { toDiagnosticShortAnswer, type DiagnosticQuestion } from "./timed-diagnostic";
 
 /**
  * Writing 'marked' questions: SACE-style short-answer questions worth several
@@ -22,6 +23,7 @@ import { buildStructures, chemDiagramColumn, chemPromptLines, describeChemDiagra
 export const MARKED_MAX_COUNT = 3;
 
 type RawStructure = { smiles: string; label: string; formula: string; style: string };
+export type CheckedDraft = Draft;
 type Draft = {
   question: string; total_marks: number; marking_scheme: MarkPoint[]; solution: string; difficulty: number;
   structures?: RawStructure[]; figure_json?: string; table_json?: string;
@@ -117,13 +119,13 @@ const CHECK_SCHEMA = {
 } as const;
 
 export type MarkedTarget = {
-  curriculumId: string;
+  curriculumId: string | null;
   subject: string;
   levelLabel: string;
   examContext: string;
   topic: string;
   subtopic: string;
-  subtopicId: string;
+  subtopicId: string | null;
 };
 
 /** The curriculum, topic and subtopic a subtopic id belongs to, or null. */
@@ -220,7 +222,7 @@ export function draftRules(t: Pick<MarkedTarget, "subject" | "levelLabel">): str
 
 async function writeDrafts(t: MarkedTarget, count: number, difficulty: number | "mixed", admin: SupabaseClient): Promise<Draft[]> {
   const exemplars = await fetchExemplarContext(admin, t.subject, t.subtopic);
-  const scope = await scopeForSubtopic(admin, t.subtopicId);
+  const scope = t.subtopicId ? await scopeForSubtopic(admin, t.subtopicId) : null;
   const { data: existing } = await admin
     .from("questions").select("question")
     .eq("subject", t.subject).eq("subtopic", t.subtopic).eq("question_type", "marked").limit(40);
@@ -296,12 +298,12 @@ export type MarkedGenResult = {
   rejected: { question: string; reason: string }[];
 };
 
-/** Write, check and save up to MARKED_MAX_COUNT questions for one subtopic. */
-export async function generateMarkedQuestions(
+/** Write and check up to MARKED_MAX_COUNT questions for one subtopic, without saving them. */
+export async function writeCheckedMarkedQuestions(
   admin: SupabaseClient,
   t: MarkedTarget,
   opts: { count: number; difficulty: number | "mixed" },
-): Promise<MarkedGenResult> {
+): Promise<{ drafts: CheckedDraft[]; rejected: { question: string; reason: string }[] }> {
   const count = Math.max(1, Math.min(MARKED_MAX_COUNT, Math.round(opts.count) || 1));
   const drafts = await writeDrafts(t, count, opts.difficulty, admin);
   const rejected: MarkedGenResult["rejected"] = [];
@@ -357,8 +359,18 @@ export async function generateMarkedQuestions(
     }
   }));
 
+  return { drafts: checked.filter((d): d is Draft => !!d), rejected };
+}
+
+/** Save checked drafts to the bank; nothing is saved for a target outside a curriculum. */
+export async function saveMarkedQuestions(
+  admin: SupabaseClient,
+  t: MarkedTarget,
+  drafts: CheckedDraft[],
+): Promise<Record<string, unknown>[]> {
+  if (!t.curriculumId) return [];
   const now = new Date().toISOString();
-  const rows = checked.filter((d): d is Draft => !!d).map((d) => ({
+  const rows = drafts.map((d) => ({
     id: `ai_marked_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     subject: t.subject,
     topic: t.topic,
@@ -379,8 +391,33 @@ export async function generateMarkedQuestions(
     tip: null,
     created_at: now,
   }));
-  if (!rows.length) return { saved: [], rejected };
+  if (!rows.length) return [];
   const { data, error } = await admin.from("questions").insert(rows).select("*");
   if (error) throw new Error(`Saving the questions failed: ${error.message}`);
-  return { saved: data ?? [], rejected };
+  return data ?? [];
+}
+
+/**
+ * Checked drafts as timed-diagnostic short answers. A curriculum subject's are
+ * saved to the bank first, so each carries its bank_question_id; a subject
+ * outside a curriculum has no bank and its drafts are used as they are.
+ */
+export async function diagnosticShortAnswers(
+  admin: SupabaseClient,
+  t: MarkedTarget,
+  drafts: CheckedDraft[],
+): Promise<DiagnosticQuestion[]> {
+  type Row = Parameters<typeof toDiagnosticShortAnswer>[0];
+  const rows: Row[] = t.curriculumId ? (await saveMarkedQuestions(admin, t, drafts)) as unknown as Row[] : drafts;
+  return rows.map((r) => toDiagnosticShortAnswer(r, t.topic, t.subtopic));
+}
+
+/** Write, check and save up to MARKED_MAX_COUNT questions for one subtopic. */
+export async function generateMarkedQuestions(
+  admin: SupabaseClient,
+  t: MarkedTarget,
+  opts: { count: number; difficulty: number | "mixed" },
+): Promise<MarkedGenResult> {
+  const { drafts, rejected } = await writeCheckedMarkedQuestions(admin, t, opts);
+  return { saved: await saveMarkedQuestions(admin, t, drafts), rejected };
 }

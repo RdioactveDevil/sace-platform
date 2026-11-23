@@ -13,6 +13,11 @@ test('each status has a label and a tone', () => {
   assert.deepEqual(statusChip('no_test'), { label: 'No test', tone: 'muted' })
 })
 
+test('marking statuses', () => {
+  assert.deepEqual(statusChip('marking'), { label: 'Marking…', tone: 'gold' })
+  assert.deepEqual(statusChip('marking_failed'), { label: 'Marking failed', tone: 'danger' })
+})
+
 test('an unknown status shows as itself', () => {
   assert.deepEqual(statusChip('waived'), { label: 'waived', tone: 'muted' })
 })

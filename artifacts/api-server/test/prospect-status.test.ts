@@ -6,6 +6,7 @@ import {
   doneRecipients,
   dueForProspectReminder,
   normaliseProspectEmail,
+  resendResetFields,
   unavailableReason,
   type ProspectRow,
 } from "../src/lib/prospect-status";
@@ -69,6 +70,15 @@ test("resend: sent, opened, in progress or expired, with an email", () => {
   assert.equal(canResend(row({ prospect_email: null, sent_at: null }), after(DAY)), false);
 });
 
+test("resending a pending timed prospect test gives it a fresh clock; untimed rows keep theirs", () => {
+  assert.deepEqual(resendResetFields(row({ started_at: SENT, opened_at: SENT, time_limit_minutes: 50 })), { started_at: null, opened_at: null });
+  assert.deepEqual(resendResetFields(row({ time_limit_minutes: 50 })), { started_at: null, opened_at: null });
+  assert.deepEqual(resendResetFields(row({ started_at: SENT, opened_at: SENT })), {});
+  assert.deepEqual(resendResetFields(row({ started_at: SENT, time_limit_minutes: null })), {});
+  assert.deepEqual(resendResetFields(row({ started_at: SENT, time_limit_minutes: 50, student_id: "s1" })), {});
+  assert.deepEqual(resendResetFields(row({ started_at: SENT, time_limit_minutes: 50, status: "completed" })), {});
+});
+
 test("one reminder two days after sending, if not started", () => {
   const due = after(2 * DAY + 60_000);
   assert.equal(dueForProspectReminder(row(), due), true);
@@ -128,4 +138,23 @@ test("another tutor sees a prospect diagnostic without the private prospect data
   }
   assert.equal(other.score_total, 5);
   assert.deepEqual(forViewer(full, "setter"), full);
+});
+
+test("a timed completed row with no score yet is marking; after 3 attempts it is marking_failed", () => {
+  const timed = { status: "completed" as const, time_limit_minutes: 50, score_total: null };
+  assert.equal(diagnosticStatus(row({ ...timed, marking_attempts: 0 }), after(DAY)), "marking");
+  assert.equal(diagnosticStatus(row({ ...timed, marking_attempts: 2 }), after(DAY)), "marking");
+  assert.equal(diagnosticStatus(row({ ...timed, marking_attempts: 3 }), after(DAY)), "marking_failed");
+});
+
+test("completed rows with a score, or not timed, stay finished", () => {
+  assert.equal(diagnosticStatus(row({ status: "completed", time_limit_minutes: 50, score_total: 31 }), after(DAY)), "finished");
+  assert.equal(diagnosticStatus(row({ status: "completed", time_limit_minutes: null, score_total: null }), after(DAY)), "finished");
+  assert.equal(diagnosticStatus(row({ status: "completed", score_total: null }), after(DAY)), "finished");
+});
+
+test("marking rows can't be resent", () => {
+  const timed = { status: "completed" as const, time_limit_minutes: 50, score_total: null };
+  assert.equal(canResend(row({ ...timed, marking_attempts: 0 }), after(DAY)), false);
+  assert.equal(canResend(row({ ...timed, marking_attempts: 3 }), after(DAY)), false);
 });

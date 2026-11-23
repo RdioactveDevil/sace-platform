@@ -25,7 +25,10 @@ export function prospectSenderName(displayName: string | null | undefined): stri
 }
 
 type Audience = "student" | "parent";
-type DiagOpts = { senderName: string; subject: string; link: string; audience?: Audience; studentName?: string };
+type DiagOpts = { senderName: string; subject: string; link: string; audience?: Audience; studentName?: string; timed?: boolean };
+
+/** Replaces the "30–45 minutes" and "no time limit" sentences for a timed (50-mark, 50-minute) test. */
+export const TIMED_SENTENCE = "It's 50 marks in 50 minutes, timed, in one sitting: start it when you have an uninterrupted hour.";
 
 /** "Sam Lee" for a parent's wording, else "your child"; and the pronoun to match. */
 const childOf = (studentName?: string) => {
@@ -43,8 +46,10 @@ export function prospectDiagnosticEmail(o: DiagOpts): Email {
         heading: "A diagnostic test to pass on",
         paragraphs: [
           "Hi,",
-          `${o.senderName} has sent ${c.name} a diagnostic test for ${o.subject}. It takes about 30–45 minutes, and the results will be gone through on the consultation call.`,
-          `Please pass this link on to ${c.them}. It's best done alone, in one sitting, and it's fine to be unsure. There's no time limit.`,
+          `${o.senderName} has sent ${c.name} a diagnostic test for ${o.subject}. ${o.timed ? TIMED_SENTENCE : "It takes about 30–45 minutes,"} ${o.timed ? "The results" : "and the results"} will be gone through on the consultation call.`,
+          o.timed
+            ? `Please pass this link on to ${c.them}. It's best done alone, and it's fine to be unsure.`
+            : `Please pass this link on to ${c.them}. It's best done alone, in one sitting, and it's fine to be unsure. There's no time limit.`,
         ],
         cta: { label: "Open the diagnostic", url: o.link },
         footer: `You're receiving this because ${o.senderName} entered your email address on gradefarm. If you don't know them, you can ignore this email.`,
@@ -56,8 +61,10 @@ export function prospectDiagnosticEmail(o: DiagOpts): Email {
     content: {
       heading: "Your diagnostic test",
       paragraphs: [
-        `${o.senderName} has sent you a diagnostic test for ${o.subject}. It takes about 30–45 minutes, and the results will be gone through with you on your consultation call.`,
-        "Do it on your own, in one sitting, and answer what you can: it's fine to be unsure. There's no time limit.",
+        `${o.senderName} has sent you a diagnostic test for ${o.subject}. ${o.timed ? TIMED_SENTENCE : "It takes about 30–45 minutes,"} ${o.timed ? "The results" : "and the results"} will be gone through with you on your consultation call.`,
+        o.timed
+          ? "Do it on your own, and answer what you can: it's fine to be unsure."
+          : "Do it on your own, in one sitting, and answer what you can: it's fine to be unsure. There's no time limit.",
       ],
       cta: { label: "Start the diagnostic", url: o.link },
       footer: `You're receiving this because ${o.senderName} entered your email address on gradefarm. If you don't know them, you can ignore this email.`,
@@ -76,7 +83,7 @@ export function prospectReminderEmail(o: DiagOpts): Email {
         paragraphs: [
           "Hi,",
           `${o.senderName} sent ${c.name} a diagnostic test for ${o.subject} a couple of days ago and it hasn't been started yet.`,
-          `It takes about 30–45 minutes, and the results will be gone through on the consultation call. Please pass this link on to ${c.them}.`,
+          `${o.timed ? `${TIMED_SENTENCE} The results` : "It takes about 30–45 minutes, and the results"} will be gone through on the consultation call. Please pass this link on to ${c.them}.`,
         ],
         cta: { label: "Open the diagnostic", url: o.link },
         footer: `You're receiving this because ${o.senderName} entered your email address on gradefarm. This is the only reminder we'll send. If you don't know them, you can ignore this email.`,
@@ -89,7 +96,7 @@ export function prospectReminderEmail(o: DiagOpts): Email {
       heading: "Your diagnostic is waiting",
       paragraphs: [
         `${o.senderName} sent you a diagnostic test for ${o.subject} a couple of days ago and it hasn't been started yet.`,
-        "It takes about 30–45 minutes, and the results will be gone through with you on your consultation call.",
+        `${o.timed ? `${TIMED_SENTENCE} The results` : "It takes about 30–45 minutes, and the results"} will be gone through with you on your consultation call.`,
       ],
       cta: { label: "Start the diagnostic", url: o.link },
       footer: `You're receiving this because ${o.senderName} entered your email address on gradefarm. This is the only reminder we'll send. If you don't know them, you can ignore this email.`,

@@ -941,7 +941,7 @@ async function runDiagnosticDone(job: Job) {
 
 type ProspectReminderRow = ProspectRow & {
   id: string; token: string; tutor_id: string; subjects: { name?: string }[] | null;
-  student_name: string | null; prospect_is_parent: boolean | null;
+  student_name: string | null; prospect_is_parent: boolean | null; time_limit_minutes: number | null;
 };
 
 /** Once, a couple of days after a prospect was emailed a diagnostic they haven't started. */
@@ -950,7 +950,7 @@ async function runProspectReminders(job: Job) {
   const nowMs = job.now.getTime();
   const { data, error } = await job.admin
     .from("diagnostic_assessments")
-    .select("id, token, tutor_id, subjects, status, student_id, prospect_email, created_at, sent_at, opened_at, started_at, reminded_at, cancelled_at, has_test, student_name, prospect_is_parent")
+    .select("id, token, tutor_id, subjects, status, student_id, prospect_email, created_at, sent_at, opened_at, started_at, reminded_at, cancelled_at, has_test, student_name, prospect_is_parent, time_limit_minutes")
     .is("student_id", null)
     .not("prospect_email", "is", null)
     .eq("status", "pending")
@@ -980,6 +980,7 @@ async function runProspectReminders(job: Job) {
       senderName: prospectSenderName(displayNames.get(d.tutor_id)),
       subject: d.subjects?.[0]?.name || "your subject",
       link: prospectLink(d.token),
+      timed: !!d.time_limit_minutes,
       // The primary address may be a parent's (a consultation booked for a parent only).
       ...(d.prospect_is_parent ? { audience: "parent" as const, studentName: d.student_name ?? undefined } : {}),
     });

@@ -2052,10 +2052,18 @@ export async function fetchStudentProgressForTutor(tutorId, studentId, { allTuto
 // ── DIAGNOSTIC ASSESSMENTS ────────────────────────────────────────────────────
 
 /** Generate questions from Claude AI (preview, no save). */
-export async function generateDiagnosticQuestions({ yearLevel, subjects }) {
+export async function generateDiagnosticQuestions({ yearLevel, subjects, format }) {
   return tutorFetch('/api/tutor/diagnostic/generate', {
     method: 'POST',
-    body: JSON.stringify({ yearLevel, subjects }),
+    body: JSON.stringify({ yearLevel, subjects, ...(format ? { format } : {}) }),
+  })
+}
+
+/** Bank-format short answers for a timed test: { questions, rejected }. One of subtopicId (database subjects) or topic (built-in). */
+export async function generateShortAnswers({ yearLevel, subject, subtopicId, topic, count }) {
+  return tutorFetch('/api/tutor/diagnostic/short-answers', {
+    method: 'POST',
+    body: JSON.stringify({ yearLevel, subject, ...(subtopicId ? { subtopicId } : {}), ...(topic ? { topic } : {}), count }),
   })
 }
 
@@ -2090,6 +2098,11 @@ export async function addTestToDiagnostic(assessmentId, { yearLevel, subjects, q
 /** Email a sent diagnostic to the prospect again (restarts its 30 days and its reminder). */
 export async function resendDiagnostic(assessmentId) {
   return tutorFetch(`/api/tutor/diagnostic/${encodeURIComponent(assessmentId)}/resend`, { method: 'POST' })
+}
+
+/** Mark a timed diagnostic's answers again (after background marking gave up). Resolves { ok, marked }. */
+export async function markDiagnosticAgain(assessmentId) {
+  return tutorFetch(`/api/tutor/diagnostic/${encodeURIComponent(assessmentId)}/mark`, { method: 'POST' })
 }
 
 /** Cancel a sent diagnostic: its link stops working. */
@@ -2158,9 +2171,15 @@ export async function loadDiagnosticByToken(token) {
   return json
 }
 
-/** A prospect pressed Start on their diagnostic (public — no auth). For the tutor's list; failures don't matter. */
+/**
+ * A prospect pressed Start on their diagnostic (public — no auth). Untimed: for the tutor's list, failures
+ * don't matter. Timed: `{ ok, startedAt, timeLimitMinutes, serverNow }` starts the clock.
+ */
 export async function startDiagnostic(token) {
-  await fetch(`/api/diagnostic/${encodeURIComponent(token)}/start`, { method: 'POST' })
+  const res = await fetch(`/api/diagnostic/${encodeURIComponent(token)}/start`, { method: 'POST' })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(json.error || "The test didn't start. Try again.")
+  return json
 }
 
 /** Submit student answers (public — no auth). */
@@ -2171,6 +2190,8 @@ export async function submitDiagnosticAnswers(token, { studentName, answers }) {
     body: JSON.stringify({ studentName, answers }),
   })
   const json = await res.json().catch(() => ({}))
+  // A timed test that's already in (a retry after a lost response): that's a success.
+  if (res.status === 409 && json.error === 'already_submitted') return { submitted: true }
   if (!res.ok) throw new Error(json.error || 'Submission failed.')
   return json
 }

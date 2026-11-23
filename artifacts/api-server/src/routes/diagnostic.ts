@@ -1,16 +1,20 @@
 import { Router, type Request, type Response } from "express";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { CLAUDE_MODEL, CLAUDE_THINKING } from "../lib/anthropic-model";
 import { latexPromptRule } from "../lib/math-prompt";
-import { repairLatexJson } from "../lib/json-latex";
 import { logger } from "../lib/logger";
+import { callClaude, extractJson } from "../lib/diagnostic-claude";
+import { markAndStore, markAssessment, storeTimedSubmission, submitUnavailableReason, timedAnswers, type DiagnosticReport } from "../lib/diagnostic-marking";
+import { waitUntil } from "@vercel/functions";
 import { requireUser } from "../lib/auth";
 import { requireTutorPlan } from "../lib/tutor-plan";
 import { diagnosticScope, studentSummary, type ScopeTopic } from "../lib/student-diagnostic";
 import { scopeOutline, subtopicFieldHint } from "../lib/diagnostic-outline";
 import { signupState } from "../lib/prospect-signup";
-import { DIAGNOSTIC_LIST_COLUMNS, PROSPECT_COLUMNS, canResend, diagnosticStatus, forViewer, hasNoTest, normaliseProspectEmail, unavailableReason, type ProspectRow } from "../lib/prospect-status";
+import { DIAGNOSTIC_LIST_COLUMNS, PROSPECT_COLUMNS, canResend, diagnosticStatus, forViewer, hasNoTest, normaliseProspectEmail, resendResetFields, type ProspectRow } from "../lib/prospect-status";
 import { testInput, usableGeneratedQuestions } from "../lib/new-consultation";
+import { MCQ_COUNT, isEnglishOnly, sanitiseQuestionsForStudent, timeLimitFor, type DiagnosticQuestion } from "../lib/timed-diagnostic";
+import { MARKED_MAX_COUNT, diagnosticShortAnswers, loadMarkedTarget, writeCheckedMarkedQuestions, type MarkedTarget } from "../lib/marked-questions";
+import type { MarkPoint } from "../lib/marking";
 import { prospectDiagnosticEmail, prospectLink, prospectSenderName } from "../lib/prospect-emails";
 import { getResend, sendEmail } from "../lib/email";
 import { DEFAULT_QUESTIONNAIRE, countRedFlags, questionnaireLinkFor, questionnaireStatus, snapshotFrom, validateQuestionnaire, type Answers, type Questionnaire } from "../lib/questionnaire";
@@ -28,19 +32,6 @@ interface SupabaseAdminAuth {
   getUser(jwt: string): Promise<{ data: { user: AuthUser | null }; error: { message: string } | null }>;
 }
 type AdminClient = SupabaseClient & { auth: SupabaseAdminAuth };
-
-interface DiagnosticQuestion {
-  id: number;
-  question: string;
-  type: "multiple_choice" | "short_answer" | "extended_response";
-  options?: string[];
-  correct_answer: string;
-  marks: number;
-  difficulty: "easy" | "moderate" | "exam";
-  topic: string;
-  subtopic?: string;
-  solution_notes?: string;
-}
 
 interface SubjectConfig {
   name: string;
@@ -87,47 +78,8 @@ interface DiagnosticAssessment {
   // prospect_email is a parent's: emails to it use the parent wording.
   prospect_is_parent: boolean;
   parent_email: string | null;
-}
-
-interface QuestionResult {
-  id: number;
-  correct: boolean;
-  marks_awarded: number;
-  marks_possible: number;
-  student_answer: string;
-  correct_answer: string;
-  feedback: string;
-}
-
-interface TopicBreakdown {
-  topic: string;
-  marks_awarded: number;
-  marks_possible: number;
-  percentage: number;
-}
-
-interface SubtopicBreakdown extends TopicBreakdown {
-  subtopic: string;
-}
-
-interface DiagnosticReport {
-  total_score: number;
-  max_score: number;
-  percentage: number;
-  performance_band: string;
-  easy_score: number;
-  easy_max: number;
-  moderate_score: number;
-  moderate_max: number;
-  exam_score: number;
-  exam_max: number;
-  question_results: QuestionResult[];
-  topic_breakdown: TopicBreakdown[];
-  subtopic_breakdown?: SubtopicBreakdown[];
-  pain_points: string[];
-  patterns: string[];
-  recommendations: string[];
-  summary: string;
+  // Set for a timed (50-minute) test; null for the old untimed format.
+  time_limit_minutes: number | null;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -138,77 +90,6 @@ export function getAdminClient(): AdminClient {
   return createClient(SUPABASE_URL, serviceKey, {
     auth: { persistSession: false },
   }) as AdminClient;
-}
-
-function getBaseUrl(): string {
-  return process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL || "https://api.anthropic.com";
-}
-
-function getApiKey(): string {
-  return process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || "";
-}
-
-async function callClaude(system: string, user: string, maxTokens = 4000, jsonOnly = false): Promise<string> {
-  // Claude Haiku 5.5 rejects assistant prefill, so ask for bare JSON in the
-  // user turn instead; extractJson() still strips any fences or stray prose.
-  const content = jsonOnly
-    ? `${user}\n\nRespond with ONLY the JSON object, starting with { — no markdown fences or commentary.`
-    : user;
-  const messages = [{ role: "user", content }];
-
-  const res = await fetch(`${getBaseUrl()}/v1/messages`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": getApiKey(),
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: CLAUDE_MODEL,
-      thinking: CLAUDE_THINKING,
-      max_tokens: maxTokens,
-      system,
-      messages,
-    }),
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Claude API error: ${text.slice(0, 300)}`);
-  }
-  const data = (await res.json()) as { content?: { text: string }[]; stop_reason?: string };
-  if (data?.stop_reason && data.stop_reason !== "end_turn") {
-    logger.warn({ stop_reason: data.stop_reason, maxTokens }, "diagnostic: Claude response did not finish normally");
-  }
-  return data?.content?.[0]?.text || "";
-}
-
-/** JSON.parse that first re-escapes single-backslash LaTeX (\sqrt, \frac ...) the model writes inside strings. */
-function parseLatexJson(text: string): unknown {
-  for (const candidate of [repairLatexJson(text), text]) {
-    try { return JSON.parse(candidate); } catch { /* try next */ }
-  }
-  throw new Error("unparseable JSON");
-}
-
-function extractJson(text: string): unknown {
-  try { return parseLatexJson(text); } catch { /* continue */ }
-  // Strip markdown fences
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (fenced) {
-    try { return parseLatexJson(fenced[1].trim()); } catch { /* continue */ }
-  }
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  if (start !== -1 && end > start) {
-    try { return parseLatexJson(text.slice(start, end + 1)); } catch { /* continue */ }
-  }
-  const arrStart = text.indexOf("[");
-  const arrEnd = text.lastIndexOf("]");
-  if (arrStart !== -1 && arrEnd > arrStart) {
-    try { return parseLatexJson(text.slice(arrStart, arrEnd + 1)); } catch { /* continue */ }
-  }
-  logger.warn({ length: text.length, head: text.slice(0, 300), tail: text.slice(-300) }, "diagnostic: could not parse Claude JSON");
-  return null;
 }
 
 export async function requireTutor(req: Request, res: Response): Promise<{ admin: AdminClient; tutorId: string; tutorName: string; displayName: string | null; email: string | null } | null> {
@@ -244,19 +125,6 @@ export async function requireTutor(req: Request, res: Response): Promise<{ admin
   };
 }
 
-function performanceBand(pct: number): string {
-  if (pct >= 90) return "Outstanding";
-  if (pct >= 75) return "High";
-  if (pct >= 60) return "Satisfactory";
-  if (pct >= 40) return "Developing";
-  return "Beginning";
-}
-
-// Strip correct answers before sending to student
-function sanitiseQuestionsForStudent(questions: DiagnosticQuestion[]): Omit<DiagnosticQuestion, "correct_answer" | "solution_notes">[] {
-  return questions.map(({ correct_answer: _ca, solution_notes: _sn, ...rest }) => rest);
-}
-
 // ── Generate Questions (Claude) ────────────────────────────────────────────────
 
 async function generateQuestions(
@@ -264,10 +132,11 @@ async function generateQuestions(
   subjects: SubjectConfig[],
   // For a curriculum subject: "- Topic: Sub; Sub" lines ("" = the whole course).
   outline?: string,
+  // "timed": the multiple-choice part (20 one-mark questions) of the timed paper.
+  format?: "timed",
 ): Promise<DiagnosticQuestion[]> {
-  const isEnglishOnly = subjects.every((s) =>
-    s.name.toLowerCase().includes("english") || s.name.toLowerCase().includes("writing")
-  );
+  const englishOnly = isEnglishOnly(subjects);
+  const mcqOnly = format === "timed" && !englishOnly;
 
   const subjectDesc = subjects.map((s) => {
     const base = outline === undefined
@@ -279,7 +148,13 @@ async function generateQuestions(
     return base;
   }).join("; ");
 
-  const writingInstructions = isEnglishOnly
+  const writingInstructions = mcqOnly
+    ? `
+For this ${subjects.map((s) => s.name).join("/")} assessment, write exactly ${MCQ_COUNT} multiple-choice questions, each worth 1 mark, and nothing else:
+- About 7 easy, 7 moderate and 6 exam-style questions, ordered from easiest to hardest.
+- Spread them across the topics and subtopics in scope rather than clustering on one.
+`
+    : englishOnly
     ? `
 Since this is an English/Writing assessment:
 - EASY (10 marks): 5 multiple-choice questions (2 marks each) on language features, grammar, punctuation, vocabulary, and literacy skills appropriate for ${yearLevel}.
@@ -298,7 +173,33 @@ For this ${subjects.map((s) => s.name).join("/")} assessment:
 ${latexPromptRule("$$\\int_0^1 x^2\\,dx$$")}
 Example question: "Given $f(x) = x^3 - 3x$, find $f'(x)$ and determine the nature of the stationary points."`;
 
-  const user = `Create a 30-mark diagnostic assessment for ${yearLevel}.
+  const user = mcqOnly ? `Create a ${MCQ_COUNT}-question multiple-choice quiz for ${yearLevel}.
+Subject(s): ${subjectDesc}
+
+${writingInstructions}
+
+Each question object must have these exact fields:
+{
+  "id": <integer starting at 1>,
+  "question": "<full question text with LaTeX math wrapped in $ or $$ delimiters>",
+  "type": "multiple_choice",
+  "options": ["A. ...", "B. ...", "C. ...", "D. ..."],  (use LaTeX in options too)
+  "correct_answer": "<letter e.g. 'B'>",
+  "marks": 1,
+  "difficulty": "easy" | "moderate" | "exam",
+  "topic": "<topic name from the provided list>",
+  "subtopic": "${subtopicFieldHint(outline)}",
+  "solution_notes": "<brief explanation of the correct answer>"
+}
+
+STRICT RULES:
+1. Exactly ${MCQ_COUNT} questions, each worth exactly 1 mark.
+2. Questions must be appropriate for ${yearLevel} level, and exactly one option is correct.
+3. Use real curriculum-aligned content for the given subject(s) and topics.${outline ? " Copy topic and subtopic names exactly as written in the list." : ""}
+4. Exactly 4 options labelled A, B, C, D; correct_answer is a single uppercase letter.
+5. ALL mathematical expressions MUST use LaTeX formatting with $ delimiters.
+
+Return a JSON object: { "questions": [ ...array of question objects... ] }` : `Create a 30-mark diagnostic assessment for ${yearLevel}.
 Subject(s): ${subjectDesc}
 
 ${writingInstructions}
@@ -346,7 +247,20 @@ Return a JSON object: { "questions": [ ...array of question objects... ] }`;
   questions = usableGeneratedQuestions(questions) as unknown as DiagnosticQuestion[];
   if (!questions.length) throw new Error("No questions were generated. Please try again.");
 
+  if (mcqOnly) {
+    const valid = questions
+      .map((q) => validQuestion(q))
+      .filter((q): q is DiagnosticQuestion => !!q && q.type === "multiple_choice")
+      .map((q, i) => ({ ...q, id: i + 1, marks: 1 }));
+    if (valid.length < MCQ_COUNT) throw new NotEnoughQuestions();
+    return valid.slice(0, MCQ_COUNT);
+  }
+
   return questions;
+}
+
+class NotEnoughQuestions extends Error {
+  constructor() { super("Not enough questions came back. Try again."); }
 }
 
 // ── Curriculum diagnostic (tutor-included subjects) ───────────────────────────
@@ -434,186 +348,6 @@ Return a JSON object: { "questions": [ ... ] }`;
   return questions;
 }
 
-// ── AI Marking ────────────────────────────────────────────────────────────────
-
-async function markAssessment(
-  questions: DiagnosticQuestion[],
-  answers: Record<string, string>,
-  yearLevel: string,
-  subjects: SubjectConfig[],
-): Promise<DiagnosticReport> {
-  // Auto-mark MC questions
-  const mcResults: QuestionResult[] = [];
-  const aiMarkingQueue: { q: DiagnosticQuestion; studentAnswer: string }[] = [];
-
-  for (const q of questions) {
-    const studentAnswer = (answers[String(q.id)] || "").trim();
-    if (q.type === "multiple_choice") {
-      const correct = studentAnswer.toUpperCase() === q.correct_answer.toUpperCase();
-      mcResults.push({
-        id: q.id,
-        correct,
-        marks_awarded: correct ? q.marks : 0,
-        marks_possible: q.marks,
-        student_answer: studentAnswer,
-        correct_answer: q.correct_answer,
-        feedback: correct ? "Correct." : `Incorrect. The correct answer is ${q.correct_answer}. ${q.solution_notes || ""}`.trim(),
-      });
-    } else {
-      aiMarkingQueue.push({ q, studentAnswer });
-    }
-  }
-
-  // AI-mark short_answer and extended_response questions
-  let aiResults: QuestionResult[] = [];
-  if (aiMarkingQueue.length > 0) {
-    const markingPayload = aiMarkingQueue.map(({ q, studentAnswer }) => ({
-      id: q.id,
-      question: q.question,
-      type: q.type,
-      marks_available: q.marks,
-      difficulty: q.difficulty,
-      topic: q.topic,
-      model_answer: q.correct_answer,
-      solution_notes: q.solution_notes || "",
-      student_answer: studentAnswer,
-    }));
-
-    const system = `You are a professional Australian curriculum marker. Mark student responses fairly and accurately. Return strict JSON only — no markdown.`;
-    const user = `Mark each student response below. For each, assign marks_awarded (0 to marks_available), give a brief feedback comment (1–2 sentences), and indicate if the student clearly understood the concept.
-
-Year level: ${yearLevel}
-Subject(s): ${subjects.map((s) => s.name).join(", ")}
-
-Questions to mark:
-${JSON.stringify(markingPayload, null, 2)}
-
-Return JSON: { "results": [ { "id": <int>, "marks_awarded": <int>, "feedback": "<string>" }, ... ] }`;
-
-    const raw = await callClaude(system, user, 4000, true);
-    const parsed = extractJson(raw) as { results?: { id: number; marks_awarded: number; feedback: string }[] } | null;
-    const rawResults = parsed && typeof parsed === "object" && Array.isArray((parsed as { results?: unknown[] }).results)
-      ? (parsed as { results: { id: number; marks_awarded: number; feedback: string }[] }).results
-      : [];
-
-    aiResults = aiMarkingQueue.map(({ q, studentAnswer }) => {
-      const found = rawResults.find((r) => r.id === q.id);
-      const marksAwarded = Math.min(q.marks, Math.max(0, found?.marks_awarded ?? 0));
-      return {
-        id: q.id,
-        correct: marksAwarded >= q.marks,
-        marks_awarded: marksAwarded,
-        marks_possible: q.marks,
-        student_answer: studentAnswer,
-        correct_answer: q.correct_answer,
-        feedback: found?.feedback || (marksAwarded > 0 ? "Partially correct." : "Incorrect or incomplete response."),
-      };
-    });
-  }
-
-  const allResults = [...mcResults, ...aiResults].sort((a, b) => a.id - b.id);
-
-  // Score breakdown by difficulty
-  const easyResults   = allResults.filter((r) => questions.find((q) => q.id === r.id)?.difficulty === "easy");
-  const modResults    = allResults.filter((r) => questions.find((q) => q.id === r.id)?.difficulty === "moderate");
-  const examResults   = allResults.filter((r) => questions.find((q) => q.id === r.id)?.difficulty === "exam");
-
-  const sum = (arr: QuestionResult[], key: "marks_awarded" | "marks_possible") => arr.reduce((s, r) => s + r[key], 0);
-
-  const totalScore = sum(allResults, "marks_awarded");
-  const maxScore   = sum(allResults, "marks_possible");
-  const pct        = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0;
-
-  // Topic breakdown
-  const topicMap: Record<string, { awarded: number; possible: number }> = {};
-  for (const r of allResults) {
-    const q = questions.find((q) => q.id === r.id);
-    if (!q) continue;
-    const key = q.topic;
-    if (!topicMap[key]) topicMap[key] = { awarded: 0, possible: 0 };
-    topicMap[key].awarded  += r.marks_awarded;
-    topicMap[key].possible += r.marks_possible;
-  }
-  const topicBreakdown: TopicBreakdown[] = Object.entries(topicMap).map(([topic, { awarded, possible }]) => ({
-    topic,
-    marks_awarded: awarded,
-    marks_possible: possible,
-    percentage: possible > 0 ? Math.round((awarded / possible) * 100) : 0,
-  }));
-
-  const subtopicMap: Record<string, SubtopicBreakdown> = {};
-  for (const r of allResults) {
-    const q = questions.find((q) => q.id === r.id);
-    if (!q?.subtopic) continue;
-    const key = `${q.topic}\u0000${q.subtopic}`;
-    subtopicMap[key] ??= { topic: q.topic, subtopic: q.subtopic, marks_awarded: 0, marks_possible: 0, percentage: 0 };
-    subtopicMap[key].marks_awarded  += r.marks_awarded;
-    subtopicMap[key].marks_possible += r.marks_possible;
-  }
-  const subtopicBreakdown = Object.values(subtopicMap).map((s) => ({
-    ...s,
-    percentage: s.marks_possible > 0 ? Math.round((s.marks_awarded / s.marks_possible) * 100) : 0,
-  }));
-
-  // Generate AI report narrative
-  const weakTopics = topicBreakdown.filter((t) => t.percentage < 60).map((t) => t.topic);
-  const reportSystem = `You are an expert educational diagnostician. Write a concise, actionable diagnostic report for a tutor based on a student's assessment results. Be specific and practical.`;
-  const reportUser = `Write a diagnostic report for a ${yearLevel} student who scored ${totalScore}/${maxScore} (${pct}%) on a ${subjects.map((s) => s.name).join("/")} diagnostic assessment.
-
-Score breakdown:
-- Easy section: ${sum(easyResults, "marks_awarded")}/${sum(easyResults, "marks_possible")}
-- Moderate section: ${sum(modResults, "marks_awarded")}/${sum(modResults, "marks_possible")}
-- Exam section: ${sum(examResults, "marks_awarded")}/${sum(examResults, "marks_possible")}
-
-Topic performance: ${JSON.stringify(topicBreakdown)}
-
-Weak topics (below 60%): ${weakTopics.join(", ") || "None — student performed well across all topics"}
-
-Question results summary:
-${allResults.map((r) => {
-  const q = questions.find((qq) => qq.id === r.id);
-  return `Q${r.id} [${q?.difficulty}/${q?.topic}]: ${r.marks_awarded}/${r.marks_possible} — ${r.feedback}`;
-}).join("\n")}
-
-Return JSON with exactly these fields:
-{
-  "pain_points": ["<specific concept or topic the student struggled with>", ...],
-  "patterns": ["<observable learning pattern or gap>", ...],
-  "recommendations": ["<specific, actionable teaching recommendation>", ...],
-  "summary": "<2–3 sentence overall summary for the tutor>"
-}
-
-Be specific. Reference actual topics and marks. Limit to 4–5 items per array.`;
-
-  const reportRaw = await callClaude(reportSystem, reportUser, 2600, true);
-  const reportParsed = extractJson(reportRaw) as {
-    pain_points?: string[];
-    patterns?: string[];
-    recommendations?: string[];
-    summary?: string;
-  } | null;
-
-  return {
-    total_score: totalScore,
-    max_score: maxScore,
-    percentage: pct,
-    performance_band: performanceBand(pct),
-    easy_score:    sum(easyResults,  "marks_awarded"),
-    easy_max:      sum(easyResults,  "marks_possible"),
-    moderate_score: sum(modResults,  "marks_awarded"),
-    moderate_max:   sum(modResults,  "marks_possible"),
-    exam_score:    sum(examResults,  "marks_awarded"),
-    exam_max:      sum(examResults,  "marks_possible"),
-    question_results: allResults,
-    topic_breakdown: topicBreakdown,
-    subtopic_breakdown: subtopicBreakdown,
-    pain_points:      reportParsed?.pain_points      || weakTopics.map((t) => `Needs work on ${t}`),
-    patterns:         reportParsed?.patterns         || [],
-    recommendations:  reportParsed?.recommendations  || [],
-    summary:          reportParsed?.summary          || `Student scored ${pct}% overall.`,
-  };
-}
-
 /** A tutor's master questionnaire (their saved one, else the default). */
 export async function masterQuestionnaire(admin: AdminClient, tutorId: string): Promise<{ questionnaire: Questionnaire; isDefault: boolean }> {
   const { data, error } = await admin
@@ -633,9 +367,10 @@ router.post("/tutor/diagnostic/generate", async (req: Request, res: Response) =>
     if (!ctx) return;
     const { admin } = ctx;
 
-    const { yearLevel, subjects } = req.body as {
+    const { yearLevel, subjects, format } = req.body as {
       yearLevel: string;
       subjects: SubjectConfig[];
+      format?: "timed";
     };
 
     if (!yearLevel?.trim()) return res.status(400).json({ error: "yearLevel is required" });
@@ -645,8 +380,45 @@ router.post("/tutor/diagnostic/generate", async (req: Request, res: Response) =>
     const outline = curriculumId
       ? scopeOutline((await diagnosticScope(admin, curriculumId, subjects[0].subtopicIds ?? [])).topics)
       : undefined;
-    const questions = await generateQuestions(yearLevel.trim(), subjects, outline);
+    const timed = format === "timed" && !isEnglishOnly(subjects) ? ("timed" as const) : undefined;
+    const questions = await generateQuestions(yearLevel.trim(), subjects, outline, timed);
     return res.json({ questions });
+  } catch (err) {
+    if (err instanceof NotEnoughQuestions) return res.status(502).json({ error: err.message });
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
+/** POST /tutor/diagnostic/short-answers — Bank-format short answers for the timed paper (a curriculum subject's are saved to the bank) */
+router.post("/tutor/diagnostic/short-answers", async (req: Request, res: Response) => {
+  try {
+    const ctx = await requireTutor(req, res);
+    if (!ctx) return;
+    const { admin } = ctx;
+
+    const { yearLevel, subject, subtopicId, topic, count } = req.body as {
+      yearLevel?: string; subject?: SubjectConfig; subtopicId?: string; topic?: string; count?: number;
+    };
+    if (!subject || typeof subject.name !== "string" || !subject.name.trim()) return res.status(400).json({ error: "subject is required" });
+    const n = Math.max(1, Math.min(MARKED_MAX_COUNT, Math.round(Number(count)) || 1));
+
+    let target: MarkedTarget;
+    if (subject.curriculumId) {
+      const t = typeof subtopicId === "string" && subtopicId ? await loadMarkedTarget(admin, subtopicId) : null;
+      if (!t || t.curriculumId !== subject.curriculumId) return res.status(404).json({ error: "Subtopic not found" });
+      target = t;
+    } else {
+      const name = (typeof topic === "string" && topic.trim()) || subject.topics?.[0] || subject.name;
+      target = {
+        curriculumId: null, subtopicId: null, subject: subject.name,
+        levelLabel: typeof yearLevel === "string" ? yearLevel.trim() : "", examContext: "", topic: name, subtopic: name,
+      };
+    }
+
+    const { drafts, rejected } = await writeCheckedMarkedQuestions(admin, target, { count: n, difficulty: "mixed" });
+    const questions = await diagnosticShortAnswers(admin, target, drafts);
+    return res.json({ questions, rejected: rejected.length });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";
     return res.status(500).json({ error: message });
@@ -666,15 +438,16 @@ const linkFor = (req: Request, token: string) =>
  */
 async function emailProspect(
   admin: AdminClient,
-  d: { id: string; token: string; prospect_email: string; subjects: SubjectConfig[] | null; prospect_is_parent?: boolean | null; student_name?: string | null },
+  d: { id: string; token: string; prospect_email: string; subjects: SubjectConfig[] | null; prospect_is_parent?: boolean | null; student_name?: string | null; time_limit_minutes?: number | null },
   displayName: string | null,
-  o: { parentCopy?: string | null; replyTo?: string | null } = {},
+  o: { parentCopy?: string | null; replyTo?: string | null; reset?: { started_at?: null; opened_at?: null } } = {},
 ): Promise<{ error?: string; parent?: boolean }> {
   const resend = getResend();
   if (!resend) return { error: "Email isn't set up on this server.", ...(o.parentCopy ? { parent: false } : {}) };
   const base = {
     senderName: prospectSenderName(displayName), subject: d.subjects?.[0]?.name || "your subject", link: prospectLink(d.token),
     studentName: d.student_name?.trim() || undefined,
+    ...(d.time_limit_minutes ? { timed: true } : {}),
   };
   const { subject, content } = prospectDiagnosticEmail({ ...base, ...(d.prospect_is_parent ? { audience: "parent" as const } : {}) });
   const sentAt = new Date().toISOString();
@@ -691,6 +464,12 @@ async function emailProspect(
   if (result.error) return { error: result.blocked ? "That address can't receive our emails (it bounced or reported spam before)." : "The email couldn't be sent. Try Resend.", ...withParent };
   const { error } = await admin.from("diagnostic_assessments").update({ sent_at: sentAt, reminded_at: null }).eq("id", d.id);
   if (error) logger.error({ err: error, id: d.id }, "diagnostic: emailed a prospect but couldn't record it");
+  // A resent timed test starts afresh (only while it's still pending; a submitted one keeps its times).
+  if (o.reset && Object.keys(o.reset).length) {
+    const { error: resetErr } = await admin.from("diagnostic_assessments").update(o.reset)
+      .eq("id", d.id).eq("status", "pending").is("student_id", null);
+    if (resetErr) logger.error({ err: resetErr, id: d.id }, "diagnostic: resent a timed test but couldn't reset its clock");
+  }
   return withParent;
 }
 
@@ -755,6 +534,7 @@ router.post("/tutor/diagnostic/create", async (req: Request, res: Response) => {
         questionnaire:     snapshot,
         status:            "pending",
         score_max:         test.scoreMax,
+        time_limit_minutes: timeLimitFor(test.questions),
         ...(await testScopeFields(admin, subjects)),
         prospect_email:    checked.email,
         parent_email:      parent.email,
@@ -768,7 +548,7 @@ router.post("/tutor/diagnostic/create", async (req: Request, res: Response) => {
     if (!checked.email) return res.json({ id: data.id, token: data.token, link, emailed: false });
 
     // The diagnostic is saved either way; a failed send leaves it to Resend.
-    const sent = await emailProspect(admin, { id: data.id, token: data.token, prospect_email: checked.email, subjects }, ctx.displayName);
+    const sent = await emailProspect(admin, { id: data.id, token: data.token, prospect_email: checked.email, subjects, time_limit_minutes: timeLimitFor(test.questions) }, ctx.displayName);
     return res.json({ id: data.id, token: data.token, link, emailed: !sent.error, ...(sent.error ? { emailError: sent.error } : {}) });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";
@@ -900,9 +680,9 @@ async function ownLinkDiagnostic(admin: AdminClient, tutorId: string, id: string
   if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
   const { data, error } = await admin
     .from("diagnostic_assessments")
-    .select(`id, token, tutor_id, subjects, student_name, parent_email, prospect_is_parent, ${PROSPECT_COLUMNS}`)
+    .select(`id, token, tutor_id, subjects, student_name, parent_email, prospect_is_parent, time_limit_minutes, ${PROSPECT_COLUMNS}`)
     .eq("id", id)
-    .maybeSingle<Pick<DiagnosticAssessment, "id" | "token" | "tutor_id" | "subjects" | "student_name" | "parent_email" | "prospect_is_parent"> & ProspectRow>();
+    .maybeSingle<Pick<DiagnosticAssessment, "id" | "token" | "tutor_id" | "subjects" | "student_name" | "parent_email" | "prospect_is_parent"> & { time_limit_minutes: number | null } & ProspectRow>();
   if (error) throw new Error(error.message);
   return data && data.tutor_id === tutorId && !data.student_id ? data : null;
 }
@@ -915,7 +695,7 @@ router.post("/tutor/diagnostic/:id/resend", async (req: Request, res: Response) 
     const d = await ownLinkDiagnostic(ctx.admin, ctx.tutorId, String(req.params.id));
     if (!d) return res.status(404).json({ error: "Diagnostic not found" });
     if (!d.prospect_email || !canResend(d, new Date())) return res.status(409).json({ error: "This diagnostic can't be resent." });
-    const sent = await emailProspect(ctx.admin, { ...d, prospect_email: d.prospect_email }, ctx.displayName);
+    const sent = await emailProspect(ctx.admin, { ...d, prospect_email: d.prospect_email }, ctx.displayName, { reset: resendResetFields(d) });
     if (sent.error) return res.status(502).json({ error: sent.error });
     return res.json({ ok: true });
   } catch (err) {
@@ -947,6 +727,7 @@ router.post("/tutor/diagnostic/:id/add-test", async (req: Request, res: Response
         subjects: test.subjects,
         questions: test.questions,
         score_max: test.scoreMax,
+        time_limit_minutes: timeLimitFor(test.questions),
         has_test: true,
         ...(await testScopeFields(ctx.admin, test.subjects)),
       })
@@ -959,7 +740,7 @@ router.post("/tutor/diagnostic/:id/add-test", async (req: Request, res: Response
     // sent_at is recorded once the primary address has it (a failed send leaves it to Resend).
     const sent = await emailProspect(
       ctx.admin,
-      { ...d, prospect_email: d.prospect_email, subjects: test.subjects as unknown as SubjectConfig[] },
+      { ...d, prospect_email: d.prospect_email, subjects: test.subjects as unknown as SubjectConfig[], time_limit_minutes: timeLimitFor(test.questions) },
       ctx.displayName,
       { parentCopy: d.prospect_is_parent ? null : d.parent_email, replyTo: ctx.email },
     );
@@ -993,6 +774,33 @@ router.post("/tutor/diagnostic/:id/cancel", async (req: Request, res: Response) 
   }
 });
 
+/**
+ * POST /tutor/diagnostic/:id/mark — "Mark again" for a timed diagnostic whose
+ * background marking failed: a fresh set of attempts, marked during the request.
+ */
+router.post("/tutor/diagnostic/:id/mark", async (req: Request, res: Response) => {
+  try {
+    const ctx = await requireTutor(req, res);
+    if (!ctx) return;
+    const d = await ownLinkDiagnostic(ctx.admin, ctx.tutorId, String(req.params.id));
+    if (!d) return res.status(404).json({ error: "Diagnostic not found" });
+    if (d.time_limit_minutes == null || d.status !== "completed") return res.status(409).json({ error: "This diagnostic can't be marked." });
+    const { data: reset, error } = await ctx.admin
+      .from("diagnostic_assessments").update({ marking_attempts: 0 })
+      .eq("id", d.id).eq("status", "completed").is("report", null).select("id");
+    if (error) throw new Error(error.message);
+    if (!reset?.length) return res.status(409).json({ error: "This diagnostic has already been marked." });
+    await markAndStore(ctx.admin, d.id);
+    const { data: after, error: readErr } = await ctx.admin
+      .from("diagnostic_assessments").select("report").eq("id", d.id).maybeSingle<{ report: unknown }>();
+    if (readErr) throw new Error(readErr.message);
+    return res.json({ ok: true, marked: after?.report != null });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
 /** GET /tutor/diagnostic/:id/report — Full report for a completed assessment (its tutor or any rostered tutor) */
 router.get("/tutor/diagnostic/:id/report", async (req: Request, res: Response) => {
   try {
@@ -1016,6 +824,11 @@ router.get("/tutor/diagnostic/:id/report", async (req: Request, res: Response) =
       if (!rostered) return res.status(404).json({ error: "Assessment not found" });
     }
 
+    // Timed and submitted but not marked yet: nothing to show.
+    if (data.status === "completed" && !data.report) {
+      return res.status(409).json({ error: "Still marking. Try again in a minute." });
+    }
+
     // The questions come back too (with answers and solution notes), so the
     // report can show each question in full beside the student's answer.
     return res.json({ assessment: forViewer(data, tutorId), report: data.report });
@@ -1035,13 +848,14 @@ router.get("/diagnostic/:token", async (req: Request, res: Response) => {
 
     const { data, error } = await admin
       .from("diagnostic_assessments")
-      .select(`id, token, year_level, subjects, questions, student_name, score_max, pre_call_form_url, completed_at, questions_ready_at, report, tutor_id, questionnaire, ${PROSPECT_COLUMNS}`)
+      .select(`id, token, year_level, subjects, questions, student_name, score_max, pre_call_form_url, completed_at, questions_ready_at, report, tutor_id, questionnaire, time_limit_minutes, ${PROSPECT_COLUMNS}`)
       .eq("token", token)
-      .single<Pick<DiagnosticAssessment, "id" | "token" | "year_level" | "subjects" | "questions" | "student_name" | "score_max" | "pre_call_form_url" | "completed_at" | "questions_ready_at" | "report" | "tutor_id"> & ProspectRow & { questionnaire: Questionnaire | null }>();
+      .single<Pick<DiagnosticAssessment, "id" | "token" | "year_level" | "subjects" | "questions" | "student_name" | "score_max" | "pre_call_form_url" | "completed_at" | "questions_ready_at" | "report" | "tutor_id"> & ProspectRow & { questionnaire: Questionnaire | null; time_limit_minutes: number | null }>();
 
     // A consultation's record with no test yet: nothing to take.
     if (error || !data || hasNoTest(data)) return res.status(404).json({ error: "Assessment not found" });
-    const unavailable = unavailableReason(data, new Date());
+    // A started timed test stays open past link expiry (as for submit), so it can be resumed and finished.
+    const unavailable = submitUnavailableReason(data, new Date());
     if (unavailable) return res.status(410).json({ error: unavailable });
     // A prospect's link: note the first time it's opened.
     if (!data.student_id && data.status === "pending" && !data.opened_at) {
@@ -1050,7 +864,7 @@ router.get("/diagnostic/:token", async (req: Request, res: Response) => {
       if (openErr) logger.warn({ err: openErr, id: data.id }, "diagnostic: couldn't record opened_at");
     }
 
-    const { student_id, questions_ready_at, report, tutor_id, questionnaire, prospect_email: _pe, created_at: _ca, sent_at: _sa, opened_at: _oa, started_at: _st, reminded_at: _ra, cancelled_at: _cx, has_test: _ht, ...rest } = data;
+    const { student_id, questions_ready_at, report, tutor_id, questionnaire, prospect_email: _pe, created_at: _ca, sent_at: _sa, opened_at: _oa, started_at, reminded_at: _ra, cancelled_at: _cx, has_test: _ht, ...rest } = data;
     // The tutor's display name, so the page can say who it goes to.
     let tutor_name: string | null = null;
     if (tutor_id) {
@@ -1062,6 +876,8 @@ router.get("/diagnostic/:token", async (req: Request, res: Response) => {
       assessment: {
         ...rest,
         questions: sanitiseQuestionsForStudent(data.questions),
+        started_at: started_at ?? null,
+        server_now: new Date().toISOString(),
         // A tutor-included subject's diagnostic: written on first use
         // (POST …/prepare), and the student sees a summary when it's done.
         linked: !!student_id,
@@ -1085,17 +901,27 @@ router.post("/diagnostic/:token/start", async (req: Request, res: Response) => {
   try {
     const admin = getAdminClient();
     const { data, error } = await admin
-      .from("diagnostic_assessments").select(`id, ${PROSPECT_COLUMNS}`)
-      .eq("token", req.params.token).maybeSingle<{ id: string } & ProspectRow>();
+      .from("diagnostic_assessments").select(`id, time_limit_minutes, ${PROSPECT_COLUMNS}`)
+      .eq("token", req.params.token).maybeSingle<{ id: string; time_limit_minutes: number | null } & ProspectRow>();
     if (error || !data || hasNoTest(data)) return res.status(404).json({ error: "Assessment not found" });
-    const unavailable = unavailableReason(data, new Date());
+    const unavailable = submitUnavailableReason(data, new Date());
     if (unavailable) return res.status(410).json({ error: unavailable });
     if (!data.student_id && data.status === "pending" && !data.started_at) {
       const { error: upErr } = await admin.from("diagnostic_assessments")
         .update({ started_at: new Date().toISOString() }).eq("id", data.id).is("started_at", null);
       if (upErr) throw new Error(upErr.message);
     }
-    return res.json({ ok: true });
+    // The stored value (set once), so a second press or a reload gets the same clock.
+    const { data: stored, error: readErr } = await admin.from("diagnostic_assessments")
+      .select("started_at, time_limit_minutes").eq("id", data.id)
+      .maybeSingle<{ started_at: string | null; time_limit_minutes: number | null }>();
+    if (readErr) throw new Error(readErr.message);
+    return res.json({
+      ok: true,
+      startedAt: data.student_id ? null : stored?.started_at ?? null,
+      timeLimitMinutes: stored?.time_limit_minutes ?? null,
+      serverNow: new Date().toISOString(),
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";
     return res.status(500).json({ error: message });
@@ -1121,12 +947,33 @@ router.post("/diagnostic/:token/submit", async (req: Request, res: Response) => 
       .single<DiagnosticAssessment>();
 
     if (error || !data || hasNoTest(data)) return res.status(404).json({ error: "Assessment not found" });
+    // A timed (prospect) test: stored at once, marked after the response.
+    const timed = data.time_limit_minutes != null && !data.student_id;
     if (data.status === "completed") {
+      // The client treats already_submitted as success (a retry after a lost response).
+      if (timed) return res.status(409).json({ error: "already_submitted" });
       return res.status(400).json({ error: "This assessment has already been submitted." });
     }
     if (!data.questions?.length) return res.status(409).json({ error: "This diagnostic isn't ready yet." });
-    const unavailable = unavailableReason(data, new Date());
+    // A started timed test is accepted even after its link expires.
+    const unavailable = submitUnavailableReason(data, new Date());
     if (unavailable) return res.status(410).json({ error: unavailable });
+
+    const questionnaireUrl = questionnaireLinkFor({ token: data.token, questionnaire: (data as { questionnaire?: unknown }).questionnaire ?? null, pre_call_form_url: null });
+
+    if (timed) {
+      // Accepted even after the deadline: a lost connection mustn't lose the test.
+      const stored = await storeTimedSubmission(admin, data.token, {
+        student_answers: timedAnswers(data.questions, answers),
+        submitted_by_name: (studentName || "").trim() || data.student_name || null,
+        completed_at: new Date().toISOString(),
+      });
+      if (stored === "already_submitted") return res.status(409).json({ error: "already_submitted" });
+      res.json({ submitted: true, preCallFormUrl: data.pre_call_form_url, questionnaireUrl });
+      // markAndStore logs its own failures; the email cron re-runs a stalled one.
+      waitUntil(markAndStore(admin, data.id));
+      return;
+    }
 
     // Run AI marking
     const report = await markAssessment(data.questions, answers, data.year_level, data.subjects);
@@ -1156,7 +1003,7 @@ router.post("/diagnostic/:token/submit", async (req: Request, res: Response) => 
       band:     report.performance_band,
       report,
       preCallFormUrl: data.pre_call_form_url,
-      questionnaireUrl: questionnaireLinkFor({ token: data.token, questionnaire: (data as { questionnaire?: unknown }).questionnaire ?? null, pre_call_form_url: null }),
+      questionnaireUrl,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";
