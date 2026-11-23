@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { isEnglishOnly, shortAnswerRequests, pickShortAnswers, buildTimedTest } from './timedDiagnostic.js'
+import { isEnglishOnly, shortAnswerRequests, pickShortAnswers, buildTimedTest, clockFrom, timeLeft, timeUp, inWarning, loadAnswers, saveAnswers, clearAnswers } from './timedDiagnostic.js'
 
 const sa = (marks, topic, difficulty = 'moderate', n = Math.random()) => ({ type: 'marked', marks, topic, difficulty, question: `q${n}`, id: 0 })
 const sum = qs => qs.reduce((s, q) => s + q.marks, 0)
@@ -70,4 +70,73 @@ test('buildTimedTest throws the exact message when 30 marks never appear', async
         generateShortAnswers: async () => ({ questions: [sa(4, 'A')] }),
       }),
     { message: "Couldn't put together 30 marks of short answers. Try again." })
+})
+
+// ---- Clock and saved answers ----
+
+const MIN = 60000
+const at = iso => Date.parse(iso)
+
+test('deadline corrects for the client clock', () => {
+  // Server says 10:00, client says 10:10 (client clock 10 min fast). Started 09:55, 50 min.
+  const clock = clockFrom(
+    { startedAt: '2026-11-23T09:55:00Z', limitMinutes: 50, serverNow: '2026-11-23T10:00:00Z' },
+    at('2026-11-23T10:10:00Z'),
+  )
+  assert.equal(clock.deadline, at('2026-11-23T10:55:00Z'))
+})
+
+test('timeLeft is 0 and timeUp true past the deadline', () => {
+  const clock = { deadline: at('2026-11-23T10:55:00Z') }
+  assert.equal(timeLeft(clock, at('2026-11-23T10:55:00Z') + 3 * MIN), 0)
+  assert.equal(timeUp(clock, at('2026-11-23T10:55:00Z') + 3 * MIN), true)
+  assert.equal(timeLeft(clock, at('2026-11-23T10:54:00Z')), MIN)
+  assert.equal(timeUp(clock, at('2026-11-23T10:54:00Z')), false)
+})
+
+test('inWarning is true from 5 minutes down to just above 0', () => {
+  const clock = { deadline: at('2026-11-23T10:55:00Z') }
+  assert.equal(inWarning(clock, at('2026-11-23T10:55:00Z') - 4 * MIN - 59000), true)
+  assert.equal(inWarning(clock, at('2026-11-23T10:55:00Z') - 5 * MIN - 1000), false)
+  assert.equal(inWarning(clock, at('2026-11-23T10:55:00Z')), false)
+  assert.equal(inWarning(clock, at('2026-11-23T10:56:00Z')), false)
+})
+
+function stubStorage(impl) {
+  const prev = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, get: impl })
+  return () => {
+    if (prev) Object.defineProperty(globalThis, 'localStorage', prev)
+    else delete globalThis.localStorage
+  }
+}
+
+test('answers round-trip through localStorage under the token key', () => {
+  const data = new Map()
+  const restore = stubStorage(() => ({
+    getItem: k => (data.has(k) ? data.get(k) : null),
+    setItem: (k, v) => data.set(k, String(v)),
+    removeItem: k => data.delete(k),
+  }))
+  try {
+    assert.deepEqual(loadAnswers('tok1'), {})
+    saveAnswers('tok1', { 1: 'B', 21: 'the answer' })
+    assert.ok(data.has('gf-diagnostic-answers:tok1'))
+    assert.deepEqual(loadAnswers('tok1'), { 1: 'B', 21: 'the answer' })
+    assert.deepEqual(loadAnswers('other'), {})
+    clearAnswers('tok1')
+    assert.deepEqual(loadAnswers('tok1'), {})
+  } finally { restore() }
+})
+
+test('loadAnswers returns {} for corrupt JSON and when storage throws', () => {
+  const restore = stubStorage(() => ({ getItem: () => '{not json', setItem() {}, removeItem() {} }))
+  try { assert.deepEqual(loadAnswers('tok'), {}) } finally { restore() }
+
+  const restore2 = stubStorage(() => { throw new Error('denied') })
+  try {
+    assert.deepEqual(loadAnswers('tok'), {})
+    assert.doesNotThrow(() => saveAnswers('tok', { 1: 'A' }))
+    assert.doesNotThrow(() => clearAnswers('tok'))
+  } finally { restore2() }
 })

@@ -127,3 +127,60 @@ export async function buildTimedTest({ yearLevel, subject, scopeTopics }, { gene
 
   return [...mc.map(q => ({ ...q, marks: 1 })), ...picked].map((q, i) => ({ ...q, id: i + 1 }))
 }
+
+// ---- Clock and saved answers (student sitting; pure, no React/db) ----
+
+const FIVE_MIN = 5 * 60000
+const answersKey = token => `gf-diagnostic-answers:${token}`
+
+/**
+ * Client-side deadline for a timed sitting. The server's clock and the device's clock can
+ * disagree, so the offset (serverNow - clientNow at fetch time) is applied to the server
+ * deadline to get the deadline in client time.
+ */
+export function clockFrom({ startedAt, limitMinutes, serverNow }, clientNow = Date.now()) {
+  const serverDeadline = Date.parse(startedAt) + limitMinutes * 60000
+  return { deadline: serverDeadline - (Date.parse(serverNow) - clientNow) }
+}
+
+/** Milliseconds left on the clock, never below 0. */
+export function timeLeft(clock, now = Date.now()) {
+  return Math.max(0, clock.deadline - now)
+}
+
+/** True once no time is left. */
+export function timeUp(clock, now = Date.now()) {
+  return timeLeft(clock, now) === 0
+}
+
+/** True when five minutes or less remain and time is not yet up. */
+export function inWarning(clock, now = Date.now()) {
+  const left = timeLeft(clock, now)
+  return left > 0 && left <= FIVE_MIN
+}
+
+/** Saved answers for this sitting, or {} when missing, corrupt, or storage is unavailable. */
+export function loadAnswers(token) {
+  try {
+    const raw = globalThis.localStorage.getItem(answersKey(token))
+    if (!raw) return {}
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+/** Save answers for this sitting. Storage errors are ignored: the page works without it. */
+export function saveAnswers(token, answers) {
+  try {
+    globalThis.localStorage.setItem(answersKey(token), JSON.stringify(answers))
+  } catch { /* storage unavailable */ }
+}
+
+/** Remove saved answers for this sitting. Storage errors are ignored. */
+export function clearAnswers(token) {
+  try {
+    globalThis.localStorage.removeItem(answersKey(token))
+  } catch { /* storage unavailable */ }
+}
