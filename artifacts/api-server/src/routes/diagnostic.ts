@@ -11,7 +11,7 @@ import { scopeOutline, subtopicFieldHint } from "../lib/diagnostic-outline";
 import { signupState } from "../lib/prospect-signup";
 import { DIAGNOSTIC_LIST_COLUMNS, PROSPECT_COLUMNS, canResend, diagnosticStatus, forViewer, hasNoTest, normaliseProspectEmail, unavailableReason, type ProspectRow } from "../lib/prospect-status";
 import { testInput, usableGeneratedQuestions } from "../lib/new-consultation";
-import { MCQ_COUNT, isEnglishOnly, sanitiseQuestionsForStudent, toDiagnosticShortAnswer, type DiagnosticQuestion } from "../lib/timed-diagnostic";
+import { MCQ_COUNT, isEnglishOnly, sanitiseQuestionsForStudent, timeLimitFor, toDiagnosticShortAnswer, type DiagnosticQuestion } from "../lib/timed-diagnostic";
 import { MARKED_MAX_COUNT, loadMarkedTarget, writeCheckedMarkedQuestions, type MarkedTarget } from "../lib/marked-questions";
 import type { MarkPoint } from "../lib/marking";
 import { prospectDiagnosticEmail, prospectLink, prospectSenderName } from "../lib/prospect-emails";
@@ -735,7 +735,7 @@ const linkFor = (req: Request, token: string) =>
  */
 async function emailProspect(
   admin: AdminClient,
-  d: { id: string; token: string; prospect_email: string; subjects: SubjectConfig[] | null; prospect_is_parent?: boolean | null; student_name?: string | null },
+  d: { id: string; token: string; prospect_email: string; subjects: SubjectConfig[] | null; prospect_is_parent?: boolean | null; student_name?: string | null; time_limit_minutes?: number | null },
   displayName: string | null,
   o: { parentCopy?: string | null; replyTo?: string | null } = {},
 ): Promise<{ error?: string; parent?: boolean }> {
@@ -744,6 +744,7 @@ async function emailProspect(
   const base = {
     senderName: prospectSenderName(displayName), subject: d.subjects?.[0]?.name || "your subject", link: prospectLink(d.token),
     studentName: d.student_name?.trim() || undefined,
+    ...(d.time_limit_minutes ? { timed: true } : {}),
   };
   const { subject, content } = prospectDiagnosticEmail({ ...base, ...(d.prospect_is_parent ? { audience: "parent" as const } : {}) });
   const sentAt = new Date().toISOString();
@@ -824,6 +825,7 @@ router.post("/tutor/diagnostic/create", async (req: Request, res: Response) => {
         questionnaire:     snapshot,
         status:            "pending",
         score_max:         test.scoreMax,
+        time_limit_minutes: timeLimitFor(test.questions),
         ...(await testScopeFields(admin, subjects)),
         prospect_email:    checked.email,
         parent_email:      parent.email,
@@ -837,7 +839,7 @@ router.post("/tutor/diagnostic/create", async (req: Request, res: Response) => {
     if (!checked.email) return res.json({ id: data.id, token: data.token, link, emailed: false });
 
     // The diagnostic is saved either way; a failed send leaves it to Resend.
-    const sent = await emailProspect(admin, { id: data.id, token: data.token, prospect_email: checked.email, subjects }, ctx.displayName);
+    const sent = await emailProspect(admin, { id: data.id, token: data.token, prospect_email: checked.email, subjects, time_limit_minutes: timeLimitFor(test.questions) }, ctx.displayName);
     return res.json({ id: data.id, token: data.token, link, emailed: !sent.error, ...(sent.error ? { emailError: sent.error } : {}) });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";
@@ -969,9 +971,9 @@ async function ownLinkDiagnostic(admin: AdminClient, tutorId: string, id: string
   if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
   const { data, error } = await admin
     .from("diagnostic_assessments")
-    .select(`id, token, tutor_id, subjects, student_name, parent_email, prospect_is_parent, ${PROSPECT_COLUMNS}`)
+    .select(`id, token, tutor_id, subjects, student_name, parent_email, prospect_is_parent, time_limit_minutes, ${PROSPECT_COLUMNS}`)
     .eq("id", id)
-    .maybeSingle<Pick<DiagnosticAssessment, "id" | "token" | "tutor_id" | "subjects" | "student_name" | "parent_email" | "prospect_is_parent"> & ProspectRow>();
+    .maybeSingle<Pick<DiagnosticAssessment, "id" | "token" | "tutor_id" | "subjects" | "student_name" | "parent_email" | "prospect_is_parent"> & { time_limit_minutes: number | null } & ProspectRow>();
   if (error) throw new Error(error.message);
   return data && data.tutor_id === tutorId && !data.student_id ? data : null;
 }
@@ -1016,6 +1018,7 @@ router.post("/tutor/diagnostic/:id/add-test", async (req: Request, res: Response
         subjects: test.subjects,
         questions: test.questions,
         score_max: test.scoreMax,
+        time_limit_minutes: timeLimitFor(test.questions),
         has_test: true,
         ...(await testScopeFields(ctx.admin, test.subjects)),
       })
@@ -1028,7 +1031,7 @@ router.post("/tutor/diagnostic/:id/add-test", async (req: Request, res: Response
     // sent_at is recorded once the primary address has it (a failed send leaves it to Resend).
     const sent = await emailProspect(
       ctx.admin,
-      { ...d, prospect_email: d.prospect_email, subjects: test.subjects as unknown as SubjectConfig[] },
+      { ...d, prospect_email: d.prospect_email, subjects: test.subjects as unknown as SubjectConfig[], time_limit_minutes: timeLimitFor(test.questions) },
       ctx.displayName,
       { parentCopy: d.prospect_is_parent ? null : d.parent_email, replyTo: ctx.email },
     );
@@ -1104,9 +1107,9 @@ router.get("/diagnostic/:token", async (req: Request, res: Response) => {
 
     const { data, error } = await admin
       .from("diagnostic_assessments")
-      .select(`id, token, year_level, subjects, questions, student_name, score_max, pre_call_form_url, completed_at, questions_ready_at, report, tutor_id, questionnaire, ${PROSPECT_COLUMNS}`)
+      .select(`id, token, year_level, subjects, questions, student_name, score_max, pre_call_form_url, completed_at, questions_ready_at, report, tutor_id, questionnaire, time_limit_minutes, ${PROSPECT_COLUMNS}`)
       .eq("token", token)
-      .single<Pick<DiagnosticAssessment, "id" | "token" | "year_level" | "subjects" | "questions" | "student_name" | "score_max" | "pre_call_form_url" | "completed_at" | "questions_ready_at" | "report" | "tutor_id"> & ProspectRow & { questionnaire: Questionnaire | null }>();
+      .single<Pick<DiagnosticAssessment, "id" | "token" | "year_level" | "subjects" | "questions" | "student_name" | "score_max" | "pre_call_form_url" | "completed_at" | "questions_ready_at" | "report" | "tutor_id"> & ProspectRow & { questionnaire: Questionnaire | null; time_limit_minutes: number | null }>();
 
     // A consultation's record with no test yet: nothing to take.
     if (error || !data || hasNoTest(data)) return res.status(404).json({ error: "Assessment not found" });
@@ -1119,7 +1122,7 @@ router.get("/diagnostic/:token", async (req: Request, res: Response) => {
       if (openErr) logger.warn({ err: openErr, id: data.id }, "diagnostic: couldn't record opened_at");
     }
 
-    const { student_id, questions_ready_at, report, tutor_id, questionnaire, prospect_email: _pe, created_at: _ca, sent_at: _sa, opened_at: _oa, started_at: _st, reminded_at: _ra, cancelled_at: _cx, has_test: _ht, ...rest } = data;
+    const { student_id, questions_ready_at, report, tutor_id, questionnaire, prospect_email: _pe, created_at: _ca, sent_at: _sa, opened_at: _oa, started_at, reminded_at: _ra, cancelled_at: _cx, has_test: _ht, ...rest } = data;
     // The tutor's display name, so the page can say who it goes to.
     let tutor_name: string | null = null;
     if (tutor_id) {
@@ -1131,6 +1134,8 @@ router.get("/diagnostic/:token", async (req: Request, res: Response) => {
       assessment: {
         ...rest,
         questions: sanitiseQuestionsForStudent(data.questions),
+        started_at: started_at ?? null,
+        server_now: new Date().toISOString(),
         // A tutor-included subject's diagnostic: written on first use
         // (POST …/prepare), and the student sees a summary when it's done.
         linked: !!student_id,
@@ -1164,7 +1169,17 @@ router.post("/diagnostic/:token/start", async (req: Request, res: Response) => {
         .update({ started_at: new Date().toISOString() }).eq("id", data.id).is("started_at", null);
       if (upErr) throw new Error(upErr.message);
     }
-    return res.json({ ok: true });
+    // The stored value (set once), so a second press or a reload gets the same clock.
+    const { data: stored, error: readErr } = await admin.from("diagnostic_assessments")
+      .select("started_at, time_limit_minutes").eq("id", data.id)
+      .maybeSingle<{ started_at: string | null; time_limit_minutes: number | null }>();
+    if (readErr) throw new Error(readErr.message);
+    return res.json({
+      ok: true,
+      startedAt: data.student_id ? null : stored?.started_at ?? null,
+      timeLimitMinutes: stored?.time_limit_minutes ?? null,
+      serverNow: new Date().toISOString(),
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";
     return res.status(500).json({ error: message });

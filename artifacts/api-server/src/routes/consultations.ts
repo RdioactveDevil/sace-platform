@@ -33,6 +33,7 @@ import {
 } from "../lib/consultation-service";
 import { logger } from "../lib/logger";
 import { newConsultationInput } from "../lib/new-consultation";
+import { timeLimitFor } from "../lib/timed-diagnostic";
 import { normaliseProspectEmail } from "../lib/prospect-status";
 import { prospectLink, prospectSenderName } from "../lib/prospect-emails";
 import { snapshotFrom } from "../lib/questionnaire";
@@ -324,6 +325,7 @@ router.post("/tutor/consultations/new", async (req: Request, res: Response) => {
         subjects: t?.subjects ?? [],
         questions: t?.questions ?? [],
         score_max: t?.scoreMax ?? 0,
+        time_limit_minutes: t ? timeLimitFor(t.questions) : null,
         ...(t ? await testScopeFields(admin, t.subjects) : {}),
         questionnaire: snapshot,
         status: "pending",

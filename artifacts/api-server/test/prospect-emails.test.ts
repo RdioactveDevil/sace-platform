@@ -85,3 +85,28 @@ test("student audience is identical to the default", () => {
   assert.deepEqual(prospectDiagnosticEmail({ ...o, audience: "student", studentName: "Sam Lee" }), prospectDiagnosticEmail(o));
   assert.deepEqual(prospectReminderEmail({ ...o, audience: "student", studentName: "Sam Lee" }), prospectReminderEmail(o));
 });
+
+const TIMED = "It's 50 marks in 50 minutes, timed, in one sitting: start it when you have an uninterrupted hour.";
+
+test("a timed test's emails give the timed sentence instead of the 30–45 minutes / no time limit wording", () => {
+  for (const audience of [undefined, "parent" as const]) {
+    for (const make of [prospectDiagnosticEmail, prospectReminderEmail]) {
+      const e = make({ ...o, timed: true, ...(audience ? { audience, studentName: "Sam Lee" } : {}) });
+      const text = allText(e);
+      assert.ok(e.content.paragraphs.some((p) => p.includes(TIMED)), `${make.name} ${audience ?? "student"}`);
+      assert.doesNotMatch(text, /no time limit|30–45/i);
+      assert.match(text, /will be gone through/);
+    }
+  }
+  const inv = prospectDiagnosticEmail({ ...o, timed: true });
+  assert.match(inv.content.paragraphs[1], /fine to be unsure/);
+  const pinv = prospectDiagnosticEmail({ ...o, timed: true, audience: "parent" });
+  assert.match(pinv.content.paragraphs[2], /Please pass this link on/);
+});
+
+test("an untimed email keeps the original wording", () => {
+  for (const make of [prospectDiagnosticEmail, prospectReminderEmail]) {
+    assert.match(allText(make({ ...o, timed: false })), /30–45 minutes/);
+  }
+  assert.match(allText(prospectDiagnosticEmail(o)), /There's no time limit/);
+});

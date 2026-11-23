@@ -53,8 +53,8 @@ export function checkTimedTest(questions: { type?: unknown; marks: number }[]): 
 }
 
 /** The time limit in minutes, or null for an untimed (old-format) test. */
-export function timeLimitFor(questions: { type?: unknown }[]): number | null {
-  return questions.some((q) => q.type === "marked") ? TIME_LIMIT_MINUTES : null;
+export function timeLimitFor(questions: readonly object[]): number | null {
+  return questions.some((q) => (q as { type?: unknown }).type === "marked") ? TIME_LIMIT_MINUTES : null;
 }
 
 /** Bank difficulty (1-5) mapped to the diagnostic's labels. */
