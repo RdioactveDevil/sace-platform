@@ -132,6 +132,7 @@ export async function buildTimedTest({ yearLevel, subject, scopeTopics }, { gene
 
 const FIVE_MIN = 5 * 60000
 const answersKey = token => `gf-diagnostic-answers:${token}`
+const nameKey = token => `gf-diagnostic-name:${token}`
 
 /**
  * Client-side deadline for a timed sitting. The server's clock and the device's clock can
@@ -141,6 +142,22 @@ const answersKey = token => `gf-diagnostic-answers:${token}`
 export function clockFrom({ startedAt, limitMinutes, serverNow }, clientNow = Date.now()) {
   const serverDeadline = Date.parse(startedAt) + limitMinutes * 60000
   return { deadline: serverDeadline - (Date.parse(serverNow) - clientNow) }
+}
+
+/**
+ * clockFrom, but never without a working deadline: a `serverNow` that doesn't parse
+ * means no offset (the device's clock is used as is), and a `startedAt` that doesn't
+ * parse means the sitting started at `fallbackStart` (client time: when Start was
+ * pressed, or the page load on a resume).
+ */
+export function sittingClock({ startedAt, limitMinutes, serverNow }, clientNow = Date.now(), fallbackStart = clientNow) {
+  const iso = ms => new Date(ms).toISOString()
+  if (!Number.isFinite(Date.parse(startedAt))) {
+    const start = Number.isFinite(fallbackStart) ? fallbackStart : clientNow
+    return clockFrom({ startedAt: iso(start), limitMinutes, serverNow: iso(clientNow) }, clientNow)
+  }
+  const now = Number.isFinite(Date.parse(serverNow)) ? serverNow : iso(clientNow)
+  return clockFrom({ startedAt, limitMinutes, serverNow: now }, clientNow)
 }
 
 /** Milliseconds left on the clock, never below 0. */
@@ -178,9 +195,27 @@ export function saveAnswers(token, answers) {
   } catch { /* storage unavailable */ }
 }
 
-/** Remove saved answers for this sitting. Storage errors are ignored. */
+/** Remove saved answers (and the saved name) for this sitting. Storage errors are ignored. */
 export function clearAnswers(token) {
   try {
     globalThis.localStorage.removeItem(answersKey(token))
+    globalThis.localStorage.removeItem(nameKey(token))
+  } catch { /* storage unavailable */ }
+}
+
+/** The name typed on the start page, kept so a reload still submits it; '' when missing. */
+export function loadName(token) {
+  try {
+    const raw = globalThis.localStorage.getItem(nameKey(token))
+    return typeof raw === 'string' ? raw : ''
+  } catch {
+    return ''
+  }
+}
+
+/** Save the name typed on the start page. Storage errors are ignored. */
+export function saveName(token, name) {
+  try {
+    globalThis.localStorage.setItem(nameKey(token), String(name || ''))
   } catch { /* storage unavailable */ }
 }

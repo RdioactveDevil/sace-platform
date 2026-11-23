@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { isEnglishOnly, shortAnswerRequests, pickShortAnswers, buildTimedTest, clockFrom, timeLeft, timeUp, inWarning, loadAnswers, saveAnswers, clearAnswers } from './timedDiagnostic.js'
+import { isEnglishOnly, shortAnswerRequests, pickShortAnswers, buildTimedTest, clockFrom, timeLeft, timeUp, inWarning, loadAnswers, saveAnswers, clearAnswers, sittingClock, loadName, saveName } from './timedDiagnostic.js'
 
 const sa = (marks, topic, difficulty = 'moderate', n = Math.random()) => ({ type: 'marked', marks, topic, difficulty, question: `q${n}`, id: 0 })
 const sum = qs => qs.reduce((s, q) => s + q.marks, 0)
@@ -138,5 +138,57 @@ test('loadAnswers returns {} for corrupt JSON and when storage throws', () => {
     assert.deepEqual(loadAnswers('tok'), {})
     assert.doesNotThrow(() => saveAnswers('tok', { 1: 'A' }))
     assert.doesNotThrow(() => clearAnswers('tok'))
+  } finally { restore2() }
+})
+
+test('sittingClock matches clockFrom when both times parse', () => {
+  const args = { startedAt: '2026-11-23T09:55:00Z', limitMinutes: 50, serverNow: '2026-11-23T10:00:00Z' }
+  assert.deepEqual(sittingClock(args, at('2026-11-23T10:10:00Z')), clockFrom(args, at('2026-11-23T10:10:00Z')))
+})
+
+test('sittingClock uses no offset when serverNow does not parse', () => {
+  for (const serverNow of [undefined, null, '', 'nonsense']) {
+    const clock = sittingClock({ startedAt: '2026-11-23T10:00:00Z', limitMinutes: 50, serverNow }, at('2026-11-23T10:10:00Z'))
+    assert.equal(clock.deadline, at('2026-11-23T10:50:00Z'))
+  }
+})
+
+test('sittingClock starts from the fallback client time when startedAt does not parse', () => {
+  for (const startedAt of [undefined, null, '', 'nonsense']) {
+    const clock = sittingClock({ startedAt, limitMinutes: 50, serverNow: '2026-11-23T12:00:00Z' }, at('2026-11-23T10:10:00Z'), at('2026-11-23T10:05:00Z'))
+    assert.equal(clock.deadline, at('2026-11-23T10:55:00Z'))
+  }
+  // No fallback given: the client time now.
+  const clock = sittingClock({ startedAt: null, limitMinutes: 50, serverNow: null }, at('2026-11-23T10:10:00Z'))
+  assert.equal(clock.deadline, at('2026-11-23T11:00:00Z'))
+})
+
+test('sittingClock always gives a finite deadline', () => {
+  const clock = sittingClock({ startedAt: 'x', limitMinutes: 50, serverNow: 'y' }, at('2026-11-23T10:00:00Z'), NaN)
+  assert.equal(clock.deadline, at('2026-11-23T10:50:00Z'))
+})
+
+test('the name round-trips and clearAnswers removes it too', () => {
+  const data = new Map()
+  const restore = stubStorage(() => ({
+    getItem: k => (data.has(k) ? data.get(k) : null),
+    setItem: (k, v) => data.set(k, String(v)),
+    removeItem: k => data.delete(k),
+  }))
+  try {
+    assert.equal(loadName('tok1'), '')
+    saveName('tok1', 'Sam Lee')
+    saveAnswers('tok1', { 1: 'A' })
+    assert.equal(loadName('tok1'), 'Sam Lee')
+    assert.equal(loadName('tok2'), '')
+    clearAnswers('tok1')
+    assert.equal(loadName('tok1'), '')
+    assert.deepEqual(loadAnswers('tok1'), {})
+  } finally { restore() }
+
+  const restore2 = stubStorage(() => { throw new Error('denied') })
+  try {
+    assert.equal(loadName('tok'), '')
+    assert.doesNotThrow(() => saveName('tok', 'Sam'))
   } finally { restore2() }
 })

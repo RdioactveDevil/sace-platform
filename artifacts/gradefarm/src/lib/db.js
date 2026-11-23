@@ -2166,9 +2166,15 @@ export async function loadDiagnosticByToken(token) {
   return json
 }
 
-/** A prospect pressed Start on their diagnostic (public — no auth). For the tutor's list; failures don't matter. */
+/**
+ * A prospect pressed Start on their diagnostic (public — no auth). Untimed: for the tutor's list, failures
+ * don't matter. Timed: `{ ok, startedAt, timeLimitMinutes, serverNow }` starts the clock.
+ */
 export async function startDiagnostic(token) {
-  await fetch(`/api/diagnostic/${encodeURIComponent(token)}/start`, { method: 'POST' })
+  const res = await fetch(`/api/diagnostic/${encodeURIComponent(token)}/start`, { method: 'POST' })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(json.error || "The test didn't start. Try again.")
+  return json
 }
 
 /** Submit student answers (public — no auth). */
@@ -2179,6 +2185,8 @@ export async function submitDiagnosticAnswers(token, { studentName, answers }) {
     body: JSON.stringify({ studentName, answers }),
   })
   const json = await res.json().catch(() => ({}))
+  // A timed test that's already in (a retry after a lost response): that's a success.
+  if (res.status === 409 && json.error === 'already_submitted') return { submitted: true }
   if (!res.ok) throw new Error(json.error || 'Submission failed.')
   return json
 }
