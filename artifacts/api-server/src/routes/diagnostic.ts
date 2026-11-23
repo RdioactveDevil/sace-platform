@@ -12,7 +12,7 @@ import { scopeOutline, subtopicFieldHint } from "../lib/diagnostic-outline";
 import { signupState } from "../lib/prospect-signup";
 import { DIAGNOSTIC_LIST_COLUMNS, PROSPECT_COLUMNS, canResend, diagnosticStatus, forViewer, hasNoTest, normaliseProspectEmail, resendResetFields, type ProspectRow } from "../lib/prospect-status";
 import { testInput, usableGeneratedQuestions } from "../lib/new-consultation";
-import { MCQ_COUNT, isEnglishOnly, sanitiseQuestionsForStudent, timeLimitFor, type DiagnosticQuestion } from "../lib/timed-diagnostic";
+import { MCQ_COUNT, isEnglishOnly, sanitiseQuestionsForStudent, shuffleOptions, timeLimitFor, type DiagnosticQuestion } from "../lib/timed-diagnostic";
 import { MARKED_MAX_COUNT, diagnosticShortAnswers, loadMarkedTarget, writeCheckedMarkedQuestions, type MarkedTarget } from "../lib/marked-questions";
 import type { MarkPoint } from "../lib/marking";
 import { prospectDiagnosticEmail, prospectLink, prospectSenderName } from "../lib/prospect-emails";
@@ -245,6 +245,8 @@ Return a JSON object: { "questions": [ ...array of question objects... ] }`;
 
   // Text required, whole-number marks, ids from 1: what the tutor previews is what saves.
   questions = usableGeneratedQuestions(questions) as unknown as DiagnosticQuestion[];
+  // The writer puts the right answer first: shuffle each MCQ's options (the key follows).
+  questions = questions.map((q) => shuffleOptions(q));
   if (!questions.length) throw new Error("No questions were generated. Please try again.");
 
   if (mcqOnly) {
@@ -341,6 +343,7 @@ Return a JSON object: { "questions": [ ... ] }`;
   const questions = list
     .map((q) => validQuestion(q as Partial<DiagnosticQuestion>))
     .filter((q): q is DiagnosticQuestion => !!q)
+    .map((q) => shuffleOptions(q))
     .sort((a, b) => order[a.difficulty] - order[b.difficulty])
     .slice(0, STUDENT_DIAGNOSTIC_QUESTIONS)
     .map((q, i) => ({ ...q, id: i + 1 }));
