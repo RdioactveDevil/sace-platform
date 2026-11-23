@@ -11,7 +11,8 @@ import { scopeOutline, subtopicFieldHint } from "../lib/diagnostic-outline";
 import { signupState } from "../lib/prospect-signup";
 import { DIAGNOSTIC_LIST_COLUMNS, PROSPECT_COLUMNS, canResend, diagnosticStatus, forViewer, hasNoTest, normaliseProspectEmail, unavailableReason, type ProspectRow } from "../lib/prospect-status";
 import { testInput, usableGeneratedQuestions } from "../lib/new-consultation";
-import { isEnglishOnly, sanitiseQuestionsForStudent } from "../lib/timed-diagnostic";
+import { MCQ_COUNT, isEnglishOnly, sanitiseQuestionsForStudent, toDiagnosticShortAnswer, type DiagnosticQuestion } from "../lib/timed-diagnostic";
+import { MARKED_MAX_COUNT, loadMarkedTarget, writeCheckedMarkedQuestions, type MarkedTarget } from "../lib/marked-questions";
 import type { MarkPoint } from "../lib/marking";
 import { prospectDiagnosticEmail, prospectLink, prospectSenderName } from "../lib/prospect-emails";
 import { getResend, sendEmail } from "../lib/email";
@@ -30,24 +31,6 @@ interface SupabaseAdminAuth {
   getUser(jwt: string): Promise<{ data: { user: AuthUser | null }; error: { message: string } | null }>;
 }
 type AdminClient = SupabaseClient & { auth: SupabaseAdminAuth };
-
-interface DiagnosticQuestion {
-  id: number;
-  question: string;
-  type: "multiple_choice" | "short_answer" | "extended_response" | "marked";
-  options?: string[];
-  correct_answer: string;
-  marks: number;
-  difficulty: "easy" | "moderate" | "exam";
-  topic: string;
-  subtopic?: string;
-  solution_notes?: string;
-  marking_scheme?: MarkPoint[];
-  solution?: string;
-  table_data?: unknown;
-  diagram?: unknown;
-  bank_question_id?: string;
-}
 
 interface SubjectConfig {
   name: string;
@@ -266,8 +249,11 @@ async function generateQuestions(
   subjects: SubjectConfig[],
   // For a curriculum subject: "- Topic: Sub; Sub" lines ("" = the whole course).
   outline?: string,
+  // "timed": the multiple-choice part (20 one-mark questions) of the timed paper.
+  format?: "timed",
 ): Promise<DiagnosticQuestion[]> {
   const englishOnly = isEnglishOnly(subjects);
+  const mcqOnly = format === "timed" && !englishOnly;
 
   const subjectDesc = subjects.map((s) => {
     const base = outline === undefined
@@ -279,7 +265,13 @@ async function generateQuestions(
     return base;
   }).join("; ");
 
-  const writingInstructions = englishOnly
+  const writingInstructions = mcqOnly
+    ? `
+For this ${subjects.map((s) => s.name).join("/")} assessment, write exactly ${MCQ_COUNT} multiple-choice questions, each worth 1 mark, and nothing else:
+- About 7 easy, 7 moderate and 6 exam-style questions, ordered from easiest to hardest.
+- Spread them across the topics and subtopics in scope rather than clustering on one.
+`
+    : englishOnly
     ? `
 Since this is an English/Writing assessment:
 - EASY (10 marks): 5 multiple-choice questions (2 marks each) on language features, grammar, punctuation, vocabulary, and literacy skills appropriate for ${yearLevel}.
@@ -298,7 +290,33 @@ For this ${subjects.map((s) => s.name).join("/")} assessment:
 ${latexPromptRule("$$\\int_0^1 x^2\\,dx$$")}
 Example question: "Given $f(x) = x^3 - 3x$, find $f'(x)$ and determine the nature of the stationary points."`;
 
-  const user = `Create a 30-mark diagnostic assessment for ${yearLevel}.
+  const user = mcqOnly ? `Create a ${MCQ_COUNT}-question multiple-choice quiz for ${yearLevel}.
+Subject(s): ${subjectDesc}
+
+${writingInstructions}
+
+Each question object must have these exact fields:
+{
+  "id": <integer starting at 1>,
+  "question": "<full question text with LaTeX math wrapped in $ or $$ delimiters>",
+  "type": "multiple_choice",
+  "options": ["A. ...", "B. ...", "C. ...", "D. ..."],  (use LaTeX in options too)
+  "correct_answer": "<letter e.g. 'B'>",
+  "marks": 1,
+  "difficulty": "easy" | "moderate" | "exam",
+  "topic": "<topic name from the provided list>",
+  "subtopic": "${subtopicFieldHint(outline)}",
+  "solution_notes": "<brief explanation of the correct answer>"
+}
+
+STRICT RULES:
+1. Exactly ${MCQ_COUNT} questions, each worth exactly 1 mark.
+2. Questions must be appropriate for ${yearLevel} level, and exactly one option is correct.
+3. Use real curriculum-aligned content for the given subject(s) and topics.${outline ? " Copy topic and subtopic names exactly as written in the list." : ""}
+4. Exactly 4 options labelled A, B, C, D; correct_answer is a single uppercase letter.
+5. ALL mathematical expressions MUST use LaTeX formatting with $ delimiters.
+
+Return a JSON object: { "questions": [ ...array of question objects... ] }` : `Create a 30-mark diagnostic assessment for ${yearLevel}.
 Subject(s): ${subjectDesc}
 
 ${writingInstructions}
@@ -346,7 +364,20 @@ Return a JSON object: { "questions": [ ...array of question objects... ] }`;
   questions = usableGeneratedQuestions(questions) as unknown as DiagnosticQuestion[];
   if (!questions.length) throw new Error("No questions were generated. Please try again.");
 
+  if (mcqOnly) {
+    const valid = questions
+      .map((q) => validQuestion(q))
+      .filter((q): q is DiagnosticQuestion => !!q && q.type === "multiple_choice")
+      .map((q, i) => ({ ...q, id: i + 1, marks: 1 }));
+    if (valid.length < MCQ_COUNT) throw new NotEnoughQuestions();
+    return valid.slice(0, MCQ_COUNT);
+  }
+
   return questions;
+}
+
+class NotEnoughQuestions extends Error {
+  constructor() { super("Not enough questions came back. Try again."); }
 }
 
 // ── Curriculum diagnostic (tutor-included subjects) ───────────────────────────
@@ -633,9 +664,10 @@ router.post("/tutor/diagnostic/generate", async (req: Request, res: Response) =>
     if (!ctx) return;
     const { admin } = ctx;
 
-    const { yearLevel, subjects } = req.body as {
+    const { yearLevel, subjects, format } = req.body as {
       yearLevel: string;
       subjects: SubjectConfig[];
+      format?: "timed";
     };
 
     if (!yearLevel?.trim()) return res.status(400).json({ error: "yearLevel is required" });
@@ -645,8 +677,45 @@ router.post("/tutor/diagnostic/generate", async (req: Request, res: Response) =>
     const outline = curriculumId
       ? scopeOutline((await diagnosticScope(admin, curriculumId, subjects[0].subtopicIds ?? [])).topics)
       : undefined;
-    const questions = await generateQuestions(yearLevel.trim(), subjects, outline);
+    const timed = format === "timed" && !isEnglishOnly(subjects) ? ("timed" as const) : undefined;
+    const questions = await generateQuestions(yearLevel.trim(), subjects, outline, timed);
     return res.json({ questions });
+  } catch (err) {
+    if (err instanceof NotEnoughQuestions) return res.status(502).json({ error: err.message });
+    const message = err instanceof Error ? err.message : "Internal error";
+    return res.status(500).json({ error: message });
+  }
+});
+
+/** POST /tutor/diagnostic/short-answers — Preview bank-format short answers for the timed paper (nothing is saved) */
+router.post("/tutor/diagnostic/short-answers", async (req: Request, res: Response) => {
+  try {
+    const ctx = await requireTutor(req, res);
+    if (!ctx) return;
+    const { admin } = ctx;
+
+    const { yearLevel, subject, subtopicId, topic, count } = req.body as {
+      yearLevel?: string; subject?: SubjectConfig; subtopicId?: string; topic?: string; count?: number;
+    };
+    if (!subject || typeof subject.name !== "string" || !subject.name.trim()) return res.status(400).json({ error: "subject is required" });
+    const n = Math.max(1, Math.min(MARKED_MAX_COUNT, Math.round(Number(count)) || 1));
+
+    let target: MarkedTarget;
+    if (subject.curriculumId) {
+      const t = typeof subtopicId === "string" && subtopicId ? await loadMarkedTarget(admin, subtopicId) : null;
+      if (!t || t.curriculumId !== subject.curriculumId) return res.status(404).json({ error: "Subtopic not found" });
+      target = t;
+    } else {
+      const name = (typeof topic === "string" && topic.trim()) || subject.topics?.[0] || subject.name;
+      target = {
+        curriculumId: null, subtopicId: null, subject: subject.name,
+        levelLabel: typeof yearLevel === "string" ? yearLevel.trim() : "", examContext: "", topic: name, subtopic: name,
+      };
+    }
+
+    const { drafts, rejected } = await writeCheckedMarkedQuestions(admin, target, { count: n, difficulty: "mixed" });
+    const questions = drafts.map((d) => toDiagnosticShortAnswer(d, target.topic, target.subtopic));
+    return res.json({ questions, rejected: rejected.length });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";
     return res.status(500).json({ error: message });

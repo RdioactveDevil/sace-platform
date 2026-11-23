@@ -5,6 +5,26 @@
  * one keep the old, untimed format.
  */
 
+import type { MarkPoint } from "./marking";
+
+export interface DiagnosticQuestion {
+  id: number;
+  question: string;
+  type: "multiple_choice" | "short_answer" | "extended_response" | "marked";
+  options?: string[];
+  correct_answer: string;
+  marks: number;
+  difficulty: "easy" | "moderate" | "exam";
+  topic: string;
+  subtopic?: string;
+  solution_notes?: string;
+  marking_scheme?: MarkPoint[];
+  solution?: string;
+  table_data?: unknown;
+  diagram?: unknown;
+  bank_question_id?: string;
+}
+
 export const TIME_LIMIT_MINUTES = 50;
 export const MCQ_COUNT = 20;
 export const SHORT_ANSWER_MARKS = 30;
@@ -53,4 +73,30 @@ export function sanitiseQuestionsForStudent<T extends object>(
     for (const k of HIDDEN_FROM_STUDENT) delete rest[k];
     return rest as Omit<T, (typeof HIDDEN_FROM_STUDENT)[number]>;
   });
+}
+
+/** A bank short answer as a diagnostic question (the id is assigned when the test is assembled). */
+export function toDiagnosticShortAnswer(
+  row: {
+    id?: string; question: string; total_marks: number; marking_scheme: MarkPoint[]; solution: string;
+    difficulty: number; table_data?: unknown; diagram?: unknown;
+  },
+  topic: string,
+  subtopic: string,
+): DiagnosticQuestion {
+  return {
+    id: 0,
+    question: row.question,
+    type: "marked",
+    correct_answer: row.solution,
+    marks: row.total_marks,
+    difficulty: diagnosticDifficulty(row.difficulty),
+    topic,
+    subtopic,
+    marking_scheme: row.marking_scheme,
+    solution: row.solution,
+    ...(row.table_data ? { table_data: row.table_data } : {}),
+    ...(row.diagram ? { diagram: row.diagram } : {}),
+    ...(row.id ? { bank_question_id: row.id } : {}),
+  };
 }
