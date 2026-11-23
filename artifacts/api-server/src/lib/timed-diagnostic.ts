@@ -30,6 +30,7 @@ export const MCQ_COUNT = 20;
 export const SHORT_ANSWER_MARKS = 30;
 /** A marking run older than this is treated as stalled and may be re-run. */
 export const REMARK_AFTER_MS = 10 * 60_000;
+/** Background marking gives up after this many failed attempts. */
 export const MAX_MARKING_ATTEMPTS = 3;
 
 /** True when every subject is an English or Writing subject. */
@@ -62,7 +63,7 @@ export function diagnosticDifficulty(bankDifficulty: number): "moderate" | "exam
   return bankDifficulty >= 4 ? "exam" : "moderate";
 }
 
-const HIDDEN_FROM_STUDENT = ["correct_answer", "solution_notes", "marking_scheme", "solution"] as const;
+const HIDDEN_FROM_STUDENT = ["correct_answer", "solution_notes", "marking_scheme", "solution", "bank_question_id"] as const;
 
 /** Strip the answers and marking material before a question reaches the student. */
 export function sanitiseQuestionsForStudent<T extends object>(

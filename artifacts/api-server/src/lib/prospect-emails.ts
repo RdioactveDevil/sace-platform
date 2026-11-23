@@ -28,7 +28,7 @@ type Audience = "student" | "parent";
 type DiagOpts = { senderName: string; subject: string; link: string; audience?: Audience; studentName?: string; timed?: boolean };
 
 /** Replaces the "30–45 minutes" and "no time limit" sentences for a timed (50-mark, 50-minute) test. */
-const TIMED_SENTENCE = "It's 50 marks in 50 minutes, timed, in one sitting: start it when you have an uninterrupted hour.";
+export const TIMED_SENTENCE = "It's 50 marks in 50 minutes, timed, in one sitting: start it when you have an uninterrupted hour.";
 
 /** "Sam Lee" for a parent's wording, else "your child"; and the pronoun to match. */
 const childOf = (studentName?: string) => {

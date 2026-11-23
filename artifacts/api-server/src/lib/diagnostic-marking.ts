@@ -314,8 +314,9 @@ export async function storeTimedSubmission(
 }
 
 /**
- * Why a submit is refused, or null. As unavailableReason(), except that a timed
- * test the student has started is still accepted after its link expires (a lost
+ * Why the test page, its start or a submit is refused, or null. As
+ * unavailableReason(), except that a timed test the student has started can
+ * still be loaded, resumed and submitted after its link expires (a lost
  * connection mustn't lose the test); a cancelled one is still refused.
  */
 export function submitUnavailableReason(r: ProspectRow & { time_limit_minutes: number | null }, now: Date): string | null {

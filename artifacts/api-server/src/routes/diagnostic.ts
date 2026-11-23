@@ -10,10 +10,10 @@ import { requireTutorPlan } from "../lib/tutor-plan";
 import { diagnosticScope, studentSummary, type ScopeTopic } from "../lib/student-diagnostic";
 import { scopeOutline, subtopicFieldHint } from "../lib/diagnostic-outline";
 import { signupState } from "../lib/prospect-signup";
-import { DIAGNOSTIC_LIST_COLUMNS, PROSPECT_COLUMNS, canResend, diagnosticStatus, forViewer, hasNoTest, normaliseProspectEmail, unavailableReason, type ProspectRow } from "../lib/prospect-status";
+import { DIAGNOSTIC_LIST_COLUMNS, PROSPECT_COLUMNS, canResend, diagnosticStatus, forViewer, hasNoTest, normaliseProspectEmail, resendResetFields, type ProspectRow } from "../lib/prospect-status";
 import { testInput, usableGeneratedQuestions } from "../lib/new-consultation";
-import { MCQ_COUNT, isEnglishOnly, sanitiseQuestionsForStudent, timeLimitFor, toDiagnosticShortAnswer, type DiagnosticQuestion } from "../lib/timed-diagnostic";
-import { MARKED_MAX_COUNT, loadMarkedTarget, writeCheckedMarkedQuestions, type MarkedTarget } from "../lib/marked-questions";
+import { MCQ_COUNT, isEnglishOnly, sanitiseQuestionsForStudent, timeLimitFor, type DiagnosticQuestion } from "../lib/timed-diagnostic";
+import { MARKED_MAX_COUNT, diagnosticShortAnswers, loadMarkedTarget, writeCheckedMarkedQuestions, type MarkedTarget } from "../lib/marked-questions";
 import type { MarkPoint } from "../lib/marking";
 import { prospectDiagnosticEmail, prospectLink, prospectSenderName } from "../lib/prospect-emails";
 import { getResend, sendEmail } from "../lib/email";
@@ -390,7 +390,7 @@ router.post("/tutor/diagnostic/generate", async (req: Request, res: Response) =>
   }
 });
 
-/** POST /tutor/diagnostic/short-answers — Preview bank-format short answers for the timed paper (nothing is saved) */
+/** POST /tutor/diagnostic/short-answers — Bank-format short answers for the timed paper (a curriculum subject's are saved to the bank) */
 router.post("/tutor/diagnostic/short-answers", async (req: Request, res: Response) => {
   try {
     const ctx = await requireTutor(req, res);
@@ -417,7 +417,7 @@ router.post("/tutor/diagnostic/short-answers", async (req: Request, res: Respons
     }
 
     const { drafts, rejected } = await writeCheckedMarkedQuestions(admin, target, { count: n, difficulty: "mixed" });
-    const questions = drafts.map((d) => toDiagnosticShortAnswer(d, target.topic, target.subtopic));
+    const questions = await diagnosticShortAnswers(admin, target, drafts);
     return res.json({ questions, rejected: rejected.length });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";
@@ -440,7 +440,7 @@ async function emailProspect(
   admin: AdminClient,
   d: { id: string; token: string; prospect_email: string; subjects: SubjectConfig[] | null; prospect_is_parent?: boolean | null; student_name?: string | null; time_limit_minutes?: number | null },
   displayName: string | null,
-  o: { parentCopy?: string | null; replyTo?: string | null } = {},
+  o: { parentCopy?: string | null; replyTo?: string | null; reset?: { started_at?: null; opened_at?: null } } = {},
 ): Promise<{ error?: string; parent?: boolean }> {
   const resend = getResend();
   if (!resend) return { error: "Email isn't set up on this server.", ...(o.parentCopy ? { parent: false } : {}) };
@@ -464,6 +464,12 @@ async function emailProspect(
   if (result.error) return { error: result.blocked ? "That address can't receive our emails (it bounced or reported spam before)." : "The email couldn't be sent. Try Resend.", ...withParent };
   const { error } = await admin.from("diagnostic_assessments").update({ sent_at: sentAt, reminded_at: null }).eq("id", d.id);
   if (error) logger.error({ err: error, id: d.id }, "diagnostic: emailed a prospect but couldn't record it");
+  // A resent timed test starts afresh (only while it's still pending; a submitted one keeps its times).
+  if (o.reset && Object.keys(o.reset).length) {
+    const { error: resetErr } = await admin.from("diagnostic_assessments").update(o.reset)
+      .eq("id", d.id).eq("status", "pending").is("student_id", null);
+    if (resetErr) logger.error({ err: resetErr, id: d.id }, "diagnostic: resent a timed test but couldn't reset its clock");
+  }
   return withParent;
 }
 
@@ -689,7 +695,7 @@ router.post("/tutor/diagnostic/:id/resend", async (req: Request, res: Response) 
     const d = await ownLinkDiagnostic(ctx.admin, ctx.tutorId, String(req.params.id));
     if (!d) return res.status(404).json({ error: "Diagnostic not found" });
     if (!d.prospect_email || !canResend(d, new Date())) return res.status(409).json({ error: "This diagnostic can't be resent." });
-    const sent = await emailProspect(ctx.admin, { ...d, prospect_email: d.prospect_email }, ctx.displayName);
+    const sent = await emailProspect(ctx.admin, { ...d, prospect_email: d.prospect_email }, ctx.displayName, { reset: resendResetFields(d) });
     if (sent.error) return res.status(502).json({ error: sent.error });
     return res.json({ ok: true });
   } catch (err) {
@@ -848,7 +854,8 @@ router.get("/diagnostic/:token", async (req: Request, res: Response) => {
 
     // A consultation's record with no test yet: nothing to take.
     if (error || !data || hasNoTest(data)) return res.status(404).json({ error: "Assessment not found" });
-    const unavailable = unavailableReason(data, new Date());
+    // A started timed test stays open past link expiry (as for submit), so it can be resumed and finished.
+    const unavailable = submitUnavailableReason(data, new Date());
     if (unavailable) return res.status(410).json({ error: unavailable });
     // A prospect's link: note the first time it's opened.
     if (!data.student_id && data.status === "pending" && !data.opened_at) {
@@ -894,10 +901,10 @@ router.post("/diagnostic/:token/start", async (req: Request, res: Response) => {
   try {
     const admin = getAdminClient();
     const { data, error } = await admin
-      .from("diagnostic_assessments").select(`id, ${PROSPECT_COLUMNS}`)
-      .eq("token", req.params.token).maybeSingle<{ id: string } & ProspectRow>();
+      .from("diagnostic_assessments").select(`id, time_limit_minutes, ${PROSPECT_COLUMNS}`)
+      .eq("token", req.params.token).maybeSingle<{ id: string; time_limit_minutes: number | null } & ProspectRow>();
     if (error || !data || hasNoTest(data)) return res.status(404).json({ error: "Assessment not found" });
-    const unavailable = unavailableReason(data, new Date());
+    const unavailable = submitUnavailableReason(data, new Date());
     if (unavailable) return res.status(410).json({ error: unavailable });
     if (!data.student_id && data.status === "pending" && !data.started_at) {
       const { error: upErr } = await admin.from("diagnostic_assessments")

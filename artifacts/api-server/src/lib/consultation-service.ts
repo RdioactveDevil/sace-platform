@@ -222,7 +222,7 @@ export async function sendConsultationEmails(o: {
    * guest and parent get the one combined email instead of the booking
    * confirmation, with the diagnostic link when a test was included.
    */
-  invite?: { testUrl: string | null };
+  invite?: { testUrl: string | null; timed?: boolean };
   /** Default: the configured Resend client. */
   resend?: Resend | null;
 }): Promise<ConsultationSends> {
@@ -275,6 +275,7 @@ export async function sendConsultationEmails(o: {
         audience: to === "parent" ? "parent" : "student",
         tutorName: tutor.name, studentName, start: call.scheduled_at, timeZone: tz, minutes: call.duration_minutes,
         joinUrl, questionnaireUrl: o.questionnaireUrl ?? null, testUrl: o.invite.testUrl,
+        ...(o.invite.timed ? { timed: true } : {}),
       });
     }
     const common = { to, tutorName: tutor.name, studentName, start: call.scheduled_at, timeZone: tz };

@@ -241,6 +241,39 @@ test("markAndStore logs a marker failure: no report, the attempt counted, nothin
   assert.equal(row.marking_attempts, 2);
 });
 
+test("markAndStore loses the claim when another runner bumps marking_attempts after the read", async () => {
+  const db: FakeDb = { tables: { diagnostic_assessments: [completedTimedRow({ marking_attempts: 0 })] } };
+  const base = fakeSupabase(db);
+  let first = true;
+  // The first query is markAndStore's read: once it has returned, another runner claims the row.
+  const racing = {
+    ...base,
+    from: (table: string) => {
+      const q = base.from(table) as unknown as { then: PromiseLike<unknown>["then"] };
+      if (first) {
+        first = false;
+        const then = q.then.bind(q);
+        q.then = ((ok, bad) => then((v) => {
+          db.tables.diagnostic_assessments[0].marking_attempts = 1;
+          db.tables.diagnostic_assessments[0].marking_started_at = NOW.toISOString();
+          return ok ? ok(v) : v;
+        }, bad)) as PromiseLike<unknown>["then"];
+      }
+      return q;
+    },
+  } as unknown as typeof base;
+  const calls: { q: MarkableQuestion; answer: string }[] = [];
+  let narrated = 0;
+  const deps = stubMarker(calls, fourOfFour);
+  const ok = await markAndStore(racing, "d1", { ...deps, narrate: async (a, b) => { narrated++; return deps.narrate(a, b); } });
+  assert.equal(ok, false);
+  assert.equal(calls.length, 0, "the marker is never called");
+  assert.equal(narrated, 0);
+  const row = db.tables.diagnostic_assessments[0];
+  assert.equal(row.marking_attempts, 1, "the other runner's claim stands");
+  assert.equal(row.report, null);
+});
+
 test("markAndStore gives up after the last attempt", async () => {
   const db: FakeDb = { tables: { diagnostic_assessments: [completedTimedRow({ marking_attempts: 3 })] } };
   const calls: { q: MarkableQuestion; answer: string }[] = [];

@@ -5,6 +5,8 @@
  * (student_id set) never expire here and get no prospect reminder.
  */
 
+import { MAX_MARKING_ATTEMPTS } from "./timed-diagnostic";
+
 export type ProspectRow = {
   status: "pending" | "completed";
   student_id: string | null;
@@ -26,8 +28,6 @@ export type ProspectRow = {
 export type DiagnosticStatus = "finished" | "marking" | "marking_failed" | "cancelled" | "no_test" | "expired" | "in_progress" | "opened" | "sent" | "link";
 
 const DAY_MS = 24 * 3_600_000;
-/** Background marking gives up after this many failed attempts. */
-export const MAX_MARKING_ATTEMPTS = 3;
 
 /** A link diagnostic's link works for this long after it was (last) sent, or created. */
 export const PROSPECT_TTL_MS = 30 * DAY_MS;
@@ -71,6 +71,16 @@ export function unavailableReason(r: ProspectRow, now: Date): string | null {
 export function canResend(r: ProspectRow, now: Date): boolean {
   if (!isProspect(r) || !r.prospect_email) return false;
   return ["sent", "opened", "in_progress", "expired", "link"].includes(diagnosticStatus(r, now));
+}
+
+/**
+ * What a resend clears besides the reminder: a pending timed prospect test
+ * gets a fresh time limit (its clock and opened mark are reset), so a started
+ * one isn't submitted as soon as it's reopened. Untimed rows keep both.
+ */
+export function resendResetFields(r: Pick<ProspectRow, "status" | "student_id" | "time_limit_minutes">): { started_at?: null; opened_at?: null } {
+  if (r.student_id || r.status !== "pending" || !r.time_limit_minutes) return {};
+  return { started_at: null, opened_at: null };
 }
 
 export function dueForProspectReminder(r: ProspectRow, now: Date): boolean {

@@ -9,6 +9,7 @@ import { subjectProfile } from "./subject-profile";
 import { latexPromptRule } from "./math-prompt";
 import { LEARNING_OBJECTIVES } from "../routes/generate-questions";
 import { buildStructures, chemDiagramColumn, chemPromptLines, describeChemDiagram, sanitizeChemFigure } from "./chem-figures";
+import { toDiagnosticShortAnswer, type DiagnosticQuestion } from "./timed-diagnostic";
 
 /**
  * Writing 'marked' questions: SACE-style short-answer questions worth several
@@ -394,6 +395,21 @@ export async function saveMarkedQuestions(
   const { data, error } = await admin.from("questions").insert(rows).select("*");
   if (error) throw new Error(`Saving the questions failed: ${error.message}`);
   return data ?? [];
+}
+
+/**
+ * Checked drafts as timed-diagnostic short answers. A curriculum subject's are
+ * saved to the bank first, so each carries its bank_question_id; a subject
+ * outside a curriculum has no bank and its drafts are used as they are.
+ */
+export async function diagnosticShortAnswers(
+  admin: SupabaseClient,
+  t: MarkedTarget,
+  drafts: CheckedDraft[],
+): Promise<DiagnosticQuestion[]> {
+  type Row = Parameters<typeof toDiagnosticShortAnswer>[0];
+  const rows: Row[] = t.curriculumId ? (await saveMarkedQuestions(admin, t, drafts)) as unknown as Row[] : drafts;
+  return rows.map((r) => toDiagnosticShortAnswer(r, t.topic, t.subtopic));
 }
 
 /** Write, check and save up to MARKED_MAX_COUNT questions for one subtopic. */

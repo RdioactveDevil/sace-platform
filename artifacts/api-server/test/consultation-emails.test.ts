@@ -133,6 +133,31 @@ test("invite email to a parent without a student name says 'your child'", () => 
   assert.doesNotMatch(text(e), /your tutor/i);
 });
 
+const TIMED = "It's 50 marks in 50 minutes, timed, in one sitting: start it when you have an uninterrupted hour.";
+
+test("invite email for a timed test gives the timed sentence instead of 30–45 minutes", () => {
+  for (const audience of ["student", "parent"] as const) {
+    for (const questionnaireUrl of [Q, null]) {
+      const e = consultationInviteEmail({ ...inv, audience, questionnaireUrl, testUrl: T, timed: true });
+      const t = text(e);
+      assert.doesNotMatch(t, /30–45/, audience);
+      assert.ok(e.content.paragraphs.includes(`A diagnostic test: ${T}`), audience);
+      assert.equal(e.content.paragraphs.at(-1), TIMED, audience);
+    }
+  }
+  // No test, no timed sentence.
+  assert.ok(!text(consultationInviteEmail({ ...inv, audience: "student", questionnaireUrl: Q, timed: true })).includes(TIMED));
+});
+
+test("invite email for an untimed test keeps its wording exactly", () => {
+  for (const audience of ["student", "parent"] as const) {
+    const untimed = consultationInviteEmail({ ...inv, audience, questionnaireUrl: Q, testUrl: T });
+    assert.deepEqual(consultationInviteEmail({ ...inv, audience, questionnaireUrl: Q, testUrl: T, timed: false }), untimed);
+    assert.equal(untimed.content.paragraphs.at(-1), `A diagnostic test (about 30–45 minutes): ${T}`);
+    assert.ok(!text(untimed).includes(TIMED));
+  }
+});
+
 test("invite email lists only the links it is given", () => {
   const onlyQ = text(consultationInviteEmail({ ...inv, audience: "student", questionnaireUrl: Q }));
   assert.ok(onlyQ.includes(Q) && !onlyQ.includes(T));

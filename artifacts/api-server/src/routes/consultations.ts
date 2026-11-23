@@ -374,7 +374,7 @@ router.post("/tutor/consultations/new", async (req: Request, res: Response) => {
         call: { ...call, guest_is_parent: v.primary.isParent },
         tutor,
         questionnaireUrl: questionnaireLinkFor({ token: rec.token, questionnaire: snapshot, pre_call_form_url: null }),
-        invite: { testUrl: t ? prospectLink(rec.token) : null },
+        invite: { testUrl: t ? prospectLink(rec.token) : null, ...(t && timeLimitFor(t.questions) ? { timed: true } : {}) },
       });
     } catch (err) {
       logger.error({ err, sessionId: booked.id }, "consultations: booked, but the emails failed");

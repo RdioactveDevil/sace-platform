@@ -6,6 +6,7 @@ import {
   doneRecipients,
   dueForProspectReminder,
   normaliseProspectEmail,
+  resendResetFields,
   unavailableReason,
   type ProspectRow,
 } from "../src/lib/prospect-status";
@@ -67,6 +68,15 @@ test("resend: sent, opened, in progress or expired, with an email", () => {
   assert.equal(canResend(row({ status: "completed" }), after(DAY)), false);
   assert.equal(canResend(row({ cancelled_at: SENT }), after(DAY)), false);
   assert.equal(canResend(row({ prospect_email: null, sent_at: null }), after(DAY)), false);
+});
+
+test("resending a pending timed prospect test gives it a fresh clock; untimed rows keep theirs", () => {
+  assert.deepEqual(resendResetFields(row({ started_at: SENT, opened_at: SENT, time_limit_minutes: 50 })), { started_at: null, opened_at: null });
+  assert.deepEqual(resendResetFields(row({ time_limit_minutes: 50 })), { started_at: null, opened_at: null });
+  assert.deepEqual(resendResetFields(row({ started_at: SENT, opened_at: SENT })), {});
+  assert.deepEqual(resendResetFields(row({ started_at: SENT, time_limit_minutes: null })), {});
+  assert.deepEqual(resendResetFields(row({ started_at: SENT, time_limit_minutes: 50, student_id: "s1" })), {});
+  assert.deepEqual(resendResetFields(row({ started_at: SENT, time_limit_minutes: 50, status: "completed" })), {});
 });
 
 test("one reminder two days after sending, if not started", () => {
