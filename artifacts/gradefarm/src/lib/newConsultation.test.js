@@ -106,3 +106,9 @@ test('testSentSummary: who got the test, or that it is saved and can be resent',
   assert.equal(testSentSummary({ emailed: {} }).ok, false)
   assert.equal(testSentSummary(undefined).ok, false)
 })
+
+test('newConsultationBody sends the student\'s location when one is chosen', () => {
+  const base = { ...emptyNewConsultation(), studentName: 'Sam', sendToStudent: true, studentEmail: 'sam@x.com', startIso: '2026-12-01T06:00:00.000Z' }
+  assert.equal(newConsultationBody({ ...base, timeZone: 'Australia/Melbourne' }).timeZone, 'Australia/Melbourne')
+  assert.equal('timeZone' in newConsultationBody(base), false)
+})

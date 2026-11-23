@@ -616,15 +616,15 @@ router.get("/tutor/diagnostic/list", async (req: Request, res: Response) => {
     // (one live call per prospect email, whichever of their diagnostics it was booked from).
     const { data: calls, error: callsErr } = await admin
       .from("tutoring_sessions")
-      .select("id, scheduled_at, diagnostic_id, guest_email, reminder_minutes")
+      .select("id, scheduled_at, diagnostic_id, guest_email, guest_time_zone, reminder_minutes")
       .eq("tutor_id", tutorId).eq("session_type", "consultation").eq("status", "scheduled");
     if (callsErr) throw new Error(callsErr.message);
-    type Call = { id: string; scheduled_at: string; diagnostic_id: string | null; guest_email: string | null; reminder_minutes: number[] | null };
+    type Call = { id: string; scheduled_at: string; diagnostic_id: string | null; guest_email: string | null; guest_time_zone: string | null; reminder_minutes: number[] | null };
     const bookingFor = (row: Row) => {
       if (row.tutor_id !== tutorId || row.student_id) return null;
       const email = row.prospect_email?.toLowerCase() ?? null;
       const call = ((calls ?? []) as Call[]).find((c) => c.diagnostic_id === row.id || (!!email && c.guest_email?.toLowerCase() === email));
-      return call ? { sessionId: call.id, start: call.scheduled_at, reminderMinutes: call.reminder_minutes ?? [] } : null;
+      return call ? { sessionId: call.id, start: call.scheduled_at, reminderMinutes: call.reminder_minutes ?? [], timeZone: call.guest_time_zone } : null;
     };
 
     // Sign-up state: this tutor's invites that carry one of these diagnostics across.

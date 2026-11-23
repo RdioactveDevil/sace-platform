@@ -1982,7 +1982,7 @@ function DiagnosticTab({ profile, theme }) {
                       )}
                       {isProspect && d.booking && (
                         <>
-                          <button onClick={() => setCallModal({ mode: 'reschedule', session: { id: d.booking.sessionId, diagnostic_id: d.id, scheduled_at: d.booking.start, guest_name: rowName, guest_email: d.prospect_email } })} disabled={busy} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.text, fontSize: 12, fontWeight: 700, cursor: busy ? 'default' : 'pointer', fontFamily: FONT_B }}>
+                          <button onClick={() => setCallModal({ mode: 'reschedule', session: { id: d.booking.sessionId, diagnostic_id: d.id, scheduled_at: d.booking.start, guest_name: rowName, guest_email: d.prospect_email, guest_time_zone: d.booking.timeZone || null } })} disabled={busy} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.text, fontSize: 12, fontWeight: 700, cursor: busy ? 'default' : 'pointer', fontFamily: FONT_B }}>
                             Reschedule
                           </button>
                           <button onClick={() => handleCancelCall(d)} disabled={busy} style={{ padding: '6px 12px', borderRadius: 7, border: `1px solid ${t.border}`, background: 'transparent', color: t.textMuted, fontSize: 12, cursor: busy ? 'default' : 'pointer', fontFamily: FONT_B }}>

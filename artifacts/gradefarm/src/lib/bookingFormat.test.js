@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  reminderLabel, groupSlotsByDay, emptyWeek, isValidHHMM, formatWhen, zonedToIso, reminderToMinutes, splitReminder, ZONES, nextBlock, zoneCity, joinCountdownText, prospectBookingBody,
+  reminderLabel, groupSlotsByDay, emptyWeek, isValidHHMM, formatWhen, zonedToIso, reminderToMinutes, splitReminder, ZONES, STUDENT_LOCATIONS, nextBlock, zoneCity, joinCountdownText, prospectBookingBody,
 } from './bookingFormat.js'
 
 test('reminderLabel', () => {
@@ -121,4 +121,10 @@ test('prospectBookingBody sends a cleared parent email as an empty string, not l
   assert.equal(cleared.email, 'kid@example.com')
   assert.equal(cleared.name, undefined)
   assert.equal(prospectBookingBody({ ...base, parentEmail: ' mum@example.com ' }).parentEmail, 'mum@example.com')
+})
+
+test('STUDENT_LOCATIONS: one per Australian zone, labelled with the state', () => {
+  assert.deepEqual(STUDENT_LOCATIONS.map(l => l.value).sort(), ZONES.map(z => z.value).sort())
+  assert.equal(STUDENT_LOCATIONS.find(l => l.value === 'Australia/Melbourne').label, 'Melbourne (VIC)')
+  assert.equal(STUDENT_LOCATIONS.find(l => l.value === 'Australia/Sydney').label, 'Sydney or Canberra (NSW, ACT)')
 })

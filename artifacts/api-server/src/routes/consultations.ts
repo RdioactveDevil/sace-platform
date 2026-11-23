@@ -23,7 +23,7 @@ import { Router, type Request, type Response } from "express";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { AccessToken } from "livekit-server-sdk";
 import {
-  bookingError, bookingParentEmail, checkReminders, consultationRoomName, checkSettingsInput, guestIdentity, guestJoinAllowed, guestTimeZone, hasHours, newGuestToken,
+  bookingError, bookingParentEmail, checkReminders, chosenGuestZone, consultationRoomName, checkSettingsInput, guestIdentity, guestJoinAllowed, guestTimeZone, hasHours, newGuestToken,
   parseStart, publicSettings, removedReminders, settingsFromRow, startIsOffered, GUEST_JOIN_EARLY_MS, GUEST_JOIN_LATE_MS,
   type SettingsRow,
 } from "../lib/consultation-access";
@@ -276,7 +276,7 @@ router.post("/tutor/consultations", async (req: Request, res: Response) => {
 
     const booked = await book(ctx.admin, {
       tutorId: ctx.tutorId, start, settings, diagnosticId: d.id, email: email.email, name: prospectName(d),
-      parentEmail: parent.email, timeZone: s.timeZone, reminders, guestIsParent: guestIsParent(d, email.email),
+      parentEmail: parent.email, timeZone: chosenGuestZone(body.timeZone) ?? s.timeZone, reminders, guestIsParent: guestIsParent(d, email.email),
     });
     if ("taken" in booked) {
       return res.status(409).json({
@@ -347,7 +347,8 @@ router.post("/tutor/consultations/new", async (req: Request, res: Response) => {
     try {
       booked = await book(admin, {
         tutorId, start: v.start, settings, diagnosticId: rec.id, email: v.primary.email, name: v.studentName,
-        parentEmail: v.parentCopy, timeZone: s.timeZone, reminders: v.reminderMinutes ?? s.reminderMinutes,
+        parentEmail: v.parentCopy, timeZone: chosenGuestZone((req.body as Record<string, unknown> | undefined)?.timeZone) ?? s.timeZone,
+        reminders: v.reminderMinutes ?? s.reminderMinutes,
         guestIsParent: v.primary.isParent,
       });
     } catch (err) {
@@ -415,9 +416,20 @@ router.patch("/tutor/consultations/:id", async (req: Request, res: Response) => 
     const call = await changeableCall(ctx, String(req.params.id), res);
     if (!call) return;
     const body = (req.body ?? {}) as Record<string, unknown>;
-    if (body.start === undefined && body.reminderMinutes === undefined) {
+    if (body.start === undefined && body.reminderMinutes === undefined && body.timeZone === undefined) {
       return res.status(400).json({ error: "Nothing to change." });
     }
+    // The student's location: their emails (and reminders still to come) give the time there.
+    const zone = body.timeZone === undefined ? null : chosenGuestZone(body.timeZone);
+    if (body.timeZone !== undefined && !zone) return res.status(400).json({ error: "Choose where the student is." });
+    if (zone && zone !== call.guest_time_zone) {
+      const { data: moved, error: zoneErr } = await ctx.admin
+        .from("tutoring_sessions").update({ guest_time_zone: zone })
+        .eq("id", call.id).eq("status", "scheduled").select("id");
+      if (zoneErr) throw new Error(zoneErr.message);
+      if (!moved?.length) return res.status(409).json({ error: "Only a call that hasn't started can be changed." });
+    }
+    if (body.start === undefined && body.reminderMinutes === undefined) return res.json({ ok: true });
 
     let reminders = call.reminder_minutes ?? [];
     if (body.reminderMinutes !== undefined) {

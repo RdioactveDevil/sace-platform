@@ -27,8 +27,8 @@ export default function ConsultationModal({ mode, diagnostic, session, theme, on
   const booking = mode === 'book'
   const diagnosticId = booking ? diagnostic.id : session.diagnostic_id
 
-  const times = useConsultationTimes({ diagnosticId })
-  const { loading, zoneError, zone, zoneReady, startIso, how } = times
+  const times = useConsultationTimes({ diagnosticId, studentZone: booking ? null : session.guest_time_zone || null })
+  const { loading, zoneError, zone, zoneReady, startIso, how, studentZone } = times
   const [email, setEmail] = useState(booking ? diagnostic.prospect_email || '' : '')
   const [parentEmail, setParentEmail] = useState(booking ? diagnostic.parent_email || '' : '')
   const [saving, setSaving] = useState(false)
@@ -49,9 +49,9 @@ export default function ConsultationModal({ mode, diagnostic, session, theme, on
     setSaving(true)
     try {
       if (booking) {
-        await bookConsultation({ diagnosticId, start: startIso, email: email.trim(), parentEmail: parentEmail.trim() || null })
+        await bookConsultation({ diagnosticId, start: startIso, email: email.trim(), parentEmail: parentEmail.trim() || null, timeZone: studentZone })
       } else {
-        await updateConsultation(session.id, { start: startIso })
+        await updateConsultation(session.id, { start: startIso, timeZone: studentZone })
       }
       await onDone()
       onClose()

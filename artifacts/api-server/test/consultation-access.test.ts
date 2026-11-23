@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  TUTOR_TIME_ZONES, bookingError, bookingParentEmail, checkReminders, consultationRoomName, checkSettingsInput, guestIdentity, guestJoinAllowed, guestTimeZone, newGuestToken,
+  TUTOR_TIME_ZONES, bookingError, bookingParentEmail, chosenGuestZone, checkReminders, consultationRoomName, checkSettingsInput, guestIdentity, guestJoinAllowed, guestTimeZone, newGuestToken,
   openSessionAllowed, parseStart, publicSettings, removedReminders, settingsFromRow, shouldMarkActive, shouldMarkCompleted, startIsOffered, type SettingsRow,
 } from "../src/lib/consultation-access.ts";
 
@@ -283,4 +283,13 @@ test("a booking's parent email: left out uses the diagnostic's, cleared means no
   assert.deepEqual(bookingParentEmail(null, "mum@example.com"), { email: null });
   assert.deepEqual(bookingParentEmail(" Dad@Example.com ", "mum@example.com"), { email: "dad@example.com" });
   assert.ok("error" in bookingParentEmail("not an email", "mum@example.com"));
+});
+
+test("chosenGuestZone: the student's location a tutor picked, or null", () => {
+  assert.equal(chosenGuestZone("Australia/Melbourne"), "Australia/Melbourne");
+  assert.equal(chosenGuestZone("Australia/Perth"), "Australia/Perth");
+  assert.equal(chosenGuestZone("Not/AZone"), null);
+  assert.equal(chosenGuestZone(""), null);
+  assert.equal(chosenGuestZone(undefined), null);
+  assert.equal(chosenGuestZone(42), null);
 });

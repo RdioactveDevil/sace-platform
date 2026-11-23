@@ -10,6 +10,17 @@ export const ZONES = [
   { value: 'Australia/Perth', label: 'Perth' },
 ]
 
+/** Where a student can be, for the time their emails give: one per Australian zone. */
+export const STUDENT_LOCATIONS = [
+  { value: 'Australia/Adelaide', label: 'Adelaide (SA)' },
+  { value: 'Australia/Melbourne', label: 'Melbourne (VIC)' },
+  { value: 'Australia/Sydney', label: 'Sydney or Canberra (NSW, ACT)' },
+  { value: 'Australia/Brisbane', label: 'Brisbane (QLD)' },
+  { value: 'Australia/Perth', label: 'Perth (WA)' },
+  { value: 'Australia/Hobart', label: 'Hobart (TAS)' },
+  { value: 'Australia/Darwin', label: 'Darwin (NT)' },
+]
+
 /** Days in the order the settings card shows them; keys match the server's weekly hours. */
 export const WEEK_DAYS = [
   { key: 'mon', label: 'Monday' },
