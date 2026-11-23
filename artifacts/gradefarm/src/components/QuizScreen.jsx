@@ -33,6 +33,7 @@ import {
   flagTopicForStudyPlan,
   completeAssignment,
   notifyAssignmentFinished,
+  getAnswersSince,
 } from '../lib/db'
 import { THEMES } from '../lib/theme'
 import { getTopicCodeByName, resolveManagedSubjectName } from '../lib/adminTopics'
@@ -51,6 +52,7 @@ import { AnnotatedQuestion, AdviceSteps, penColor } from './TitanAdvice'
 import { getQuestionType, describeCorrectAnswer, responseIsComplete, isAiMarked, totalMarks, questionFormat } from '../lib/questionTypes'
 import { writtenTopupSubtopic } from '../lib/writtenTopups'
 import { buildQuestionHelpContext, describeResponse, questionHelpSystemSection } from '../lib/questionHelp'
+import { presentQuestion as inDisplayOrder, presentReveal, storedQuestion, relabelLetters, toOriginal, toDisplay } from '../lib/optionShuffle'
 import RoughWork from './RoughWork'
 import { consolidationRound, CONSOLIDATION_STREAK, CONSOLIDATION_MAX_QUESTIONS } from '../lib/consolidation'
 import { playSound, answerSound, finishSound, isCelebration, isStreakMilestone } from '../lib/sounds'
@@ -576,9 +578,18 @@ export default function QuizScreen({
     setReporting(false)
   }
 
+  // Multiple-choice options show in an order of the student's own, the same
+  // each time they see the question (lib/optionShuffle.js). Everything on
+  // screen (selected, exam responses, keys 1–4, the answer shown, Titan's
+  // context) is in that order; answers go to the server, and stored picks and
+  // answers come back, in the stored order, translated where they cross.
+  const userId = profile?.id
+  const shownQuestion = useCallback((q) => inDisplayOrder(q, `${userId}:${q?.bank_question_id || q?.id}`), [userId])
+
   const showHeldRef = useRef(null)
   // `held`: this is the question the server kept for the student (see below).
-  const setDisplayQuestion = useCallback((q, { held = false } = {}) => {
+  const setDisplayQuestion = useCallback((stored, { held = false } = {}) => {
+    const q = shownQuestion(stored)
     setFinished(false)
     setCurrentQ(q)
     setSelected(null)
@@ -606,7 +617,7 @@ export default function QuizScreen({
         if (r?.bonus && currentQRef.current?.id === (r.questionId || q.id)) setBonusId(r.questionId || q.id)
       })
     }
-  }, [setAiTip, setCorrect, setCurrentQ, setEarnedXP, setSelected, setShowAns, examRun, holdContext])
+  }, [setAiTip, setCorrect, setCurrentQ, setEarnedXP, setSelected, setShowAns, examRun, holdContext, shownQuestion])
 
   /** Show the question the server kept for the student (from the bank in hand, else fetched). */
   const showHeldQuestion = async (id) => {
@@ -1316,7 +1327,8 @@ export default function QuizScreen({
   // served again. Freshly generated variants have a bank id once the server
   // has checked and saved them (null if they didn't pass).
   const trackRemediationVariant = async (q, isCorrect) => {
-    const contentKey = questionContentKey(q)
+    // The bank copy's options are in stored order.
+    const contentKey = questionContentKey(storedQuestion(q))
     const pendingBankId = q.variant_record_id && pendingBankIdsRef.current.get(q.variant_record_id)
     const trackId =
       q.bank_question_id ||
@@ -1378,6 +1390,7 @@ export default function QuizScreen({
   const submitAnswer = async (response, marks = null) => {
     if (showAns || !currentQ || checkingRef.current) return
     const q = currentQ
+    const order = q.option_order
     const isVariant = !!q.is_variant
     const timeTakenMs = startTime.current ? Date.now() - startTime.current : null
     checkingRef.current = true
@@ -1386,7 +1399,7 @@ export default function QuizScreen({
     setSelected(response)
     let r
     try {
-      r = await checkAnswer(answerRequest(q, response, timeTakenMs))
+      r = await checkAnswer(answerRequest(q, toOriginal(order, response), timeTakenMs))
     } catch (err) {
       checkingRef.current = false
       setChecking(false)
@@ -1408,8 +1421,9 @@ export default function QuizScreen({
     const xpEarned = Number(r.xp) || 0
     const bonus = Number(r.bonus) || 0
     const newStreak = isCorrect ? streak + 1 : 0
-    // The answer and solution, now it's been answered.
-    const shown = { ...q, ...(r.reveal || {}) }
+    // The answer and solution, now it's been answered (in the order on screen;
+    // App's bank keeps them as stored).
+    const shown = { ...q, ...presentReveal(r.reveal || {}, order) }
     currentQRef.current = shown
     setCurrentQ(shown)
     if (!isVariant && r.reveal) onAnswersRevealed?.({ [q.id]: r.reveal })
@@ -1451,7 +1465,8 @@ export default function QuizScreen({
     // Reading-passage questions skip remediation: a generated "similar
     // question" would have no passage to answer from.
     const remediate = !isCorrect && !q.passage_id && remediationAllowed
-    if (remediate) enterRemediationStateSync(shown)
+    // Extra practice works from the question as stored.
+    if (remediate) enterRemediationStateSync(storedQuestion(shown))
 
     setStruggleMap(prev => {
       const old = prev[q.id] ?? { attempts: 0, wrong: 0 }
@@ -1470,14 +1485,14 @@ export default function QuizScreen({
 
     if (isCorrect) return
     // Load the extra practice in the background, alongside the tip.
-    if (remediate) enterRemediation(shown)
+    if (remediate) enterRemediation(storedQuestion(shown))
     // Written answers already come back with mark-by-mark feedback.
     if (marks) return
     // Written once per question and answer on the server, then reused.
     setLoadingTip(true)
-    const tip = await fetchAnswerTip(q.bank_question_id || q.id, response)
+    const tip = await fetchAnswerTip(q.bank_question_id || q.id, toOriginal(order, response))
     // Moved on while it was coming: it's for the last question, not this one.
-    if (currentQRef.current?.id === q.id) setAiTip(tip)
+    if (currentQRef.current?.id === q.id) setAiTip(relabelLetters(tip, order))
     setLoadingTip(false)
   }
 
@@ -1669,7 +1684,7 @@ export default function QuizScreen({
     let r
     try {
       r = await markExamRun({
-        items: answeredQs.map(q => ({ questionId: q.id, response: examResponses[q.id], timeMs: times[q.id] || null })),
+        items: answeredQs.map(q => ({ questionId: q.id, response: toOriginal(shownQuestion(q).option_order, examResponses[q.id]), timeMs: times[q.id] || null })),
         questionIds: examSet.map(q => q.id),
         context: holdContext,
         sessionId,
@@ -1873,7 +1888,8 @@ export default function QuizScreen({
     // (Home and the Study Plan offer that review).
     const wrongThisSession = sessionWrongIds(sessionResults, questions)
     const questionById = new Map(questions.map(q => [q.id, q]))
-    const answerRows = mainResults.map((r, i) => ({ r, q: questionById.get(r.id), key: `${r.id}-${i}` })).filter(x => x.q)
+    // As they were shown: the responses are in that order.
+    const answerRows = mainResults.map((r, i) => ({ r, q: shownQuestion(questionById.get(r.id)), key: `${r.id}-${i}` })).filter(x => x.q)
 
     const timeUp = examRun && timerSeconds > 0 && timeLeft <= 0
     const status = consolidation
@@ -2089,7 +2105,14 @@ export default function QuizScreen({
   // Free subject: once today's questions are used up, stop before the next one,
   // with the next question waiting behind the lock.
   if (freeQuota && freeQuota.used >= freeQuota.limit && !showAns) {
-    return <FreeLimitScreen t={t} limit={freeQuota.limit} userId={profile?.id} questions={questions} nextQ={currentQ} results={sessionResults} onUpgrade={freeQuota.onUpgrade} onRetry={(ids) => startMode('review', ids)} onHome={onHome} />
+    // Its marked sheet says which letter was picked: the letter as it was shown.
+    const loadTodaysAnswers = async (...args) => {
+      const byId = new Map(questions.map(q => [q.id, q]))
+      return (await getAnswersSince(...args)).map(a => (byId.has(a.question_id)
+        ? { ...a, selected: toDisplay(shownQuestion(byId.get(a.question_id)).option_order, a.selected) }
+        : a))
+    }
+    return <FreeLimitScreen t={t} limit={freeQuota.limit} userId={profile?.id} questions={questions} nextQ={currentQ} results={sessionResults} onUpgrade={freeQuota.onUpgrade} onRetry={(ids) => startMode('review', ids)} onHome={onHome} loadAnswers={loadTodaysAnswers} />
   }
 
   const { pct } = getLevelProgress(profile.xp, rankAccuracy(profile))
