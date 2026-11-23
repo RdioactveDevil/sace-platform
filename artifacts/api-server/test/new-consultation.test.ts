@@ -184,3 +184,16 @@ test("generated questions: ones without text are dropped; nothing usable is empt
   assert.deepEqual(out, [{ id: 1, question: "Keep", marks: 2, topic: "T" }]);
   assert.deepEqual(usableGeneratedQuestions([{ question: "" }, 5]), []);
 });
+
+const MCQS = (n: number) =>
+  Array.from({ length: n }, (_, i) => ({ id: i + 1, question: `M${i}`, type: "multiple_choice", marks: 1 }));
+const MARKED = (list: number[]) => list.map((marks, i) => ({ id: 50 + i, question: `S${i}`, type: "marked", marks }));
+const timed = (questions: unknown[]) => ({ ...TEST, questions });
+
+test("testInput checks the timed format only when a question is marked", () => {
+  assert.ok("error" in testInput(timed([...MCQS(18), ...MARKED([5, 5, 4, 4, 4, 4, 4])])));
+  const ok = testInput(timed([...MCQS(20), ...MARKED([5, 5, 4, 4, 4, 4, 4])]));
+  assert.ok(!("error" in ok));
+  assert.equal((ok as { scoreMax: number }).scoreMax, 50);
+  assert.ok(!("error" in testInput(TEST)));
+});

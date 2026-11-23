@@ -10,6 +10,7 @@
  */
 import { checkReminders, parseStart } from "./consultation-access";
 import { normaliseProspectEmail } from "./prospect-status";
+import { checkTimedTest, timeLimitFor } from "./timed-diagnostic";
 import { validateQuestionnaire, type Questionnaire } from "./questionnaire";
 
 export const MAX_STUDENT_NAME = 100;
@@ -39,6 +40,10 @@ export function testInput(raw: unknown): TestInput | { error: string } {
   }
   if (!Array.isArray(subjects) || subjects.length === 0 || !subjects.every((s) => isObj(s) && typeof s.name === "string")) {
     return { error: "At least one subject is required" };
+  }
+  if (timeLimitFor(questions as Array<{ type?: unknown }>) !== null) {
+    const problem = checkTimedTest(questions as Array<{ type?: unknown; marks: number }>);
+    if (problem) return { error: problem };
   }
   return {
     yearLevel: yearLevel.trim(),

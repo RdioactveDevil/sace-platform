@@ -11,6 +11,8 @@ import { scopeOutline, subtopicFieldHint } from "../lib/diagnostic-outline";
 import { signupState } from "../lib/prospect-signup";
 import { DIAGNOSTIC_LIST_COLUMNS, PROSPECT_COLUMNS, canResend, diagnosticStatus, forViewer, hasNoTest, normaliseProspectEmail, unavailableReason, type ProspectRow } from "../lib/prospect-status";
 import { testInput, usableGeneratedQuestions } from "../lib/new-consultation";
+import { isEnglishOnly, sanitiseQuestionsForStudent } from "../lib/timed-diagnostic";
+import type { MarkPoint } from "../lib/marking";
 import { prospectDiagnosticEmail, prospectLink, prospectSenderName } from "../lib/prospect-emails";
 import { getResend, sendEmail } from "../lib/email";
 import { DEFAULT_QUESTIONNAIRE, countRedFlags, questionnaireLinkFor, questionnaireStatus, snapshotFrom, validateQuestionnaire, type Answers, type Questionnaire } from "../lib/questionnaire";
@@ -32,7 +34,7 @@ type AdminClient = SupabaseClient & { auth: SupabaseAdminAuth };
 interface DiagnosticQuestion {
   id: number;
   question: string;
-  type: "multiple_choice" | "short_answer" | "extended_response";
+  type: "multiple_choice" | "short_answer" | "extended_response" | "marked";
   options?: string[];
   correct_answer: string;
   marks: number;
@@ -40,6 +42,11 @@ interface DiagnosticQuestion {
   topic: string;
   subtopic?: string;
   solution_notes?: string;
+  marking_scheme?: MarkPoint[];
+  solution?: string;
+  table_data?: unknown;
+  diagram?: unknown;
+  bank_question_id?: string;
 }
 
 interface SubjectConfig {
@@ -252,11 +259,6 @@ function performanceBand(pct: number): string {
   return "Beginning";
 }
 
-// Strip correct answers before sending to student
-function sanitiseQuestionsForStudent(questions: DiagnosticQuestion[]): Omit<DiagnosticQuestion, "correct_answer" | "solution_notes">[] {
-  return questions.map(({ correct_answer: _ca, solution_notes: _sn, ...rest }) => rest);
-}
-
 // ── Generate Questions (Claude) ────────────────────────────────────────────────
 
 async function generateQuestions(
@@ -265,9 +267,7 @@ async function generateQuestions(
   // For a curriculum subject: "- Topic: Sub; Sub" lines ("" = the whole course).
   outline?: string,
 ): Promise<DiagnosticQuestion[]> {
-  const isEnglishOnly = subjects.every((s) =>
-    s.name.toLowerCase().includes("english") || s.name.toLowerCase().includes("writing")
-  );
+  const englishOnly = isEnglishOnly(subjects);
 
   const subjectDesc = subjects.map((s) => {
     const base = outline === undefined
@@ -279,7 +279,7 @@ async function generateQuestions(
     return base;
   }).join("; ");
 
-  const writingInstructions = isEnglishOnly
+  const writingInstructions = englishOnly
     ? `
 Since this is an English/Writing assessment:
 - EASY (10 marks): 5 multiple-choice questions (2 marks each) on language features, grammar, punctuation, vocabulary, and literacy skills appropriate for ${yearLevel}.
