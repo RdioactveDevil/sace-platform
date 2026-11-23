@@ -2245,7 +2245,7 @@ function DiagnosticTab({ profile, theme }) {
                               ) : marked ? (
                                 <>
                                   {studentAnswer
-                                    ? <MarkedAnswer answer={studentAnswer} result={marked} theme={theme} />
+                                    ? <MarkedAnswer answer={studentAnswer} result={marked} theme={theme} label="Student's answer" />
                                     : <div style={{ fontSize: 12, color: t.textFaint }}>Not answered</div>}
                                   <MarkPoints question={q} result={marked} theme={theme} />
                                 </>

@@ -99,10 +99,10 @@ function Score({ result, theme }) {
 }
 
 /** The student's answer with what earned each mark highlighted and numbered. */
-export function MarkedAnswer({ answer, result, theme }) {
+export function MarkedAnswer({ answer, result, theme, label = 'Your answer' }) {
   const t = THEMES[theme]
   const ranges = evidenceRanges(answer, result.marks)
-  if (isMathWorking(answer)) return <MarkedWorking answer={answer} ranges={ranges} theme={theme} />
+  if (isMathWorking(answer)) return <MarkedWorking answer={answer} ranges={ranges} theme={theme} label={label} />
 
   const pieces = []
   let pos = 0
@@ -120,7 +120,7 @@ export function MarkedAnswer({ answer, result, theme }) {
 
   return (
       <div>
-        <div style={{ fontSize: 11.5, fontWeight: 700, color: t.textFaint, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Your answer</div>
+        <div style={{ fontSize: 11.5, fontWeight: 700, color: t.textFaint, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>{label}</div>
         <div style={{ whiteSpace: 'pre-wrap', fontSize: 14, lineHeight: 1.7, color: t.textSub, padding: '10px 12px', borderRadius: 10, background: t.bgSubtle, border: `1px solid ${t.border}`, overflowWrap: 'anywhere' }}>
           {pieces}
         </div>
@@ -130,12 +130,12 @@ export function MarkedAnswer({ answer, result, theme }) {
 }
 
 /** Maths working, a rendered line at a time; a line that earned marks is highlighted with their numbers. */
-function MarkedWorking({ answer, ranges, theme }) {
+function MarkedWorking({ answer, ranges, theme, label }) {
   const t = THEMES[theme]
   const rows = workingRows(answer, ranges)
   return (
     <div>
-      <div style={{ fontSize: 11.5, fontWeight: 700, color: t.textFaint, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Your answer</div>
+      <div style={{ fontSize: 11.5, fontWeight: 700, color: t.textFaint, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>{label}</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '10px 12px', borderRadius: 10, background: t.bgSubtle, border: `1px solid ${t.border}` }}>
         {rows.map((row, i) => {
           const got = row.points.length > 0
