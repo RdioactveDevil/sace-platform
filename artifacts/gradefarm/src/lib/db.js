@@ -2153,6 +2153,14 @@ export async function cancelConsultation(id) {
   return tutorFetch(`/api/tutor/consultations/${encodeURIComponent(id)}/cancel`, { method: 'POST' })
 }
 
+/**
+ * The links a prospect was emailed for a call: { call, questionnaire, test },
+ * each null when there isn't one; questionnaire and test are { url, done }.
+ */
+export async function fetchConsultationLinks(id) {
+  return tutorFetch(`/api/tutor/consultations/${encodeURIComponent(id)}/links`)
+}
+
 /** List all diagnostics created by this tutor. */
 export async function fetchDiagnosticAssessments() {
   return tutorFetch('/api/tutor/diagnostic/list')

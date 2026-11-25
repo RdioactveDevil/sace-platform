@@ -9,14 +9,15 @@
  *   POST /tutor/consultations/new            book first: a new prospect record, the call, one email each
  *   PATCH /tutor/consultations/:id           move it and/or change its reminders
  *   POST /tutor/consultations/:id/cancel
+ *   GET  /tutor/consultations/:id/links      the call, questionnaire and test links, to send by hand
  * Prospect (no account):
  *   GET  /consultation/:token/slots          by the finished diagnostic's token
  *   POST /consultation/:token/book
  *   GET/POST /consultation/join/:guestToken  the call link: details, then a room token
  *
  * The tutor's calendar address and a call's guest token never go back to a
- * client; the guest token travels only inside the join link (emailed, and
- * shown to the person who just booked).
+ * client; the guest token travels only inside the join link (emailed, shown
+ * to the person who just booked, and to the call's own tutor on request).
  */
 import { questionnaireLinkFor } from "../lib/questionnaire";
 import { Router, type Request, type Response } from "express";
@@ -28,7 +29,7 @@ import {
   type SettingsRow,
 } from "../lib/consultation-access";
 import {
-  CALL_COLUMNS, guestJoinUrl, liveBooking, loadSettings, notifyAfterWrite, openTimes, questionnaireUrl, readCalendar,
+  CALL_COLUMNS, consultationLinks, guestJoinUrl, liveBooking, loadSettings, notifyAfterWrite, openTimes, questionnaireUrl, readCalendar,
   sendConsultationEmails, tutorContact, type CallRow, type ConsultationSends,
 } from "../lib/consultation-service";
 import { logger } from "../lib/logger";
@@ -492,6 +493,23 @@ router.post("/tutor/consultations/:id/cancel", async (req: Request, res: Respons
     if (!row) return res.status(409).json({ error: "Only a call that hasn't started can be cancelled." });
     await notify(ctx.admin, "cancelled", row.id, { tutorId: ctx.tutorId, signInEmail: ctx.email }, { call: row });
     return res.json({ ok: true });
+  } catch (err) {
+    return fail(res, err);
+  }
+});
+
+/** The links the prospect was emailed, for the tutor to copy when someone can't find theirs. */
+router.get("/tutor/consultations/:id/links", async (req: Request, res: Response) => {
+  try {
+    const ctx = await requireTutor(req, res);
+    if (!ctx) return;
+    const id = String(req.params.id);
+    const call = /^[0-9a-f-]{36}$/i.test(id) ? await loadCall(ctx.admin, id) : null;
+    if (!call || call.tutor_id !== ctx.tutorId || call.session_type !== "consultation") {
+      return res.status(404).json({ error: "Consultation not found" });
+    }
+    res.set("Cache-Control", "no-store");
+    return res.json(await consultationLinks(ctx.admin, call));
   } catch (err) {
     return fail(res, err);
   }
