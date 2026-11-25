@@ -19,7 +19,7 @@ import {
 import { SETTINGS_COLUMNS, defaultSettingsRow, hasHours, settingsFromRow, type SettingsRow } from "./consultation-access";
 import { appUrl, EMAIL_FROM, getResend, sendEmail } from "./email";
 import { logger } from "./logger";
-import { prospectSenderName } from "./prospect-emails";
+import { prospectLink, prospectSenderName } from "./prospect-emails";
 
 const DAY = 86_400_000;
 const MIN = 60_000;
@@ -200,6 +200,41 @@ export async function questionnaireUrl(admin: SupabaseClient, diagnosticId: stri
     .from("diagnostic_assessments").select("token, questionnaire, pre_call_form_url").eq("id", diagnosticId)
     .maybeSingle<{ token: string; questionnaire: unknown | null; pre_call_form_url: string | null }>();
   return data ? questionnaireLinkFor(data) : null;
+}
+
+export type ConsultationLinks = {
+  /** The guest's join link. */
+  call: string | null;
+  questionnaire: { url: string; done: boolean } | null;
+  test: { url: string; done: boolean } | null;
+};
+
+/**
+ * The links a prospect was sent for a call, for the tutor to copy and pass on
+ * by hand when the email went astray. Only for the call's own tutor: the
+ * caller checks that before this runs.
+ */
+export async function consultationLinks(
+  admin: SupabaseClient,
+  call: Pick<CallRow, "guest_token" | "diagnostic_id">,
+): Promise<ConsultationLinks> {
+  const out: ConsultationLinks = { call: call.guest_token ? guestJoinUrl(call.guest_token) : null, questionnaire: null, test: null };
+  if (!call.diagnostic_id) return out;
+  const { data, error } = await admin
+    .from("diagnostic_assessments")
+    .select("token, questionnaire, pre_call_form_url, has_test, status, cancelled_at, questionnaire_submitted_at")
+    .eq("id", call.diagnostic_id)
+    .limit(1);
+  if (error) throw new Error(error.message);
+  const d = (data as Array<{
+    token: string; questionnaire: unknown | null; pre_call_form_url: string | null; has_test: boolean | null;
+    status: string; cancelled_at: string | null; questionnaire_submitted_at: string | null;
+  }> | null)?.[0];
+  if (!d) return out;
+  const q = questionnaireLinkFor(d);
+  if (q) out.questionnaire = { url: q, done: !!d.questionnaire_submitted_at };
+  if (d.has_test !== false && !d.cancelled_at) out.test = { url: prospectLink(d.token), done: d.status === "completed" };
+  return out;
 }
 
 /** Which of a call's emails went (true), failed (false) or had no one to go to (left out). */

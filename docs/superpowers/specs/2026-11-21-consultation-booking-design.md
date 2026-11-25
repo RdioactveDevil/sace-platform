@@ -230,7 +230,11 @@ confirmDialog)
   default reminders (add/remove offsets: minutes/hours/days before), Google
   Calendar secret address with how-to and last-read status.
 - **Lessons tab** lists consultations with the other sessions, labelled
-  "Consultation", with Reschedule / Cancel / reminders edit.
+  "Consultation", with Reschedule / Cancel / reminders edit, and **Links**:
+  the call, questionnaire and diagnostic links the prospect was emailed (from
+  `GET /tutor/consultations/:id/links`, the call's own tutor only), each with
+  Copy plus Copy all, for when someone can't find their invitation. Fetched on
+  click, so the guest token stays out of the sessions list.
 - **Diagnostic tab create form** gains "Parent's email (optional)".
 - **Diagnostic tab rows** for prospects gain "Book call" (or the booked time
   with Reschedule / Cancel) and a "Booked" status after "Finished".

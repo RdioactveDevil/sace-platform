@@ -24,6 +24,7 @@ import {
   getTutorBilling,
   cancelConsultation,
   fetchBookingSettings,
+  fetchConsultationLinks,
 } from '../lib/db'
 
 const GOLD  = 'var(--t-accent)'
@@ -446,12 +447,84 @@ function ScheduleModal({ profile, theme, roster, emails, classes, onClose, onCre
   )
 }
 
+// ── Consultation links ────────────────────────────────────────────────────────
+// What the prospect was emailed, for the tutor to copy and send by hand when
+// someone can't find their invitation.
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true } catch { return false }
+}
+
+function CopyButton({ text, label = 'Copy', t }) {
+  const [state, setState] = useState('idle') // idle | copied | failed
+  const onClick = async () => {
+    setState((await copyText(text)) ? 'copied' : 'failed')
+    setTimeout(() => setState('idle'), 2000)
+  }
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{ background: state === 'copied' ? t.successBg : t.bgSubtle, color: state === 'copied' ? t.success : state === 'failed' ? t.danger : t.textMuted, border: `1px solid ${t.border}`, borderRadius: 6, padding: '4px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_B, flexShrink: 0, whiteSpace: 'nowrap' }}
+    >
+      {state === 'copied' ? '✓ Copied' : state === 'failed' ? "Couldn't copy" : label}
+    </button>
+  )
+}
+
+function ConsultationLinks({ sessionId, t }) {
+  const [links, setLinks] = useState(null)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let live = true
+    fetchConsultationLinks(sessionId)
+      .then((l) => { if (live) setLinks(l) })
+      .catch((err) => { if (live) setError(err.message || "Couldn't load the links.") })
+    return () => { live = false }
+  }, [sessionId])
+
+  if (error) return <div role="alert" style={{ fontSize: 13, color: t.danger }}>{error}</div>
+  if (!links) return <div style={{ fontSize: 13, color: t.textMuted }}>Loading links…</div>
+
+  const rows = [
+    links.call && { key: 'call', label: 'Call link', url: links.call, note: 'Opens 10 minutes before the start' },
+    links.questionnaire && { key: 'questionnaire', label: 'Questionnaire', url: links.questionnaire.url, done: links.questionnaire.done && 'Submitted' },
+    links.test && { key: 'test', label: 'Diagnostic test', url: links.test.url, done: links.test.done && 'Completed' },
+  ].filter(Boolean)
+  if (!rows.length) return <div style={{ fontSize: 13, color: t.textMuted }}>This call has no links to send.</div>
+  const all = rows.map((r) => `${r.label}: ${r.url}`).join('\n')
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {rows.map((r) => (
+        <div key={r.key} style={{ display: 'flex', alignItems: 'center', gap: 10, background: t.bg, border: `1px solid ${t.border}`, borderRadius: 8, padding: '8px 12px', flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: t.text, display: 'flex', alignItems: 'center', gap: 8 }}>
+              {r.label}
+              {r.done && <span style={{ background: t.successBg, color: t.success, fontSize: 11, fontWeight: 700, padding: '1px 6px', borderRadius: 4 }}>{r.done}</span>}
+              {r.note && <span style={{ fontWeight: 500, color: t.textMuted }}>{r.note}</span>}
+            </div>
+            <div style={{ fontSize: 12, color: t.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.url}>{r.url}</div>
+          </div>
+          <CopyButton text={r.url} t={t} />
+        </div>
+      ))}
+      {rows.length > 1 && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <CopyButton text={all} label="Copy all" t={t} />
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Session Card ──────────────────────────────────────────────────────────────
 function SessionCard({ session, theme, onJoin, onCancel, onReschedule, onReminders, tutorZone }) {
   const t = THEMES[theme]
   const [cancelling, setCancelling] = useState(false)
   const [cancelError, setCancelError] = useState('')
   const [copied, setCopied] = useState(false)
+  const [showLinks, setShowLinks] = useState(false)
   const isPast = new Date(session.scheduled_at) < new Date()
   const canJoin = session.status === 'scheduled' || session.status === 'active'
   const canCancel = session.status === 'scheduled'
@@ -514,7 +587,7 @@ function SessionCard({ session, theme, onJoin, onCancel, onReschedule, onReminde
           </p>
         )}
       </div>
-      <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+      <div style={{ display: 'flex', gap: 8, flexShrink: 0, flexWrap: 'wrap' }}>
         {!isConsultation && <button
           onClick={handleCopyLink}
           style={{ background: copied ? t.successBg : t.bgSubtle, color: copied ? t.success : t.textMuted, border: `1px solid ${t.border}`, borderRadius: 8, padding: '9px 14px', fontSize: 13, fontWeight: 600, fontFamily: FONT_B, cursor: 'pointer', transition: 'all 0.2s' }}
@@ -530,6 +603,15 @@ function SessionCard({ session, theme, onJoin, onCancel, onReschedule, onReminde
             {session.status === 'active'
               ? <><span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--t-danger)', display: 'inline-block' }} />Rejoin</>
               : <><Play size={13} fill="currentColor" aria-hidden="true" />Join</>}
+          </button>
+        )}
+        {isConsultation && canJoin && (
+          <button
+            onClick={() => setShowLinks((v) => !v)}
+            aria-expanded={showLinks}
+            style={{ background: showLinks ? t.bgSubtle : 'transparent', color: t.text, border: `1px solid ${t.border}`, borderRadius: 8, padding: '9px 14px', fontSize: 13, fontWeight: 600, fontFamily: FONT_B, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          >
+            <Link size={14} aria-hidden="true" />Links
           </button>
         )}
         {isConsultation && canCancel && (
@@ -552,6 +634,11 @@ function SessionCard({ session, theme, onJoin, onCancel, onReschedule, onReminde
           </button>
         )}
       </div>
+      {isConsultation && canJoin && showLinks && (
+        <div style={{ flexBasis: '100%' }}>
+          <ConsultationLinks sessionId={session.id} t={t} />
+        </div>
+      )}
     </div>
   )
 }
