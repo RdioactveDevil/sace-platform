@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { ArrowRight, ArrowDown } from 'lucide-react'
+import { ArrowDown } from 'lucide-react'
 import { getPlatformSettings } from '../lib/db'
 import { usePublicSubjects } from '../lib/publicSubjects'
 import { SUBJECT_GROUPS as GROUPS, groupSubjects } from '../lib/homeSubjects'
@@ -480,7 +480,7 @@ function Hero({ theme, onStart, onTry }) {
   )
 }
 
-const MORE = <span className="more">See how it works<ArrowRight className="ar" aria-hidden="true" /></span>
+const MORE = <span className="more">See how it works</span>
 
 function Inside({ open }) {
   const card = (slug) => ({ className: 'card hc', href: `/features#${slug}`, onClick: (e) => { e.preventDefault(); open(slug) } })

@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react'
-import { ArrowRight } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 
 // The public site's shared pieces (homepage, pricing): colours from the app's
@@ -57,12 +56,10 @@ export const SITE_CSS = `
 .lp-btn.lg { min-height: 50px; padding: 0 26px; font-size: 16px; border-radius: 12px; }
 .lp-btn:disabled { opacity: 0.5; cursor: default; }
 /* The main call to action (StartButton): bigger than any other button, with a gold glow and a soft pulse around it. */
-/* The main call to action (StartButton): a big gold pill in capitals with a soft gold glow; the arrow nudges right on hover. */
-.lp-btn.cta { position: relative; min-height: 60px; padding: 0 28px 0 32px; gap: 12px; font-size: 15.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; border-radius: 999px; box-shadow: 0 10px 24px -10px rgba(224,169,31,0.9); transition: transform 0.15s, box-shadow 0.15s, filter 0.15s; }
+/* The main call to action (StartButton): a big gold pill in capitals with a soft gold glow. */
+.lp-btn.cta { position: relative; min-height: 60px; padding: 0 32px; font-size: 15.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; border-radius: 999px; box-shadow: 0 10px 24px -10px rgba(224,169,31,0.9); transition: transform 0.15s, box-shadow 0.15s, filter 0.15s; }
 .lp-btn.cta:hover { filter: brightness(1.04); transform: translateY(-1px); box-shadow: 0 14px 28px -10px rgba(224,169,31,0.95); }
 .lp-btn.cta:active { transform: none; }
-.lp-btn.cta svg { transition: transform 0.15s; }
-.lp-btn.cta:hover svg { transform: translateX(3px); }
 .lp-link { border: none; background: none; padding: 0; font-size: inherit; font-weight: 700; color: var(--lp-ink); cursor: pointer; text-decoration: underline; text-decoration-color: var(--lp-gold); text-decoration-thickness: 2px; text-underline-offset: 3px; }
 /* The logo keeps its own font (Sifonn Pro) and spacing; the .lp prefix puts it above the rule that gives buttons the body font. */
 .lp-brand { white-space: nowrap; } .lp-brand .g { color: var(--lp-logo-g); } .lp-brand .f { color: var(--lp-logo-f); }
@@ -91,11 +88,9 @@ export const SITE_CSS = `
 .lp-nav-login { position: relative; top: -1px; border: none; background: none; padding: 10px 2px; font-size: 15px; font-weight: 700; line-height: 1; color: var(--lp-ink); cursor: pointer; white-space: nowrap; }
 .lp-nav-login:hover { text-decoration: underline; text-decoration-color: var(--lp-gold); text-decoration-thickness: 2px; text-underline-offset: 5px; }
 /* Start: a gold pill, in capitals. */
-.lp-nav-start { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 46px; padding: 0 22px 0 24px; border: none; border-radius: 999px; background: var(--lp-gold); color: ${NAVY}; font-size: 13.5px; font-weight: 800; line-height: 1; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; cursor: pointer; box-shadow: 0 6px 16px -8px rgba(224, 169, 31, 0.9); transition: transform 0.15s, box-shadow 0.15s, filter 0.15s; }
+.lp-nav-start { display: inline-flex; align-items: center; justify-content: center; height: 46px; padding: 0 24px; border: none; border-radius: 999px; background: var(--lp-gold); color: ${NAVY}; font-size: 13.5px; font-weight: 800; line-height: 1; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; cursor: pointer; box-shadow: 0 6px 16px -8px rgba(224, 169, 31, 0.9); transition: transform 0.15s, box-shadow 0.15s, filter 0.15s; }
 .lp-nav-start:hover { filter: brightness(1.04); transform: translateY(-1px); box-shadow: 0 10px 20px -8px rgba(224, 169, 31, 0.95); }
 .lp-nav-start:active { transform: none; }
-.lp-nav-start svg { transition: transform 0.15s; }
-.lp-nav-start:hover svg { transform: translateX(2px); }
 .lp-menu-btn { display: none; align-items: center; gap: 10px; height: 42px; padding: 0 4px 0 10px; margin-right: -4px; border: none; background: none; color: var(--lp-ink); font-size: 15px; font-weight: 700; line-height: 1; cursor: pointer; border-radius: 999px; }
 .lp-menu-btn:hover { background: color-mix(in srgb, var(--lp-ink) 6%, transparent); }
 /* Two lines that cross into an X while the menu is open. */
@@ -146,7 +141,7 @@ export const SITE_CSS = `
 .lp-foot-links button { border: none; background: none; padding: 0; font-size: 12.5px; color: var(--lp-muted); cursor: pointer; }
 .lp-foot-links button:hover { color: var(--lp-ink); }
 .lp-copy { margin-left: auto; }
-@media (prefers-reduced-motion: reduce) { .lp-btn.cta, .lp-btn.cta svg, .lp-nav-start, .lp-nav-start svg { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .lp-btn.cta, .lp-nav-start { transition: none; } }
 /* Below a laptop width the centred links move into the menu. */
 @media (max-width: 960px) {
   .lp-nav-links { display: none; }
@@ -169,7 +164,7 @@ export function Brand() {
 
 /** The main call to action on the public pages: "Start GradeFarming". */
 export function StartButton({ onClick, children = 'Start GradeFarming' }) {
-  return <button type="button" className="lp-btn gold cta" onClick={onClick}>{children}<ArrowRight size={19} strokeWidth={2.75} aria-hidden="true" /></button>
+  return <button type="button" className="lp-btn gold cta" onClick={onClick}>{children}</button>
 }
 
 /** The wordmark as a button, at the size given. */
@@ -221,13 +216,13 @@ export function SiteNav({ onSignIn, onStart, onLogo, links, overlay = false }) {
   return (
     <nav className={`lp-nav${overlay ? ' overlay' : ''}`} data-scrolled={scrolled && !menuOpen} data-open={menuOpen} aria-label="Main">
       <div className="lp-in lp-nav-row">
-        <Wordmark size={26} onClick={onLogo} />
+        <Wordmark size={28} onClick={onLogo} />
         <div className="lp-nav-links">
           {links.map(([label, fn, current]) => <button key={label} type="button" onClick={pick(fn)} aria-current={current ? 'page' : undefined}>{label}</button>)}
         </div>
         <div className="lp-nav-right">
           <button type="button" className="lp-nav-login" onClick={onSignIn}>Log in</button>
-          <button type="button" className="lp-nav-start" onClick={onStart}>Start GradeFarming<ArrowRight size={16} strokeWidth={2.75} aria-hidden="true" /></button>
+          <button type="button" className="lp-nav-start" onClick={onStart}>Start GradeFarming</button>
           <button type="button" ref={menuBtn} className="lp-menu-btn" onClick={() => setMenuOpen(o => !o)} aria-expanded={menuOpen} aria-controls="lp-menu">
             <span className="lp-menu-lines" aria-hidden="true" /><span className="lp-menu-word">{menuOpen ? 'Close' : 'Menu'}</span>
           </button>
@@ -240,7 +235,7 @@ export function SiteNav({ onSignIn, onStart, onLogo, links, overlay = false }) {
           </div>
           <div className="lp-in lp-sheet-foot">
             <button type="button" className="lp-sheet-login" onClick={pick(onSignIn)}>Log in</button>
-            <button type="button" className="lp-nav-start" onClick={pick(onStart)}>Start GradeFarming<ArrowRight size={18} strokeWidth={2.75} aria-hidden="true" /></button>
+            <button type="button" className="lp-nav-start" onClick={pick(onStart)}>Start GradeFarming</button>
           </div>
         </div>
       )}

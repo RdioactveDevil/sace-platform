@@ -118,9 +118,7 @@ export const HOME_CSS = `
 .gfx .hb{flex:1;padding:22px 24px 24px;display:flex;flex-direction:column;gap:8px}
 .gfx .hb h3{font-size:21px;font-weight:800;letter-spacing:-.02em;line-height:1.25}
 .gfx .hb p{font-size:15px;color:var(--muted);max-width:42ch}
-.gfx .more{display:inline-flex;align-items:center;gap:6px;align-self:flex-start;margin-top:auto;padding-top:8px;font-size:14.5px;font-weight:700;color:var(--ink);text-decoration:underline;text-decoration-color:var(--gold);text-decoration-thickness:2px;text-underline-offset:3px}
-.gfx .more .ar{width:16px;height:16px;transition:transform .2s}
-.gfx .hc:hover .more .ar{transform:translateX(3px)}
+.gfx .more{display:inline-flex;align-items:center;align-self:flex-start;margin-top:auto;padding-top:8px;font-size:14.5px;font-weight:700;color:var(--ink);text-decoration:underline;text-decoration-color:var(--gold);text-decoration-thickness:2px;text-underline-offset:3px}
 .gfx .iqv .stars{color:var(--goldt);letter-spacing:.06em;margin-left:4px}
 .gfx .iqs{display:flex;flex-wrap:wrap;gap:5px;margin:12px 0 12px}
 .gfx .iqs .sq{width:20px;height:20px;border-radius:5px}
