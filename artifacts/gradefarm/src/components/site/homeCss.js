@@ -295,7 +295,7 @@ export const HOME_CSS = `
 .gfx .qa{animation:gfx-inA .38s cubic-bezier(.2,.8,.2,1) both}
 .gfx .qb{animation:gfx-inB .38s cubic-bezier(.2,.8,.2,1) both}
 .gfx .topic{margin-top:18px;font-size:12.5px;font-weight:700;color:var(--muted)}
-.gfx .stem{margin-top:20px;font-size:21px;font-weight:700;line-height:1.45;color:var(--ink);text-wrap:balance}
+.gfx .stem{margin-top:20px;font-size:21px;font-weight:700;line-height:1.45;color:var(--ink);text-wrap:pretty}
 .gfx .mx{font-size:1.25em;white-space:nowrap}
 .gfx .opts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:18px}
 .gfx .opt{display:flex;align-items:center;gap:12px;min-height:56px;padding:10px 14px;border-radius:12px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);font-size:20px;font-weight:400;text-align:left;transition:transform .12s,border-color .2s,background .2s,opacity .25s}

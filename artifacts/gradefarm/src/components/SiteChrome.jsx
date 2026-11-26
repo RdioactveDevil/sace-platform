@@ -81,9 +81,9 @@ export const SITE_CSS = `
 .lp-nav-row { position: relative; display: flex; align-items: center; gap: 16px; height: var(--lp-header); }
 .lp-nav .lp-wordmark { display: flex; align-items: center; height: 40px; }
 /* The links sit in the middle of the bar, whatever is either side of them. */
-.lp-nav-links { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; align-items: center; gap: 34px; }
-.lp-nav-links button { border: none; background: none; padding: 8px 0; font-size: 15.5px; font-weight: 600; line-height: 1; color: var(--lp-muted); cursor: pointer; }
-.lp-nav-links button:hover, .lp-nav-links button[aria-current="page"] { color: var(--lp-ink); }
+.lp-nav-links { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; align-items: center; gap: 48px; }
+.lp-nav-links button { border: none; background: none; padding: 8px 0; font-size: 15.5px; font-weight: 600; line-height: 1; color: var(--lp-ink); cursor: pointer; }
+.lp-nav-links button:hover, .lp-nav-links button[aria-current="page"] { text-decoration: underline; text-decoration-color: var(--lp-gold); text-decoration-thickness: 2px; text-underline-offset: 6px; }
 .lp-nav-right { margin-left: auto; display: flex; align-items: center; gap: 18px; }
 .lp-nav-login { position: relative; top: -1px; border: none; background: none; padding: 10px 2px; font-size: 15px; font-weight: 700; line-height: 1; color: var(--lp-ink); cursor: pointer; white-space: nowrap; }
 .lp-nav-login:hover { text-decoration: underline; text-decoration-color: var(--lp-gold); text-decoration-thickness: 2px; text-underline-offset: 5px; }
@@ -142,6 +142,8 @@ export const SITE_CSS = `
 .lp-foot-links button:hover { color: var(--lp-ink); }
 .lp-copy { margin-left: auto; }
 @media (prefers-reduced-motion: reduce) { .lp-btn.cta, .lp-nav-start { transition: none; } }
+/* Small laptops: tighter link spacing so Pricing doesn't crowd Log in. */
+@media (max-width: 1100px) { .lp-nav-links { gap: 30px; } }
 /* Below a laptop width the centred links move into the menu. */
 @media (max-width: 960px) {
   .lp-nav-links { display: none; }
