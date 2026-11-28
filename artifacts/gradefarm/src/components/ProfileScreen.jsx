@@ -240,10 +240,62 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
         .po-click:focus-visible, .po-inner button:focus-visible { outline: 2px solid ${GOLD}; outline-offset: 2px; }
         @media (max-width: 960px) { .po-row, .po-row.even { grid-template-columns: 1fr; } }
         @media (max-width: 860px) { .po-inner { padding: 18px 14px 28px; } }
+        .po-rank-card { display: none; }
+        @media (max-width: 860px) { .po-rank-card { display: flex; } .po-rank-line { display: none; } }
       `}</style>
       <div className="po-inner">
 
         {!isStats && <>
+        {/* Phones: the road to the next rank, first. */}
+        {(() => {
+          const prog = getLevelProgress(profile.xp, recentAccuracy)
+          const tier = RANK_TIERS[level + 1]
+          const xp = Math.max(0, Math.round(profile.xp || 0))
+          const acc = Math.round(recentAccuracy * 100)
+          const ink = '#f8f9ff', soft = 'rgba(248,249,255,0.74)', track = 'rgba(255,255,255,0.16)'
+          const bar = (pct, color) => (
+            <span aria-hidden="true" style={{ display: 'block', height: 8, borderRadius: 999, background: track, overflow: 'hidden' }}>
+              <span style={{ display: 'block', height: 8, width: `${Math.min(100, Math.max(0, pct))}%`, borderRadius: 999, background: color }} />
+            </span>
+          )
+          return (
+            <section aria-label={tier ? `Road to ${tier.name}` : 'Your rank'} className="po-rank-card"
+              style={{ flexDirection: 'column', gap: 14, padding: 18, borderRadius: 16, background: t.bgNav, color: ink }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <RankIcon level={level} size={40} color={t.accent} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.05em', textTransform: 'uppercase', color: t.accent }}>{tier ? `Next: ${tier.name}` : 'Top rank'}</div>
+                  <div style={{ fontSize: 20, fontWeight: 800 }}>You're {rank}</div>
+                </div>
+                <button type="button" onClick={() => setShowRanks(v => !v)} aria-expanded={showRanks}
+                  style={{ border: 'none', background: 'none', padding: '8px 0', fontFamily: FONT_B, fontSize: 13, fontWeight: 700, color: ink, cursor: 'pointer', textDecoration: 'underline', textDecorationColor: t.accent, textDecorationThickness: 2, textUnderlineOffset: 3 }}>
+                  {showRanks ? 'Hide ranks' : 'All ranks'}
+                </button>
+              </div>
+              {tier && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                    <span style={{ fontWeight: 700 }}>XP</span>
+                    <span style={{ color: soft, fontVariantNumeric: 'tabular-nums' }}><strong style={{ color: ink }}>{xp.toLocaleString('en-AU')}</strong> / {tier.xp.toLocaleString('en-AU')}</span>
+                  </div>
+                  {bar((xp / tier.xp) * 100, t.accent)}
+                </div>
+              )}
+              {tier && tier.accuracy > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+                    <span style={{ fontWeight: 700 }}>Accuracy</span>
+                    <span style={{ color: soft, fontVariantNumeric: 'tabular-nums' }}>
+                      {profile.recent_answers > 0 ? <><strong style={{ color: ink }}>{acc}%</strong> / {Math.round(tier.accuracy * 100)}% needed{recentAccuracy >= tier.accuracy ? ' · met' : ''}</> : `${Math.round(tier.accuracy * 100)}% needed`}
+                    </span>
+                  </div>
+                  {bar(tier.accuracy > 0 ? (recentAccuracy / tier.accuracy) * 100 : 100, recentAccuracy >= tier.accuracy ? '#6fd3a0' : t.accent)}
+                </div>
+              )}
+              {!prog.maxed && <p style={{ margin: 0, fontSize: 13.5, color: soft }}>{nextRankHint(profile.xp, recentAccuracy)}.</p>}
+            </section>
+          )
+        })()}
         {/* This week, and rank */}
         <div data-tutorial-target="progress-week" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap' }}>
@@ -251,7 +303,7 @@ export default function ProfileScreen({ profile, questions, struggleMap, theme, 
             {fact(now.total, 'answered this week')}
             {fact(`${now.days.size} day${now.days.size !== 1 ? 's' : ''}`, 'active this week')}
           </div>
-          <div style={{ fontSize: 12.5, color: t.textMuted }}>
+          <div className="po-rank-line" style={{ fontSize: 12.5, color: t.textMuted }}>
             <strong style={{ color: t.text }}>{rank}</strong> · {profile.xp.toLocaleString()} XP · {nextRankHint(profile.xp, recentAccuracy)}
             {' · '}
             <button type="button" onClick={() => setShowRanks(v => !v)} aria-expanded={showRanks}

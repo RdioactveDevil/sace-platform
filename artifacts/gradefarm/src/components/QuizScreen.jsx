@@ -1,6 +1,6 @@
 ﻿import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useBlocker } from 'react-router-dom'
-import { Zap, TriangleAlert, CircleCheck, Bot, Flame, Timer, Pin, Lightbulb, Lock, ChevronDown, ChevronRight, Flag, Star, Snowflake, PenLine } from 'lucide-react'
+import { Zap, TriangleAlert, CircleCheck, Bot, Flame, Timer, Pin, Lightbulb, Lock, ChevronDown, ChevronRight, Flag, Star, Snowflake, PenLine, Check, X } from 'lucide-react'
 import {
   selectNextQuestion,
   dueQuestionIds,
@@ -198,7 +198,7 @@ export default function QuizScreen({
   selected: _selected, setSelected,
   showAns: _showAns, setShowAns,
   correct: _correct, setCorrect,
-  setEarnedXP,
+  earnedXP: _earnedXP, setEarnedXP,
   streak: _streak, setStreak,
   sessionXP: _sessionXP, setSessionXP,
   sessionResults: _sessionResults, setSessionResults,
@@ -481,6 +481,7 @@ export default function QuizScreen({
   }, [showAns])
   const correct = _correct ?? null
   const streak = _streak ?? 0
+  const earnedXP = Number(_earnedXP) || 0
   const sessionXP = _sessionXP ?? 0
   const sessionResults = _sessionResults ?? []
   const sessionAnswered = _sessionAnswered ?? []
@@ -2149,6 +2150,10 @@ export default function QuizScreen({
   // Phones: Check, Next, Ask Titan and the exam's Previous / Next sit in a bar
   // along the bottom edge, in reach of a thumb (not while rough work's sheet covers it).
   const barMode = isMobile && !roughOpen
+  // Phones, practice: the result of a multiple-choice or short answer comes up
+  // in a sheet from the bottom edge (Correct / Not quite, the XP, why, and the
+  // next step) instead of under the question. Written answers keep their marks.
+  const sheetFeedback = barMode && !examRun && !!currentQ && !isAiMarked(currentQ)
   const isBonus = bonusId === currentQ.id && !currentQ.is_variant && !examRun
   const booklet = dataBookletFor(subjectTile)
   const tools = toolsForSubject(subjectTile?.name || currentQ?.subject, booklet)
@@ -2552,7 +2557,7 @@ export default function QuizScreen({
               )}
 
               {/* Practice, after answering: the result, why, and what's next (in the side panel for a marked written answer on a wide screen). */}
-              {!examRun && showAns && !markedLayout && (
+              {!examRun && showAns && !markedLayout && !sheetFeedback && (
                 <div ref={feedbackRef} className="qz-anim" style={{ borderTop: `1px solid ${t.border}`, marginTop: 18, paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 10, animation: 'popIn 0.2s ease', scrollMarginBottom: 16 }}>
                   {/* Written answers show their marks above, with the feedback. */}
                   {!isAiMarked(currentQ) && (
@@ -2649,10 +2654,12 @@ export default function QuizScreen({
         </div>
       </div>
       {/* Phones: the next step, along the bottom edge. */}
+      {barMode && sheetFeedback && showAns && resultSheet()}
       {barMode && (() => {
         const pending = !examRun && !showAns && isMcq
         const after = !examRun && showAns
         if (!examRun && !pending && !after) return null
+        if (after && sheetFeedback) return null
         const big = (kind, disabled) => ({ ...btn(kind, disabled), height: 48, borderRadius: 12, fontSize: 15, padding: '0 16px' })
         return (
           <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px calc(10px + env(safe-area-inset-bottom))', borderTop: `1px solid ${t.border}`, background: t.bg }}>
@@ -2682,6 +2689,66 @@ export default function QuizScreen({
       })()}
     </div>
   )
+
+  // Phones, practice: the result sheet along the bottom edge after answering.
+  function resultSheet() {
+    const tone = correct ? t.success : t.danger
+    const big = (kind, disabled) => ({ ...btn(kind, disabled), height: 48, borderRadius: 12, fontSize: 15, padding: '0 16px' })
+    return (
+      <section aria-label="Your result" className="qz-anim" style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 12, padding: '18px 16px calc(12px + env(safe-area-inset-bottom))',
+        background: t.bgCard, borderTop: `1px solid ${t.border}`, borderRadius: '20px 20px 0 0', boxShadow: '0 -12px 32px rgba(12,16,55,0.12)', animation: 'fadeUp 0.25s ease' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span aria-hidden="true" style={{ width: 32, height: 32, flexShrink: 0, borderRadius: '50%', background: tone, color: '#fff', display: 'grid', placeItems: 'center' }}>
+            {correct ? <Check size={18} strokeWidth={3} /> : <X size={18} strokeWidth={3} />}
+          </span>
+          <h2 role="status" style={{ margin: 0, flex: 1, minWidth: 0, fontFamily: FONT_B, fontSize: 20, fontWeight: 800, color: tone }}>
+            {correct ? 'Correct' : 'Not quite'}
+            {inRemediationQuestion && remediationStatus !== 'complete' && (
+              <span style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: t.textMuted }}>{Math.min(remediationStreak, remediationTarget)} of {remediationTarget} in a row</span>
+            )}
+            {!inRemediationQuestion && correct && streak >= 3 && (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12.5, fontWeight: 700, color: t.goldText }}><Flame size={13} aria-hidden="true" />{streak} in a row</span>
+            )}
+          </h2>
+          {earnedXP > 0 && (
+            <span style={{ flexShrink: 0, padding: '4px 10px', borderRadius: 999, background: t.accentGlow, border: `1px solid ${t.borderAccent || t.border}`, fontSize: 13, fontWeight: 800, color: t.text }}>+{earnedXP} XP</span>
+          )}
+        </div>
+        {(currentQ.solution || currentQ.tip || aiTip || loadingTip || (remediationPendingEntry && remediationStatus === 'generating')) && (
+          <div style={{ maxHeight: '34dvh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {currentQ.solution && (
+              <div style={{ fontSize: 14.5, color: t.textSub, lineHeight: 1.6 }}><MathText text={currentQ.solution} /></div>
+            )}
+            {currentQ.tip && (
+              <div style={{ display: 'flex', gap: 8, fontSize: 13, color: t.textSub, lineHeight: 1.6 }}>
+                <Lightbulb size={14} style={{ flexShrink: 0, marginTop: 3, color: t.goldText }} aria-hidden="true" /><div style={{ flex: 1, minWidth: 0 }}><MathText text={currentQ.tip} /></div>
+              </div>
+            )}
+            {(aiTip || loadingTip) && (
+              <div style={{ display: 'flex', gap: 8, fontSize: 13, color: t.textSub, lineHeight: 1.6 }}>
+                <Bot size={14} style={{ flexShrink: 0, marginTop: 3, color: t.textMuted }} aria-hidden="true" />
+                <div style={{ flex: 1, minWidth: 0 }}>{loadingTip ? <span style={{ color: t.textFaint }}>Titan is looking at your answer…</span> : <><strong style={{ color: t.text }}>Titan: </strong><MathText text={aiTip} /></>}</div>
+              </div>
+            )}
+            {remediationPendingEntry && remediationStatus === 'generating' && (
+              <div style={{ fontSize: 12.5, color: t.textMuted }}>Getting practice questions like this one ready…</div>
+            )}
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 8 }}>
+          {onOpenLearn && !examMode && (
+            <button type="button" onClick={() => askTitan(currentQ.topic, buildQuestionHelpContext(currentQ, selected, correct))} style={{ ...big('secondary'), flex: 1 }}>
+              {correct ? 'Ask Titan' : 'Ask Titan why'}
+            </button>
+          )}
+          <button type="button" data-tutorial-target={remediationPendingEntry ? 'quiz-extra-practice' : undefined} onClick={nextQ} disabled={remediationStatus === 'generating'} style={{ ...big('primary', remediationStatus === 'generating'), flex: 1 }}>
+            {nextButtonLabel}
+          </button>
+        </div>
+        <ReportLink />
+      </section>
+    )
+  }
 
   // The switch on a marked question's card that draws Titan's pen marks on it.
   function penMarksSwitch() {

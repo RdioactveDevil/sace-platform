@@ -15,7 +15,7 @@ import { refreshManagedTopicsCache } from './lib/adminTopics'
 import { loadManagedCurriculaTopics, fetchLiveCurricula } from './lib/curriculaDb'
 import { THEMES, shellFor, modeOf, paletteById, setActivePalette } from './lib/theme'
 import { getLevel, getLevelProgress, rankAccuracy, RANKS } from './lib/engine'
-import { Sun, Moon, Lock, Radio, Video, ClipboardList, Check, ChevronsUpDown, Ellipsis, LogOut, UserRound, IdCard, CreditCard } from 'lucide-react'
+import { Sun, Moon, Lock, Radio, Video, ClipboardList, Check, ChevronsUpDown, Ellipsis, LogOut, UserRound, IdCard, CreditCard, ChevronLeft, ChevronRight, ChevronDown, SquareCheck, MessageSquareText, NotebookPen } from 'lucide-react'
 import RankIcon from './components/RankIcon'
 import UpgradeSheet, { prefetchUpgrade } from './components/UpgradeSheet'
 import { curriculumToSubjectTile, findTileForSubjectString, formatSubjectLabel, subjectHasFeature, writingSubjectFor, subjectAccess, yearFromStage } from './lib/subjects'
@@ -599,14 +599,15 @@ function DiagnosticDueScreen({ subject, diagnostic, onChangeSubject, theme }) {
 
 // ── AppShell ──────────────────────────────────────────────────────────────────
 /** Links to the sub-pages of the current sidebar section (e.g. Progress → Overview · Your Statistics · …), with a gold bar that slides to the current one. */
-function SectionTabs({ theme, subject }) {
+function SectionTabs({ theme, subject, phone = false }) {
   const t = THEMES[theme]
   const navigate = useNavigate()
   const location = useLocation()
   const stripRef = useRef(null)
   const activeRef = useRef(null)
   const section = sectionForPath(location.pathname)
-  const pages = section ? visiblePages(section, subject) : []
+  // On a phone, pages with their own tile on Home don't repeat here.
+  const pages = section ? visiblePages(section, subject).filter(p => !(phone && PHONE_OWN_TILE.has(p.id))) : []
   const current = tabPath(location.pathname)
   const unread = useUnreadMessages(section?.id === 'portal')
   // The gold bar under the current page: measured from its link, it slides
@@ -688,73 +689,150 @@ function SectionTabs({ theme, subject }) {
   )
 }
 
-// Height of the phone tab bar, without the home-indicator inset.
-const TAB_BAR_H = 58
+// ── Phones: Home ──────────────────────────────────────────────────────────────
+// Phones have no tab bar. Home (/start) is the menu: one tile per feature, and
+// each feature opens full screen with a back button to here (PhoneBar).
 
-/**
- * Phones, studying: the main sections along the bottom edge, in reach of a
- * thumb, and More for the menu (switching subject, the Student Portal,
- * Account). Up to four sections show; Practice, Learn and Progress always do.
- * While the keyboard is up the bar steps aside, so the field being typed in
- * keeps the room. Pages read --gf-tabbar-h to keep clear of it.
- */
-function MobileTabBar({ theme, subject, hasTutoring, onMore, moreBadge = 0 }) {
+/** Where a student lands: Home on a phone, the Question Bank elsewhere. */
+function studentStartPath() {
+  return typeof window !== 'undefined' && window.innerWidth < 860 ? '/start' : '/question-bank'
+}
+
+// The title in a phone feature screen's bar, by address.
+const PHONE_TITLES = [
+  ['/question-bank', 'Question Bank'],
+  ['/learn', 'Learn'],
+  ['/essay-lab', 'Essay Marker'],
+  ['/exams', 'Exams'],
+  ['/my-progress', 'Progress'],
+  ['/my-stats', 'Progress'],
+  ['/history', 'History'],
+  ['/leaderboard', 'League'],
+  ['/my-account', 'Your account'],
+  ['/portal', 'Your tutor'],
+  ['/lessons', 'Your tutor'],
+  ['/recordings', 'Your tutor'],
+  ['/class-resources', 'Your tutor'],
+  ['/writing', 'Writing'],
+]
+function phoneTitleFor(pathname) {
+  const hit = PHONE_TITLES.find(([p]) => pathname === p || pathname.startsWith(`${p}/`))
+  return hit ? hit[1] : (sectionForPath(pathname)?.label || '')
+}
+
+// Pages with their own tile on phone Home don't repeat as section tabs there.
+const PHONE_OWN_TILE = new Set(['history', 'leaderboard', 'essay'])
+
+/** Phones: the bar at the top. Home shows the wordmark; every other page a back button and its title. */
+function PhoneBar({ theme, home }) {
   const t = THEMES[theme]
   const navigate = useNavigate()
   const location = useLocation()
-  const [keyboard, setKeyboard] = useState(false)
-  useEffect(() => {
-    const vv = window.visualViewport
-    if (!vv) return undefined
-    const check = () => setKeyboard(vv.height < window.innerHeight * 0.75)
-    vv.addEventListener('resize', check)
-    return () => vv.removeEventListener('resize', check)
-  }, [])
-  useEffect(() => {
-    const root = document.documentElement
-    root.style.setProperty('--gf-tabbar-h', keyboard ? '0px' : `calc(${TAB_BAR_H}px + env(safe-area-inset-bottom))`)
-    return () => root.style.setProperty('--gf-tabbar-h', '0px')
-  }, [keyboard])
-
-  const visible = NAV_ITEMS.filter(item => (!item.feature || subjectHasFeature(subject, item.feature)) && (!item.tutoring || hasTutoring))
-  const keep = ['practice', 'learn', 'progress', 'exams', 'writing'].filter(id => visible.some(v => v.id === id)).slice(0, 4)
-  const items = visible.filter(v => keep.includes(v.id))
-  const current = sectionForPath(location.pathname)?.id || (location.pathname === '/quiz' ? 'practice' : null)
-  const moreActive = !items.some(i => i.id === current)
-
-  if (keyboard) return null
-  const tab = (key, label, icon, active, onClick, badge = 0) => (
-    <button key={key} type="button" onClick={onClick} aria-current={active ? 'page' : undefined} className="gf-tb-item">
-      <span className={`gf-tb-pill${active ? ' on' : ''}`}>
-        {icon}
-        {badge > 0 && <span className="gf-tb-badge">{badge > 9 ? '9+' : badge}</span>}
+  if (home) return (
+    <div style={{ position: 'sticky', top: 0, zIndex: 100, height: 52, boxSizing: 'border-box', background: t.bg, borderBottom: `1px solid ${t.border}`, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+      <span style={{ fontFamily: FONT_D, fontSize: 17, letterSpacing: 1 }}>
+        <span style={{ color: t.text }}>grade</span><span style={{ color: GOLD }}>farm.</span>
       </span>
-      <span className="gf-tb-label" style={{ color: active ? t.text : t.textMuted, fontWeight: active ? 800 : 600 }}>{label}</span>
-    </button>
+    </div>
   )
   return (
-    <nav aria-label="Sections" className="gf-tabbar"
-      style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 900, display: 'flex', height: `calc(${TAB_BAR_H}px + env(safe-area-inset-bottom))`, paddingBottom: 'env(safe-area-inset-bottom)', boxSizing: 'border-box',
-        background: `color-mix(in srgb, ${t.bg} 92%, transparent)`, backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', borderTop: `1px solid ${t.border}`, fontFamily: FONT_B }}>
+    <div style={{ position: 'sticky', top: 0, zIndex: 100, height: 64, boxSizing: 'border-box', background: t.bg, borderBottom: `1px solid ${t.border}`, padding: '0 14px', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0, fontFamily: FONT_B }}>
+      <button type="button" onClick={() => navigate('/start')} aria-label="Back to Home" className="gf-phone-back"
+        style={{ width: 44, height: 44, flexShrink: 0, borderRadius: '50%', border: `1px solid ${t.border}`, background: t.bgCard, color: t.text, display: 'grid', placeItems: 'center', cursor: 'pointer' }}>
+        <ChevronLeft size={20} strokeWidth={2.2} aria-hidden="true" />
+      </button>
+      <h1 style={{ margin: 0, flex: 1, minWidth: 0, fontSize: 20, lineHeight: '26px', fontWeight: 800, letterSpacing: '-0.02em', color: t.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {phoneTitleFor(location.pathname)}
+      </h1>
+    </div>
+  )
+}
+
+/** Phones: Home, a menu of every feature this student has. */
+function PhoneHome({ theme, profile, subject, onChangeSubject }) {
+  const t = THEMES[theme]
+  const navigate = useNavigate()
+  const hasTutoring = useHasTutoring(profile?.id)
+  const unread = useUnreadMessages(hasTutoring)
+  const first = (profile?.display_name || '').trim().split(/\s+/)[0]
+
+  const icon = (Icon) => <Icon size={26} strokeWidth={1.7} aria-hidden="true" />
+  const study = [
+    { id: 'qb', label: 'Question Bank', icon: icon(SquareCheck), path: '/question-bank' },
+    { id: 'titan', label: 'Ask Titan', icon: icon(MessageSquareText), path: '/learn', learn: 'ask' },
+    { id: 'lessons', label: 'Lessons', icon: <NavIcon name="learn" size={26} />, path: '/learn', learn: 'lesson' },
+    subjectHasFeature(subject, 'test_maker') && { id: 'exams', label: 'Exams', icon: <NavIcon name="exam" size={26} />, path: '/exams' },
+    subjectHasFeature(subject, 'essay_marker') && { id: 'essay', label: 'Essay Marker', icon: <NavIcon name="pen" size={26} />, path: '/essay-lab' },
+    writingSubjectFor(subject) && { id: 'writing', label: 'Writing', icon: icon(NotebookPen), path: '/writing/essay' },
+    hasTutoring && { id: 'tutor', label: 'Your tutor', icon: <NavIcon name="video" size={26} />, path: '/portal', badge: unread },
+  ].filter(Boolean)
+  const activity = [
+    { id: 'progress', label: 'Progress', icon: <NavIcon name="profile" size={20} />, path: '/my-progress' },
+    { id: 'history', label: 'History', icon: <NavIcon name="history" size={20} />, path: '/history' },
+    { id: 'league', label: 'League', icon: <NavIcon name="leaderboard" size={20} />, path: '/leaderboard' },
+  ]
+  const open = (item) => navigate(item.path, item.learn ? { state: { learnMode: item.learn } } : undefined)
+  const heading = { fontSize: 12, fontWeight: 800, letterSpacing: '0.05em', textTransform: 'uppercase', color: t.textMuted }
+
+  return (
+    <div style={{ padding: '16px 14px 28px', display: 'flex', flexDirection: 'column', gap: 16, fontFamily: FONT_B, color: t.text }}>
       <style>{`
-        .gf-tb-item { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; border: none; background: none; padding: 6px 0 4px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
-        .gf-tb-pill { position: relative; display: grid; place-items: center; width: 52px; height: 28px; border-radius: 999px; color: var(--t-textMuted); transition: background-color 0.25s ease, color 0.25s ease, transform 0.15s ease; }
-        .gf-tb-pill.on { background: color-mix(in srgb, var(--t-accent) 24%, transparent); color: var(--t-text); }
-        .gf-tb-item:active .gf-tb-pill { transform: scale(0.92); }
-        .gf-tb-label { font-size: 11px; line-height: 1; white-space: nowrap; }
-        .gf-tb-item:focus-visible { outline: none; }
-        .gf-tb-item:focus-visible .gf-tb-pill { outline: 2px solid var(--t-accent); outline-offset: 2px; }
-        .gf-tb-badge { position: absolute; top: -3px; right: 8px; min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box; border-radius: 999px; display: grid; place-items: center;
-          background: var(--t-danger); color: #fff; font-size: 10px; font-weight: 800; border: 2px solid var(--t-bg); }
-        @media (prefers-reduced-motion: reduce) { .gf-tb-pill { transition: none; } }
+        .gf-home-tile { transition: background-color 0.15s ease, transform 0.1s ease; -webkit-tap-highlight-color: transparent; }
+        .gf-home-tile:active { transform: scale(0.98); background: var(--t-bgHover); }
+        .gf-home-tile:focus-visible { outline: 2px solid var(--t-accent); outline-offset: 2px; }
+        @media (prefers-reduced-motion: reduce) { .gf-home-tile { transition: none; } .gf-home-tile:active { transform: none; } }
       `}</style>
-      {items.map(item => tab(item.id, item.label, <NavIcon name={item.icon} size={21} />, current === item.id, () => navigate(item.path)))}
-      {tab('more', 'More', (
-        <svg width="21" height="21" viewBox="0 0 18 18" aria-hidden="true" style={{ display: 'block' }}>
-          {[4, 9, 14].map(x => <circle key={x} cx={x} cy="9" r="1.4" fill="currentColor" />)}
-        </svg>
-      ), moreActive, onMore, moreBadge)}
-    </nav>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+        <h1 style={{ margin: 0, fontSize: 24, lineHeight: '32px', fontWeight: 800, letterSpacing: '-0.02em', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {first ? `Hi ${first}` : 'Hi'}
+        </h1>
+        <button type="button" onClick={onChangeSubject} aria-label={`Studying ${formatSubjectLabel(subject || {})}. Change subject`} className="gf-home-tile"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 40, maxWidth: '62%', padding: '0 12px', borderRadius: 999, border: `1px solid ${t.border}`, background: t.bgCard, color: t.text, fontFamily: FONT_B, fontSize: 13.5, fontWeight: 800, cursor: 'pointer' }}>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{formatSubjectLabel(subject || {})}</span>
+          <ChevronDown size={14} strokeWidth={2.4} color={t.textMuted} aria-hidden="true" style={{ flexShrink: 0 }} />
+        </button>
+      </div>
+
+      <section aria-label="Study" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <span style={heading}>Study</span>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+          {study.map(item => (
+            <button key={item.id} type="button" onClick={() => open(item)} className="gf-home-tile" data-tutorial-target={`home-${item.id}`}
+              style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'space-between', height: 104, boxSizing: 'border-box', padding: 14, borderRadius: 16, border: `1px solid ${t.border}`, background: t.bgCard, color: t.text, fontFamily: FONT_B, textAlign: 'left', cursor: 'pointer' }}>
+              {item.icon}
+              <span style={{ fontSize: 15.5, fontWeight: 800 }}>{item.label}</span>
+              {item.badge > 0 && (
+                <span aria-label={`${item.badge} unread`} style={{ position: 'absolute', top: 12, right: 12, minWidth: 20, height: 20, padding: '0 6px', boxSizing: 'border-box', borderRadius: 999, background: t.danger, color: '#fff', fontSize: 11, fontWeight: 800, display: 'grid', placeItems: 'center' }}>
+                  {item.badge > 9 ? '9+' : item.badge}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section aria-label="My activity" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <span style={heading}>My activity</span>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
+          {activity.map(item => (
+            <button key={item.id} type="button" onClick={() => open(item)} className="gf-home-tile"
+              style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, height: 68, boxSizing: 'border-box', padding: '0 8px', borderRadius: 14, border: `1px solid ${t.border}`, background: t.bgCard, color: t.text, fontFamily: FONT_B, fontSize: 13, fontWeight: 800, cursor: 'pointer', minWidth: 0 }}>
+              {item.icon}<span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section aria-label="Account" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <span style={heading}>Account</span>
+        <button type="button" onClick={() => navigate('/my-account')} className="gf-home-tile"
+          style={{ display: 'flex', alignItems: 'center', gap: 10, height: 56, boxSizing: 'border-box', padding: '0 14px', borderRadius: 14, border: `1px solid ${t.border}`, background: t.bgCard, color: t.text, fontFamily: FONT_B, fontSize: 14.5, fontWeight: 800, cursor: 'pointer', textAlign: 'left' }}>
+          <UserRound size={20} strokeWidth={1.8} aria-hidden="true" />
+          <span style={{ flex: 1 }}>Your account</span>
+          <ChevronRight size={18} color={t.textFaint} aria-hidden="true" />
+        </button>
+      </section>
+    </div>
   )
 }
 
@@ -809,10 +887,9 @@ function AppShell({ children, profile, subject, onChangeSubject, onSwitchSubject
   const fit = focus && isMobile
   const navigate = useNavigate()
   const location = useLocation()
-  // Phones, studying: sections along the bottom (MobileTabBar) and a light header.
-  const studyTabs = isMobile && !fit && workspaceForPath(location.pathname) === 'study'
-  const hasTutoring = useHasTutoring(profile?.id)
-  const unread = useUnreadMessages(studyTabs && hasTutoring)
+  // Phones, studying: no tab bar. Home (/start) is the menu, and every other
+  // page has a bar with a back button to it (PhoneBar).
+  const studyPhone = isMobile && !fit && workspaceForPath(location.pathname) === 'study'
 
   // Page tips: the first time someone opens a page, show that page's tips
   // (lib/pageTips). Pages can also ask for theirs at a moment that suits them
@@ -890,16 +967,15 @@ function AppShell({ children, profile, subject, onChangeSubject, onSwitchSubject
         flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: isMobile && !fit ? '100dvh' : 0, overflow: isMobile && !fit ? 'visible' : 'hidden',
         ...(isMobile ? {} : { background: t.bg, margin: '8px 8px 8px 0', borderRadius: 12, border: `1px solid ${shell.line}` }),
       }}>
-        {isMobile && !fit && (
+        {studyPhone && <PhoneBar theme={theme} home={location.pathname === '/start'} />}
+        {isMobile && !fit && !studyPhone && (
           <div style={{ position: 'sticky', top: 0, zIndex: 100, height: 52, boxSizing: 'border-box', background: t.bg, borderBottom: `1px solid ${t.border}`, padding: '0 12px 0 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexShrink: 0 }}>
-            {!studyTabs && (
-              <button onClick={() => setMenuOpen(true)} aria-label="Open menu" style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 8, margin: '0 -4px 0 -8px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <div style={{ width: 20, height: 2, background: t.text, borderRadius: 2 }} />
-                <div style={{ width: 14, height: 2, background: t.text, borderRadius: 2 }} />
-                <div style={{ width: 20, height: 2, background: t.text, borderRadius: 2 }} />
-              </button>
-            )}
-            <button type="button" onClick={() => navigate('/home')} aria-label="gradefarm home" style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontFamily: FONT_D, fontSize: 17, letterSpacing: 1, ...(studyTabs ? {} : { flex: 1 }) }}>
+            <button onClick={() => setMenuOpen(true)} aria-label="Open menu" style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 8, margin: '0 -4px 0 -8px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ width: 20, height: 2, background: t.text, borderRadius: 2 }} />
+              <div style={{ width: 14, height: 2, background: t.text, borderRadius: 2 }} />
+              <div style={{ width: 20, height: 2, background: t.text, borderRadius: 2 }} />
+            </button>
+            <button type="button" onClick={() => navigate('/home')} aria-label="gradefarm home" style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontFamily: FONT_D, fontSize: 17, letterSpacing: 1, flex: 1 }}>
               <span style={{ color: t.text }}>grade</span><span style={{ color: GOLD }}>farm.</span>
             </button>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -916,15 +992,12 @@ function AppShell({ children, profile, subject, onChangeSubject, onSwitchSubject
         )}
         <LiveLessonBanner profile={profile} theme={theme} />
         <ParentConsentBanner profile={profile} theme={theme} onProfileUpdated={onProfileUpdated} />
-        <SectionTabs theme={theme} subject={subject} />
+        <SectionTabs theme={theme} subject={subject} phone={studyPhone} />
         <div style={{ flex: isMobile && !fit ? '0 0 auto' : 1, minHeight: isMobile && !fit ? 'auto' : 0, overflow: isMobile && !fit ? 'visible' : 'hidden', display: 'flex', flexDirection: 'column' }}>
           <Suspense fallback={<RouteFallback theme={theme} />}>{children}</Suspense>
         </div>
-        {/* Room for the tab bar under the last of the page. */}
-        {studyTabs && <div aria-hidden="true" style={{ height: 'var(--gf-tabbar-h, 0px)', flexShrink: 0 }} />}
       </div>
     </div>
-    {studyTabs && <MobileTabBar theme={theme} subject={subject} hasTutoring={hasTutoring} onMore={() => setMenuOpen(true)} moreBadge={unread} />}
     {/* Outside the zoom: the tips line their highlight up with on-screen positions. */}
     {tips && <PageTips key={tips.page} steps={tips.steps} theme={theme} onClose={() => setTips(null)} />}
     </>
@@ -974,6 +1047,8 @@ function AppShellScreens({
   if (screen === 'writing') return <Navigate to="/writing/essay" replace />
   // The study plan is now "This week's plan" on the Progress overview.
   if (screen === 'study-plan') return <Navigate to="/my-progress" replace />
+  // Home is the phone menu; wider screens have the sidebar instead.
+  if (screen === 'start' && window.innerWidth >= 860) return <Navigate to="/question-bank" replace />
 
   return (
     <AppShell {...shellProps}>
@@ -982,6 +1057,9 @@ function AppShellScreens({
           <WritingScreen subject={writingSubject} profile={profile} theme={theme} onBack={onChangeSubject} />
         </div>
       )}
+      {screen === 'start' && <div style={show('start')}>
+        <PhoneHome theme={theme} profile={profile} subject={subject} onChangeSubject={onChangeSubject} />
+      </div>}
       {wasOpened('question-bank') && <div style={show('question-bank')}>
         <HomeScreen {...commonProps}
           profile={profile} struggleMap={struggleMap}
@@ -1934,7 +2012,7 @@ function AppInner() {
             ? <Navigate to="/subject-picker" replace />
           : !profile.app_tutorial_completed_at && selectedSubject
             ? <Navigate to={'/question-bank'} replace />
-          : <Navigate to={profile.is_tutor ? '/tutor' : '/question-bank'} replace />
+          : <Navigate to={profile.is_tutor ? '/tutor' : studentStartPath()} replace />
           : <LandingPage theme={siteTheme} onSignIn={() => navigate('/auth')} />
       } />
 
@@ -1947,7 +2025,7 @@ function AppInner() {
             ? <Navigate to="/subject-picker" replace />
           : !profile.app_tutorial_completed_at && selectedSubject
             ? <Navigate to={'/question-bank'} replace />
-          : <Navigate to={profile.is_tutor ? '/tutor' : '/question-bank'} replace />
+          : <Navigate to={profile.is_tutor ? '/tutor' : studentStartPath()} replace />
           : <AuthScreen theme={siteTheme} onAuth={(isNewUser) => navigate(isNewUser ? '/onboarding' : '/home', { replace: true })} onBack={() => navigate('/home')} />
       } />
 
@@ -1959,7 +2037,7 @@ function AppInner() {
             ? <Navigate to="/subject-picker" replace />
           : !profile.app_tutorial_completed_at && selectedSubject
             ? <Navigate to={'/question-bank'} replace />
-          : <Navigate to={profile.is_tutor ? '/tutor' : '/question-bank'} replace />
+          : <Navigate to={profile.is_tutor ? '/tutor' : studentStartPath()} replace />
           : <TutorSignupScreen {...commonProps} />
       } />
 
