@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { THEMES } from '../lib/theme'
 import TitanLimitNote from './TitanLimitNote'
 import { lastTitanQuestion } from '../lib/freeLimit'
@@ -579,6 +579,14 @@ export default function LearnScreen({
   // The start screen: Ask (the default) or Lesson, the recent-chats menu, and
   // the lesson topic typed in.
   const [startMode, setStartMode] = useState('ask')
+  // Phone Home's Ask Titan and Lessons tiles open Learn on that side.
+  const location = useLocation()
+  useEffect(() => {
+    const mode = location.state?.learnMode
+    if (mode !== 'ask' && mode !== 'lesson') return
+    setStartMode(mode)
+    setPhase('setup')
+  }, [location.key]) // eslint-disable-line react-hooks/exhaustive-deps
   const [recentOpen, setRecentOpen] = useState(false)
   const [lessonQuery, setLessonQuery] = useState('')
   // Phones: the start screen fills the screen below the app's top bar exactly,
