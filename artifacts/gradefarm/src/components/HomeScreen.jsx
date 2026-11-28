@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect } from 'react'
 import YearPlanCard from './YearPlanCard'
 import HomeEngagement from './HomeEngagement'
 import { useNavigate } from 'react-router-dom'
-import { ClipboardList, GraduationCap, Target, Calendar, SlidersHorizontal, X } from 'lucide-react'
+import { ClipboardList, GraduationCap, Target, Calendar, SlidersHorizontal, X, Search, ChevronRight, ChevronsUpDown } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 import { getQuestionCounts } from '../lib/engine'
 import { priorityTopics } from '../lib/priorityTopics'
@@ -48,6 +48,15 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
   const [examMinutes, setExamMinutes] = useState(15)
   // Phones: format and exam mode live in a panel from the bottom edge.
   const [optionsOpen, setOptionsOpen] = useState(false)
+  // Phones get their own layout (renderPhone): topics start folded, with a search.
+  const [isPhone, setIsPhone] = useState(() => typeof window !== 'undefined' && window.innerWidth < 860)
+  useEffect(() => {
+    const onResize = () => setIsPhone(window.innerWidth < 860)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+  const [phoneExpanded, setPhoneExpanded] = useState(() => new Set())
+  const [topicQuery, setTopicQuery] = useState('')
   useEffect(() => {
     if (!optionsOpen) return undefined
     const onKey = (e) => { if (e.key === 'Escape') setOptionsOpen(false) }
@@ -699,6 +708,164 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
 
   const rowSelected = 'color-mix(in srgb, var(--t-accent) 10%, transparent)'
   const weekPct = weekStats.total > 0 ? Math.round((weekStats.correct / weekStats.total) * 100) : null
+
+  // ── Phones: the Question Bank ─────────────────────────────────────────────
+  // Search, which questions (and Options), the topics collapsed with how
+  // they're going and how many questions each holds, then the mode and Start
+  // along the bottom edge.
+  const pickCount = startMode === 'wrong' ? filteredCounts.wrong : startMode === 'all' ? filteredCounts.total : filteredCounts.unseen
+  const query = topicQuery.trim().toLowerCase()
+  const matches = (text) => !query || String(text || '').toLowerCase().includes(query)
+  const masteryBar = (pct, label) => (
+    <span role="img" aria-label={label} style={{ width: 52, height: 6, flexShrink: 0, borderRadius: 999, background: t.border, overflow: 'hidden' }}>
+      <span style={{ display: 'block', height: 6, width: `${pct ?? 0}%`, background: pct === null ? 'transparent' : accuracyTone(pct) }} />
+    </span>
+  )
+  const countCell = (n) => (
+    <span style={{ width: 30, flexShrink: 0, textAlign: 'right', fontSize: 13, fontWeight: 600, color: t.textMuted, fontVariantNumeric: 'tabular-nums' }}>{n}</span>
+  )
+  const pillBtn = { display: 'inline-flex', alignItems: 'center', gap: 8, height: 44, padding: '0 14px', borderRadius: 999, border: `1px solid ${t.borderMid}`, background: t.bgCard, color: t.text, fontFamily: FONT_B, fontSize: 14, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }
+
+  const renderPhone = () => (
+    <div style={{ color: t.text, fontFamily: FONT_B, display: 'flex', flexDirection: 'column' }}>
+      <style>{`
+        .hs-sheet-wrap { position: fixed; inset: 0; z-index: 1200; display: flex; align-items: flex-end; }
+        .hs-sheet-back { position: absolute; inset: 0; background: rgba(0,0,0,0.45); animation: hs-fade 0.2s ease; }
+        .hs-sheet { position: relative; width: 100%; max-height: 88dvh; overflow-y: auto; box-sizing: border-box; border-radius: 20px 20px 0 0; padding: 10px 18px calc(18px + env(safe-area-inset-bottom)); animation: hs-up 0.28s cubic-bezier(.3,.7,.2,1); font-family: inherit; }
+        @keyframes hs-fade { from { opacity: 0 } to { opacity: 1 } }
+        @keyframes hs-up { from { transform: translateY(100%) } to { transform: none } }
+        @media (prefers-reduced-motion: reduce) { .hs-sheet, .hs-sheet-back { animation: none; } }
+        .hs-row { display: flex; align-items: center; gap: 10px; width: 100%; border: none; background: transparent; font-family: inherit; text-align: left; cursor: pointer; color: inherit; }
+        .hs-row:focus-visible, .hsp-search:focus-within { outline: 2px solid ${GOLD}; outline-offset: -2px; }
+        .hsp-search input::placeholder { color: ${t.textFaint}; }
+        .hsp-search input:focus { outline: none; }
+      `}</style>
+      <div style={{ padding: '14px 14px 176px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <label className="hsp-search" style={{ display: 'flex', alignItems: 'center', gap: 10, height: 48, padding: '0 16px', borderRadius: 999, background: t.bgCard, border: `1px solid ${t.borderMid}` }}>
+          <Search size={18} color={t.textMuted} aria-hidden="true" />
+          <span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>Search topics</span>
+          <input id="hs-topic-search" type="search" value={topicQuery} onChange={e => setTopicQuery(e.target.value)} placeholder="Search topics"
+            style={{ flex: 1, minWidth: 0, border: 'none', background: 'none', fontFamily: FONT_B, fontSize: 16, color: t.text }} />
+        </label>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ flex: 1, minWidth: 0 }} data-tutorial-target="practice-session">
+            <SegmentedToggle kind="radio" size="sm" fill label="Questions" value={startMode} onChange={setSessionMode} options={[
+              { value: 'new', label: 'New' },
+              { value: 'wrong', label: `Got wrong · ${filteredCounts.wrong}`, disabled: filteredCounts.wrong === 0 },
+              { value: 'all', label: 'Mixed' },
+            ]} />
+          </div>
+          {(bankHasBothFormats || examAvailable) && (
+            <button type="button" onClick={() => setOptionsOpen(true)} aria-haspopup="dialog" style={{ ...pillBtn, height: 46, fontSize: 13.5, border: `1px solid ${t.border}` }}>
+              <SlidersHorizontal size={16} aria-hidden="true" />Options
+            </button>
+          )}
+        </div>
+
+        {/* Comeback, tutor work and invites stay above the topics. */}
+        {showComeback && (
+          <div style={{ padding: '14px 16px', borderRadius: 12, background: 'color-mix(in srgb, var(--t-accent) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--t-accent) 25%, transparent)', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: t.textMuted }}><strong style={{ display: 'block', color: t.text, fontSize: 14 }}>Welcome back</strong>Start with the questions you got wrong last time.</div>
+            <button onClick={() => onStartSession({ mode: 'wrong', subtopics: [] })} style={{ height: 40, padding: '0 14px', borderRadius: 10, border: 'none', background: GOLD, color: NAVY_FILL, fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: FONT_B, flexShrink: 0 }}>Start</button>
+          </div>
+        )}
+        <YearPlanCard theme={theme} profile={profile} subject={subject} questions={questions} struggleMap={currentStruggleMap}
+          mode="prompt" onStartSession={onStartSession} onSetUp={() => navigate('/year-setup')} />
+        <TutorWorkStrip />
+        <TutorInvitesCard />
+        <DiagnosticResultsCard />
+
+        <section aria-label="Topics" style={{ borderRadius: 14, background: t.bgCard, border: `1px solid ${t.border}`, overflow: 'hidden' }}>
+          <button className="hs-row" onClick={() => setSelectedSubtopics(isAllTopicsSelected ? [] : allSubtopics)} aria-pressed={isAllTopicsSelected}
+            style={{ height: 48, padding: '0 14px 0 46px', borderBottom: `1px solid ${t.border}`, background: isAllTopicsSelected ? rowSelected : 'transparent' }}>
+            {checkbox(isAllTopicsSelected ? 'all' : selectedSubtopics.length > 0 ? 'some' : null, 20)}
+            <span style={{ flex: 1, fontSize: 14.5, fontWeight: 800 }}>All topics</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: t.textMuted }}>Correct · Qs</span>
+          </button>
+          {MACRO_GROUPS.map((macro, mi) => {
+            const topicsShown = macro.topics.filter(tp => normTopicGroups[tp] && (matches(macro.label) || matches(tp)))
+            if (query && !matches(macro.label) && topicsShown.length === 0) return null
+            const macroSubs = macro.topics.flatMap(tp => normTopicToSubs[tp] || [])
+            const macroSelected = macroSubs.length > 0 && macroSubs.every(s => selectedSubtopics.includes(s))
+            const macroPartial = !macroSelected && macroSubs.some(s => selectedSubtopics.includes(s))
+            const open = phoneExpanded.has(macro.id) || (!!query && topicsShown.length > 0 && !matches(macro.label))
+            const labelGroup = normTopicGroups[macro.label] || { total: 0 }
+            const total = macro.topics.reduce((sum, tp) => sum + (normTopicGroups[tp]?.total || 0), 0) + labelGroup.total
+            const pct = topicAccuracy([...macro.topics.map(tp => normTopicGroups[tp]), normTopicGroups[macro.label]])
+            const canOpen = macro.topics.some(tp => normTopicGroups[tp])
+            return (
+              <div key={macro.id} style={{ borderTop: mi === 0 ? 'none' : `1px solid ${t.border}` }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 14px 0 4px', background: macroSelected ? rowSelected : 'transparent' }}>
+                  <button type="button" className="hs-row" disabled={!canOpen} onClick={() => setPhoneExpanded(prev => { const n = new Set(prev); n.has(macro.id) ? n.delete(macro.id) : n.add(macro.id); return n })}
+                    aria-expanded={open} aria-label={`${open ? 'Hide' : 'Show'} the topics in ${macro.label}`}
+                    style={{ width: 38, height: 48, flexShrink: 0, justifyContent: 'center', color: t.textMuted, opacity: canOpen ? 1 : 0.35 }}>
+                    <ChevronRight size={16} strokeWidth={2.4} aria-hidden="true" style={{ transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s ease' }} />
+                  </button>
+                  <button className="hs-row" onClick={() => toggleMacro(macro.id)} aria-pressed={macroSelected} style={{ flex: 1, minWidth: 0, minHeight: 52, padding: '8px 0', gap: 12 }}>
+                    {checkbox(macroSelected ? 'all' : macroPartial ? 'some' : null, 20)}
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: 600, lineHeight: 1.3 }}>{macro.label}</span>
+                    {masteryBar(pct, pct === null ? 'Not started' : `${pct}% correct`)}
+                    {countCell(total)}
+                  </button>
+                </div>
+                {open && topicsShown.map(topicName => {
+                  const tg = normTopicGroups[topicName]
+                  const subs = normTopicToSubs[topicName] || []
+                  const sel = subs.length > 0 && subs.every(s => selectedSubtopics.includes(s))
+                  const partial = !sel && subs.some(s => selectedSubtopics.includes(s))
+                  const tPct = topicAccuracy([tg])
+                  return (
+                    <button key={topicName} className="hs-row" onClick={() => toggleNormTopic(topicName)} aria-pressed={sel}
+                      style={{ minHeight: 46, padding: '6px 14px 6px 54px', gap: 12, background: sel ? rowSelected : t.bgSubtle, borderTop: `1px solid ${t.border}` }}>
+                      {checkbox(sel ? 'all' : partial ? 'some' : null, 18)}
+                      <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 500, lineHeight: 1.3 }}>{topicName}</span>
+                      {masteryBar(tPct, tPct === null ? 'Not started' : `${tPct}% correct`)}
+                      {countCell(tg.total)}
+                    </button>
+                  )
+                })}
+              </div>
+            )
+          })}
+          {query && !MACRO_GROUPS.some(m => matches(m.label) || m.topics.some(tp => normTopicGroups[tp] && matches(tp))) && (
+            <div style={{ padding: '14px 16px', fontSize: 13.5, color: t.textMuted }}>No topics match “{topicQuery.trim()}”.</div>
+          )}
+        </section>
+      </div>
+
+      {/* Along the bottom edge: the mode, how many there are to pick from, and Start. */}
+      <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 50, display: 'flex', flexDirection: 'column', gap: 10, padding: '12px 14px calc(14px + env(safe-area-inset-bottom))', background: t.bg, borderTop: `1px solid ${t.border}` }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {examAvailable ? (
+            <button type="button" onClick={() => setOptionsOpen(true)} aria-haspopup="dialog" aria-label={`Mode: ${examOn ? 'Exam' : 'Practice'}. Change`} style={pillBtn}>
+              {examOn ? 'Exam' : 'Practice'}<ChevronsUpDown size={15} color={t.textMuted} aria-hidden="true" />
+            </button>
+          ) : bankHasBothFormats ? (
+            <button type="button" onClick={() => setOptionsOpen(true)} aria-haspopup="dialog" aria-label={`Format: ${formatLabel}. Change`} style={pillBtn}>
+              {formatLabel}<ChevronsUpDown size={15} color={t.textMuted} aria-hidden="true" />
+            </button>
+          ) : null}
+          {examOn && (
+            <button type="button" onClick={() => setOptionsOpen(true)} aria-haspopup="dialog" aria-label={`${examCount} questions, ${examTimerValid ? `${examTimerMinutes} minutes` : 'no time set'}. Change`} style={pillBtn}>
+              {examCount} Qs<ChevronsUpDown size={15} color={t.textMuted} aria-hidden="true" />
+            </button>
+          )}
+          <span style={{ marginLeft: 'auto', fontSize: 13, color: t.textMuted, whiteSpace: 'nowrap' }}>
+            <strong style={{ fontSize: 18, color: t.text, fontVariantNumeric: 'tabular-nums' }}>{pickCount.toLocaleString('en-AU')}</strong> to pick from
+          </span>
+        </div>
+        <button type="button" data-tutorial-target="practice-start" onClick={startSession} disabled={!canStart}
+          style={{ width: '100%', height: 54, borderRadius: 14, border: 'none', fontFamily: FONT_B, fontSize: 16, fontWeight: 800,
+            background: canStart ? t.accent : t.bgHover, color: canStart ? NAVY_FILL : t.textFaint, cursor: canStart ? 'pointer' : 'not-allowed', boxShadow: canStart ? '0 6px 18px color-mix(in srgb, var(--t-accent) 30%, transparent)' : 'none' }}>
+          {examOn ? 'Start exam' : 'Start questions'}
+        </button>
+      </div>
+      {renderOptionsSheet()}
+    </div>
+  )
+
+  if (isPhone) return renderPhone()
 
   return (
     <div style={{ color: t.text, fontFamily: FONT_B, animation: 'hs-fadeUp 0.3s ease', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
