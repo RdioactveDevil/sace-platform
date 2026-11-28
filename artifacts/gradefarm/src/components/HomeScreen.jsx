@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect } from 'react'
 import YearPlanCard from './YearPlanCard'
 import HomeEngagement from './HomeEngagement'
 import { useNavigate } from 'react-router-dom'
-import { ClipboardList, GraduationCap, Target, Calendar, SlidersHorizontal, X, Search, ChevronRight, ChevronsUpDown } from 'lucide-react'
+import { ClipboardList, GraduationCap, Target, Calendar, SlidersHorizontal, X, Search, ChevronRight } from 'lucide-react'
 import { THEMES } from '../lib/theme'
 import { getQuestionCounts } from '../lib/engine'
 import { priorityTopics } from '../lib/priorityTopics'
@@ -713,7 +713,8 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
   // Search, which questions (and Options), the topics collapsed with how
   // they're going and how many questions each holds, then the mode and Start
   // along the bottom edge.
-  const pickCount = startMode === 'wrong' ? filteredCounts.wrong : startMode === 'all' ? filteredCounts.total : filteredCounts.unseen
+  // Start session floats over the page once a topic or subtopic is ticked.
+  const showStart = selectedSubtopics.length > 0
   const query = topicQuery.trim().toLowerCase()
   const matches = (text) => !query || String(text || '').toLowerCase().includes(query)
   const masteryBar = (pct, label) => (
@@ -739,8 +740,11 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
         .hs-row:focus-visible, .hsp-search:focus-within { outline: 2px solid ${GOLD}; outline-offset: -2px; }
         .hsp-search input::placeholder { color: ${t.textFaint}; }
         .hsp-search input:focus { outline: none; }
+        .hsp-start { animation: hsp-rise 0.22s cubic-bezier(.3,.7,.2,1); }
+        @keyframes hsp-rise { from { opacity: 0; transform: translateY(16px) } to { opacity: 1; transform: none } }
+        @media (prefers-reduced-motion: reduce) { .hsp-start { animation: none; } }
       `}</style>
-      <div style={{ padding: '14px 14px 176px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ padding: `14px 14px ${showStart ? 104 : 28}px`, display: 'flex', flexDirection: 'column', gap: 12 }}>
         <label className="hsp-search" style={{ display: 'flex', alignItems: 'center', gap: 10, height: 48, padding: '0 16px', borderRadius: 999, background: t.bgCard, border: `1px solid ${t.borderMid}` }}>
           <Search size={18} color={t.textMuted} aria-hidden="true" />
           <span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>Search topics</span>
@@ -757,7 +761,7 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
             ]} />
           </div>
           {(bankHasBothFormats || examAvailable) && (
-            <button type="button" onClick={() => setOptionsOpen(true)} aria-haspopup="dialog" style={{ ...pillBtn, height: 46, fontSize: 13.5, border: `1px solid ${t.border}` }}>
+            <button type="button" onClick={() => setOptionsOpen(true)} aria-haspopup="dialog" style={{ ...pillBtn, height: 40, fontSize: 13.5, border: `1px solid ${t.border}` }}>
               <SlidersHorizontal size={16} aria-hidden="true" />Options
             </button>
           )}
@@ -834,33 +838,17 @@ export default function HomeScreen({ profile, struggleMap, questions, subject, o
         </section>
       </div>
 
-      {/* Along the bottom edge: the mode, how many there are to pick from, and Start. */}
-      <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 50, display: 'flex', flexDirection: 'column', gap: 10, padding: '12px 14px calc(14px + env(safe-area-inset-bottom))', background: t.bg, borderTop: `1px solid ${t.border}` }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {examAvailable ? (
-            <button type="button" onClick={() => setOptionsOpen(true)} aria-haspopup="dialog" aria-label={`Mode: ${examOn ? 'Exam' : 'Practice'}. Change`} style={pillBtn}>
-              {examOn ? 'Exam' : 'Practice'}<ChevronsUpDown size={15} color={t.textMuted} aria-hidden="true" />
-            </button>
-          ) : bankHasBothFormats ? (
-            <button type="button" onClick={() => setOptionsOpen(true)} aria-haspopup="dialog" aria-label={`Format: ${formatLabel}. Change`} style={pillBtn}>
-              {formatLabel}<ChevronsUpDown size={15} color={t.textMuted} aria-hidden="true" />
-            </button>
-          ) : null}
-          {examOn && (
-            <button type="button" onClick={() => setOptionsOpen(true)} aria-haspopup="dialog" aria-label={`${examCount} questions, ${examTimerValid ? `${examTimerMinutes} minutes` : 'no time set'}. Change`} style={pillBtn}>
-              {examCount} Qs<ChevronsUpDown size={15} color={t.textMuted} aria-hidden="true" />
-            </button>
-          )}
-          <span style={{ marginLeft: 'auto', fontSize: 13, color: t.textMuted, whiteSpace: 'nowrap' }}>
-            <strong style={{ fontSize: 18, color: t.text, fontVariantNumeric: 'tabular-nums' }}>{pickCount.toLocaleString('en-AU')}</strong> to pick from
-          </span>
+      {/* Start session floats above the page once something is ticked. */}
+      {showStart && (
+        <div className="hsp-start" style={{ position: 'fixed', left: 14, right: 14, bottom: 'calc(14px + env(safe-area-inset-bottom))', zIndex: 50 }}>
+          <button type="button" data-tutorial-target="practice-start" onClick={startSession} disabled={!canStart}
+            style={{ width: '100%', height: 54, borderRadius: 14, border: 'none', fontFamily: FONT_B, fontSize: 16, fontWeight: 800,
+              background: canStart ? t.accent : t.bgHover, color: canStart ? NAVY_FILL : t.textFaint, cursor: canStart ? 'pointer' : 'not-allowed',
+              boxShadow: canStart ? '0 10px 28px color-mix(in srgb, var(--t-accent) 38%, transparent), 0 2px 8px rgba(0,0,0,0.12)' : 'none' }}>
+            {examOn ? 'Start exam' : 'Start session'}
+          </button>
         </div>
-        <button type="button" data-tutorial-target="practice-start" onClick={startSession} disabled={!canStart}
-          style={{ width: '100%', height: 54, borderRadius: 14, border: 'none', fontFamily: FONT_B, fontSize: 16, fontWeight: 800,
-            background: canStart ? t.accent : t.bgHover, color: canStart ? NAVY_FILL : t.textFaint, cursor: canStart ? 'pointer' : 'not-allowed', boxShadow: canStart ? '0 6px 18px color-mix(in srgb, var(--t-accent) 30%, transparent)' : 'none' }}>
-          {examOn ? 'Start exam' : 'Start questions'}
-        </button>
-      </div>
+      )}
       {renderOptionsSheet()}
     </div>
   )
